@@ -547,7 +547,21 @@ function Test-VisitorFlow([string]$look) {
         }
         if (Click-Id 'flow back at start' 'FlowOption_o_p_delivery') {
             if (Click-Id 'flow parcel page' 'FlowOption_o_leave') {
-                [void](Assert-Element 'flow end page' 'FlowDoneButton')
+                # The sample answers a notify after 4 s: the tapped option shows the activity
+                # ring and stays selected, the others and Back are disabled, and the status line
+                # follows after 0.8 s.
+                Start-Sleep -Milliseconds 300
+                $tapped = Find-ById 'FlowOption_o_leave' 1000
+                $other = Find-ById 'FlowOption_o_hand' 1000
+                $back = Find-ById 'FlowBackButton' 1000
+                Add-Check 'flow pending: tapped option stays enabled and reports busy' ((Test-OnScreen $tapped) -and $tapped.Current.IsEnabled -and ($tapped.Current.ItemStatus.Length -gt 0)) ([string]$tapped.Current.ItemStatus)
+                Add-Check 'flow pending: other option is disabled' ((Test-OnScreen $other) -and (-not $other.Current.IsEnabled))
+                Add-Check 'flow pending: Back is disabled' ((Test-OnScreen $back) -and (-not $back.Current.IsEnabled))
+                Save-Shot ("flow-pending-" + $look)
+                Start-Sleep -Milliseconds 600
+                [void](Assert-Element 'flow pending status line' 'FlowPendingLine' 1000)
+                Save-Shot ("flow-pending-status-" + $look)
+                [void](Assert-Element 'flow end page' 'FlowDoneButton' 8000)
                 Assert-Gone 'flow end page' 'FlowBackButton'
                 Assert-Gone 'flow end page' 'FlowOption_o_leave'
                 Save-Shot ("flow-end-" + $look)
@@ -587,6 +601,19 @@ function Test-FlowEditor([string]$look) {
             Save-Shot ("flow-option-dialog-" + $look)
             [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
             Start-Sleep -Milliseconds 500
+        }
+        # A field error: with every option removed the page cannot be saved, and the message
+        # stands at the top of the form. Nothing is written; Cancel discards the draft.
+        for ($i = 0; $i -lt 12; $i++) {
+            $remove = Find-ById 'FlowOptionRemove' 400
+            if (-not (Test-OnScreen $remove)) { break }
+            Invoke-Click $remove
+            Start-Sleep -Milliseconds 200
+        }
+        if (Click-Id 'flow step dialog' 'FlowStepSave') {
+            [void](Assert-Element 'flow step error' 'FlowStepError' 3000)
+            Start-Sleep -Milliseconds 300
+            Save-Shot ("flow-step-error-" + $look)
         }
         [void](Click-Id 'flow step dialog' 'FlowStepCancel')
         Assert-Gone 'flow step dialog' 'FlowStepSave'

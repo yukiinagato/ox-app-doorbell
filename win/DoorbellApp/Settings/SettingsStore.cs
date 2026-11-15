@@ -12,6 +12,10 @@ namespace DoorbellApp.Settings
         public bool Ok;
         public string Error = "";
         public string Warnings = "";
+        /// <summary>Numbers and language of a refused write (Core's "detail" object).</summary>
+        public Dictionary<string, object> Detail;
+        /// <summary>The "key" and "message_key" of each warning, for notes beside a control.</summary>
+        public List<KeyValuePair<string, string>> Notes = new List<KeyValuePair<string, string>>();
     }
 
     /// <summary>
@@ -152,6 +156,9 @@ namespace DoorbellApp.Settings
                 object err;
                 result.Error = doc != null && doc.TryGetValue("err", out err) && err != null
                     ? err.ToString() : "rejected";
+                object detail;
+                if (doc != null && doc.TryGetValue("detail", out detail))
+                    result.Detail = detail as Dictionary<string, object>;
             }
             object warnings;
             if (doc != null && doc.TryGetValue("warnings", out warnings) &&
@@ -163,9 +170,11 @@ namespace DoorbellApp.Settings
                 {
                     var entry = w as Dictionary<string, object>;
                     if (entry == null) continue;
-                    object messageKey, contrast;
+                    object messageKey, contrast, at;
                     string text = entry.TryGetValue("message_key", out messageKey) && messageKey != null
-                        ? DoorbellApp.Util.Texts.T(messageKey.ToString()) : "";
+                        ? DoorbellApp.Util.Texts.T(WarningKey(messageKey.ToString())) : "";
+                    if (messageKey != null && entry.TryGetValue("key", out at) && at != null)
+                        result.Notes.Add(new KeyValuePair<string, string>(at.ToString(), messageKey.ToString()));
                     if (entry.TryGetValue("contrast", out contrast) && contrast != null)
                         text += " (" + Convert.ToString(contrast,
                             System.Globalization.CultureInfo.InvariantCulture) + ":1)";
@@ -175,6 +184,15 @@ namespace DoorbellApp.Settings
             }
             Reload();
             return result;
+        }
+
+        /// <summary>Flow warnings share the flow_error strings (visitor_flow.code is flow_error.code).</summary>
+        internal static string WarningKey(string messageKey)
+        {
+            const string flow = "visitor_flow.";
+            if (!messageKey.StartsWith(flow, StringComparison.Ordinal)) return messageKey;
+            string shared = "flow_error." + messageKey.Substring(flow.Length);
+            return DoorbellApp.Util.Texts.T(shared) != shared ? shared : messageKey;
         }
 
         public static bool AsBool(object value, bool fallback)

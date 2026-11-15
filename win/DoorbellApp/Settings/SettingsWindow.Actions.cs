@@ -275,7 +275,11 @@ namespace DoorbellApp.Settings
         private bool WriteLanguage(string lang, RowParts parts)
         {
             if (!Report(_store.Set("devices.{self}.local.ui_lang", lang), parts)) return false;
-            if (App.Boot != null) BootConfig.PersistField(App.Boot.FilePath, "ui_lang", lang);
+            if (App.Boot != null)
+            {
+                BootConfig.PersistField(App.Boot.FilePath, "ui_lang", lang);
+                App.Boot.UiLang = lang;
+            }
             L10n.SetLanguage(lang);
             Texts.SetLang(lang);
             _main.ReapplyLanguageFromSettings();

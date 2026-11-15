@@ -194,6 +194,11 @@
                         <Border x:Name="FlowOptionFade" Height="28" VerticalAlignment="Bottom"
                                 IsHitTestVisible="False" Visibility="Collapsed"/>
                     </Grid>
+                    <TextBlock x:Name="FlowPendingLine" Visibility="Collapsed" FontSize="20"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="8,10,8,0"
+                               Foreground="{DynamicResource Fg}"
+                               AutomationProperties.AutomationId="FlowPendingLine"
+                               AutomationProperties.LiveSetting="Assertive"/>
                     <Button x:Name="FlowBackButton" Visibility="Collapsed" MinHeight="56"
                             FontSize="20" Padding="22,8" Margin="8,8,8,0"
                             HorizontalAlignment="Left" Click="OnFlowBackClick"/>

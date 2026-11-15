@@ -27,10 +27,17 @@ namespace DoorbellApp.Settings
         private delegate string FlowReader(Dictionary<string, object> step);
 
         /// <summary>
-        /// Set while a step dialog is open: shows a message under one option of that step (and clears
-        /// them all when the id is null). Returns false when the option is not on screen.
+        /// The message lines of the open step dialog, by control: "title.ja", "body.en", "message.zh",
+        /// "option.o_id", "image.0", "image.0.ja". Rows that redraw register their lines again.
         /// </summary>
-        private Func<string, string, bool> _flowOptionError;
+        private sealed class FlowErrorSite
+        {
+            public TextBlock Header;
+            public readonly Dictionary<string, TextBlock> Lines = new Dictionary<string, TextBlock>();
+            public readonly Dictionary<string, Control> Inputs = new Dictionary<string, Control>();
+        }
+
+        private FlowErrorSite _flowSite;
 
         // ---- reading the configuration --------------------------------------------------------
 
@@ -173,32 +180,126 @@ namespace DoorbellApp.Settings
         }
 
         /// <summary>Core's error text for a refused flow write: the code is an i18n key.</summary>
-        internal static string FlowErrorText(string error)
+        internal static string FlowErrorText(string error, Dictionary<string, object> detail = null)
         {
             if (string.IsNullOrEmpty(error)) return "";
             if (error == "unresolved_config_conflict") return Texts.T("flow_editor.conflict");
-            if (!error.StartsWith("visitor_flow.", StringComparison.Ordinal)) return error;
-            int cut = error.IndexOf(": ", StringComparison.Ordinal);
-            string code = cut < 0 ? error : error.Substring(0, cut);
-            string detail = cut < 0 ? "" : error.Substring(cut + 2);
-            string text = Texts.T(code);
-            if (string.IsNullOrEmpty(text) || text == code) return Texts.T("visitor_flow.invalid", error);
-            return detail.Length == 0 ? text : text + " (" + detail + ")";
+            FlowErrorInfo info = FlowError.Parse(error, detail);
+            return info.IsFlow ? FlowErrorMessage(info) : error;
         }
 
         /// <summary>
-        /// Core names the step and option an error concerns as "visitor_flow.code: step.option".
-        /// When that is an option of the open step, the message appears under that option.
+        /// flow_error.code with its numbers and language filled in; a code this build does not
+        /// know gets the generic message and the raw code beside it.
         /// </summary>
-        private bool ShowFlowFieldError(string stepId, string error)
+        private static string FlowErrorMessage(FlowErrorInfo info)
         {
-            if (_flowOptionError == null || string.IsNullOrEmpty(error)) return false;
-            int cut = error.IndexOf(": ", StringComparison.Ordinal);
-            if (cut < 0) return false;
-            string detail = error.Substring(cut + 2);
-            int dot = detail.IndexOf('.');
-            if (dot <= 0 || detail.Substring(0, dot) != stepId) return false;
-            return _flowOptionError(detail.Substring(dot + 1), FlowErrorText(error));
+            string key = "flow_error." + info.Code;
+            string text = Texts.T(key);
+            if (string.IsNullOrEmpty(text) || text == key)
+                return Texts.T("visitor_flow.invalid", info.Code + (info.Location.Length > 0 ? ": " + info.Location : ""));
+            return FlowError.Fill(text, info, LangName);
+        }
+
+        private TextBlock NewFlowLine(string key, Control input)
+        {
+            var line = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                                       Visibility = Visibility.Collapsed, Margin = new Thickness(0, 2, 0, 0) };
+            line.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
+            AutomationId(line, "FlowFieldError");
+            if (_flowSite != null)
+            {
+                _flowSite.Lines[key] = line;
+                if (input != null) _flowSite.Inputs[key] = input;
+            }
+            return line;
+        }
+
+        private static void ShowFlowLine(TextBlock line, string text, bool problem)
+        {
+            line.SetResourceReference(TextBlock.ForegroundProperty, problem ? "NegativeText" : "AccentText");
+            line.Text = text;
+            line.Visibility = Visibility.Visible;
+            line.BringIntoView();
+        }
+
+        /// <summary>
+        /// Puts a refused write beside the control Core named in the open step dialog (the
+        /// language field, the option row, the image row), else in the header of the form.
+        /// </summary>
+        private bool ShowFlowFieldError(string stepId, SettingsWriteResult result)
+        {
+            FlowErrorInfo info = FlowError.Parse(result.Error, result.Detail);
+            if (_flowSite == null || !info.IsFlow) return false;
+            string text = FlowErrorMessage(info);
+            string key = null;
+            if (info.Step == stepId)
+            {
+                if (info.Place == FlowErrorPlace.Field && info.Lang.Length > 0) key = info.Field + "." + info.Lang;
+                else if (info.Place == FlowErrorPlace.Option) key = "option." + info.Option;
+                else if (info.Place == FlowErrorPlace.Image)
+                    key = info.Lang.Length > 0 && _flowSite.Lines.ContainsKey("image." + info.Image + "." + info.Lang)
+                        ? "image." + info.Image + "." + info.Lang : "image." + info.Image;
+            }
+            TextBlock line;
+            if (key == null || !_flowSite.Lines.TryGetValue(key, out line)) line = _flowSite.Header;
+            ShowFlowLine(line, text, true);
+            Control input;
+            if (key != null && _flowSite.Inputs.TryGetValue(key, out input)) input.Focus();
+            return true;
+        }
+
+        /// <summary>
+        /// A start page refused by Core shows under its picker (door is "" for the shared start);
+        /// anything else goes to the banner at the top of the editor.
+        /// </summary>
+        private bool ReportFlowStart(SettingsWriteResult result, RowParts parts, TextBlock line, string door)
+        {
+            line.Visibility = Visibility.Collapsed;
+            if (!result.Ok)
+            {
+                FlowErrorInfo info = FlowError.Parse(result.Error, result.Detail);
+                if (info.IsFlow && info.Place == FlowErrorPlace.Start && info.Option == door)
+                {
+                    ShowFlowLine(line, FlowErrorMessage(info), true);
+                    return false;
+                }
+            }
+            return Report(result, parts);
+        }
+
+        private TextBlock NewFlowHeader()
+        {
+            var line = new TextBlock { FontSize = 14, TextWrapping = TextWrapping.Wrap,
+                                       Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 10) };
+            AutomationId(line, "FlowStepError");
+            return line;
+        }
+
+        private TextBlock NewStartLine()
+        {
+            var line = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                                       Visibility = Visibility.Collapsed, Margin = new Thickness(0, 2, 0, 0) };
+            AutomationId(line, "FlowFieldError");
+            return line;
+        }
+
+        /// <summary>Notes for the open step: a warning of a write that succeeded, beside its option.</summary>
+        private bool ShowFlowNotes(string stepId, SettingsWriteResult result)
+        {
+            bool shown = false;
+            string head = "visitor_flow.steps." + stepId;
+            foreach (var note in result.Notes)
+            {
+                if (note.Key != head && !note.Key.StartsWith(head + ".", StringComparison.Ordinal)) continue;
+                FlowErrorInfo info = FlowError.Parse(note.Value + ": " + note.Key.Substring("visitor_flow.steps.".Length), null);
+                TextBlock line;
+                string optionKey = info.Place == FlowErrorPlace.Option ? "option." + info.Option : "";
+                if (!_flowSite.Lines.TryGetValue(optionKey, out line)) line = _flowSite.Header;
+                ShowFlowLine(line, FlowErrorMessage(info), false);
+                shown = true;
+            }
+            return shown;
         }
 
         // ---- writing ----------------------------------------------------------------------------
@@ -257,13 +358,19 @@ namespace DoorbellApp.Settings
 
             // Start page and idle return.
             var pages = FlowStepOptions(steps, "page", null);
+            var startLine = NewStartLine();
             var start = FlowCombo(pages, _store.Get("visitor_flow.start"), value =>
+            {
+                startLine.Visibility = Visibility.Collapsed;
                 FlowCommit(FlowSet("visitor_flow.start", value), null, result =>
                 {
-                    if (!Report(result, parts)) Refresh();
-                }));
+                    if (ReportFlowStart(result, parts, startLine, "")) return;
+                    if (startLine.Visibility != Visibility.Visible) Refresh();
+                });
+            });
             AutomationId(start, "FlowStart");
             panel.Children.Add(FlowField(Texts.T("flow_editor.start"), start, null));
+            panel.Children.Add(startLine);
 
             var idle = FormTextBox(Convert.ToString(_store.Get("visitor_flow.idle_s") ?? 45, CultureInfo.InvariantCulture), 3);
             idle.Width = 120;
@@ -300,15 +407,22 @@ namespace DoorbellApp.Settings
                 string door = doorId;
                 var options = new List<SettingOption> { new SettingOption("", "flow_editor.door_start_inherit") };
                 options.AddRange(pages);
+                var doorLine = NewStartLine();
                 var combo = FlowCombo(options, _store.Get("doors." + door + ".visitor_flow.start") ?? "", value =>
                 {
                     string chosen = Convert.ToString(value, CultureInfo.InvariantCulture);
+                    doorLine.Visibility = Visibility.Collapsed;
                     FlowCommit(chosen.Length == 0 ? null : FlowSet("doors." + door + ".visitor_flow.start", chosen),
                                chosen.Length == 0 ? new List<string> { "doors." + door + ".visitor_flow.start" } : null,
-                               result => { if (!Report(result, parts)) Refresh(); });
+                               result =>
+                               {
+                                   if (!ReportFlowStart(result, parts, doorLine, door) &&
+                                       doorLine.Visibility != Visibility.Visible) Refresh();
+                               });
                 });
                 panel.Children.Add(FlowField(Texts.T("flow_editor.door_start") + ": " +
                     LabelText(doors[door].ContainsKey("label") ? doors[door]["label"] : null, door), combo, null));
+                panel.Children.Add(doorLine);
             }
 
             // require_call: an administrator setting, with the warning when it is off.
@@ -684,6 +798,9 @@ namespace DoorbellApp.Settings
                                         : FormTextBox(Str(existing, lang), maxLength);
                 AutomationLabel(box, label);
                 form.Children.Add(box);
+                TextBlock line = NewFlowLine(key + "." + lang, box);
+                box.TextChanged += (s, e) => line.Visibility = Visibility.Collapsed;
+                form.Children.Add(line);
                 boxes.Add(new KeyValuePair<string, TextBox>(lang, box));
             }
             readers.Add(next =>
@@ -728,7 +845,14 @@ namespace DoorbellApp.Settings
             var readers = new List<FlowReader>();
             var imageOwner = new RowParts { Error = error };
             Window previousOwner = _formOwner;
+            FlowErrorSite previousSite = _flowSite;
             _formOwner = dialog;
+            _flowSite = new FlowErrorSite { Header = NewFlowHeader() };
+            form.Children.Add(_flowSite.Header);
+            form.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                new TextChangedEventHandler((s, e) => _flowSite.Header.Visibility = Visibility.Collapsed));
+            form.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent,
+                new SelectionChangedEventHandler((s, e) => _flowSite.Header.Visibility = Visibility.Collapsed));
             SettingsWriteResult committed = null;
             bool closed = false;
             dialog.Closed += (s, e) => closed = true;
@@ -823,8 +947,7 @@ namespace DoorbellApp.Settings
                     {
                         string problem = read(next);
                         if (problem == null) continue;
-                        error.Text = problem;
-                        error.Visibility = Visibility.Visible;
+                        ShowFlowLine(_flowSite.Header, problem, true);
                         return;
                     }
                     var sets = new List<KeyValuePair<string, object>>();
@@ -849,7 +972,8 @@ namespace DoorbellApp.Settings
                         sets.Add(new KeyValuePair<string, object>("visitor_flow.steps." + id, next));
                     }
                     error.Visibility = Visibility.Collapsed;
-                    if (_flowOptionError != null) _flowOptionError(null, null);
+                    foreach (TextBlock line in _flowSite.Lines.Values) line.Visibility = Visibility.Collapsed;
+                    _flowSite.Header.Visibility = Visibility.Collapsed;
                     save.IsEnabled = false;
                     FlowCommit(sets, null, result =>
                     {
@@ -863,11 +987,18 @@ namespace DoorbellApp.Settings
                         if (result.Ok)
                         {
                             committed = result;
+                            // A warning is not a refusal: the step is saved. The note stays beside
+                            // its option until the dialog is closed.
+                            if (ShowFlowNotes(id, result))
+                            {
+                                cancel.Content = Texts.T("settings.close");
+                                return;
+                            }
                             dialog.DialogResult = true;
                             return;
                         }
-                        if (ShowFlowFieldError(id, result.Error)) return;
-                        error.Text = Texts.T("settings.save_failed_reason", FlowErrorText(result.Error));
+                        if (ShowFlowFieldError(id, result)) return;
+                        error.Text = Texts.T("settings.save_failed_reason", FlowErrorText(result.Error, result.Detail));
                         error.Visibility = Visibility.Visible;
                     });
                 };
@@ -876,7 +1007,7 @@ namespace DoorbellApp.Settings
             finally
             {
                 _formOwner = previousOwner;
-                _flowOptionError = null;
+                _flowSite = previousSite;
             }
             if (committed == null) return false;
             Report(committed, null);
@@ -993,6 +1124,10 @@ namespace DoorbellApp.Settings
             var walker = new VisitorFlowWalker(document, lang);
             string outcome = "";
             var body = new StackPanel();
+            var optionButtons = new List<Button>();
+            Button backButton = null;
+            bool pending = false, dialogClosed = false;
+            dialog.Closed += (s, e) => dialogClosed = true;
             Action render = null;
 
             Action<FlowAction> handle = null;
@@ -1015,6 +1150,8 @@ namespace DoorbellApp.Settings
             render = () =>
             {
                 body.Children.Clear();
+                optionButtons.Clear();
+                backButton = null;
                 if (outcome.Length > 0)
                 {
                     var result = new TextBlock { Text = outcome, FontSize = 15, TextWrapping = TextWrapping.Wrap,
@@ -1070,11 +1207,43 @@ namespace DoorbellApp.Settings
                     button.Margin = new Thickness(0, 6, 0, 0);
                     AutomationId(button, "FlowPreviewOption");
                     AutomationLabel(button, option.Label);
+                    optionButtons.Add(button);
                     button.Click += (s, e) =>
                     {
+                        if (pending) return;
                         outcome = "";
-                        handle(walker.Tap(chosen.Id));
-                        render();
+                        FlowAction action = walker.Tap(chosen.Id);
+                        if (action.Kind == FlowActionKind.None)
+                        {
+                            render();
+                            return;
+                        }
+                        // What the door station shows while Core works, simulated for about a second.
+                        pending = true;
+                        foreach (Button other in optionButtons)
+                            if (!ReferenceEquals(other, button)) { other.IsEnabled = false; other.Opacity = 0.45; }
+                        if (backButton != null) { backButton.IsEnabled = false; backButton.Opacity = 0.45; }
+                        var panel = button.Content as StackPanel;
+                        if (panel != null)
+                        {
+                            FrameworkElement ring = DoorbellApp.Ui.Fluent.BusyIndicator(20, button.Foreground);
+                            ring.Margin = new Thickness(0, 0, 10, 0);
+                            if (panel.Children.Count > 1) panel.Children[0] = ring;
+                            else panel.Children.Insert(0, ring);
+                        }
+                        button.SetResourceReference(Control.BorderBrushProperty, "Accent");
+                        button.BorderThickness = new Thickness(3);
+                        System.Windows.Automation.AutomationProperties.SetItemStatus(button, Texts.T("flow.pending_notify"));
+                        var settle = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                        settle.Tick += (t, a) =>
+                        {
+                            settle.Stop();
+                            pending = false;
+                            if (dialogClosed) return;
+                            handle(action);
+                            render();
+                        };
+                        settle.Start();
                     };
                     options.Children.Add(button);
                 }
@@ -1092,7 +1261,8 @@ namespace DoorbellApp.Settings
                     AutomationId(back, "FlowPreviewBack");
                     back.Margin = new Thickness(0, 10, 0, 0);
                     back.HorizontalAlignment = HorizontalAlignment.Left;
-                    back.Click += (s, e) => { walker.Back(); outcome = ""; render(); };
+                    back.Click += (s, e) => { if (pending) return; walker.Back(); outcome = ""; render(); };
+                    backButton = back;
                     body.Children.Add(back);
                 }
             };
@@ -1220,6 +1390,7 @@ namespace DoorbellApp.Settings
                         TextWrapping = TextWrapping.Wrap,
                     });
                     box.Children.Add(top);
+                    box.Children.Add(NewFlowLine("image." + index, null));
                     row.Place = new ComboBox { Style = (Style)FindResource("SettingsComboBox"),
                                                HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220,
                                                Margin = new Thickness(0, 8, 0, 0) };
@@ -1235,6 +1406,9 @@ namespace DoorbellApp.Settings
                         var alt = FormTextBox(Str(existing, lang), 120);
                         AutomationLabel(alt, label);
                         box.Children.Add(alt);
+                        TextBlock altLine = NewFlowLine("image." + index + "." + lang, alt);
+                        alt.TextChanged += (s, e) => altLine.Visibility = Visibility.Collapsed;
+                        box.Children.Add(altLine);
                         row.Alt[lang] = alt;
                     }
                     up.Click += (s, e) => { harvest(); Swap(rows, index, index - 1); redraw(); };
@@ -1300,25 +1474,13 @@ namespace DoorbellApp.Settings
             add.HorizontalAlignment = HorizontalAlignment.Left;
             form.Children.Add(add);
 
-            var optionErrors = new Dictionary<string, TextBlock>();
-            _flowOptionError = (optionId, text) =>
-            {
-                if (optionId == null)
-                {
-                    foreach (var line in optionErrors.Values) line.Visibility = Visibility.Collapsed;
-                    return true;
-                }
-                TextBlock target;
-                if (!optionErrors.TryGetValue(optionId, out target)) return false;
-                target.Text = text;
-                target.Visibility = Visibility.Visible;
-                return true;
-            };
             Action redraw = null;
             redraw = () =>
             {
                 host.Children.Clear();
-                optionErrors.Clear();
+                if (_flowSite != null)
+                    foreach (string stale in new List<string>(_flowSite.Lines.Keys))
+                        if (stale.StartsWith("option.", StringComparison.Ordinal)) _flowSite.Lines.Remove(stale);
                 for (int i = 0; i < options.Count; i++)
                 {
                     int index = i;
@@ -1340,15 +1502,11 @@ namespace DoorbellApp.Settings
                     if (option.ContainsKey("enabled") && !SettingsStore.AsBool(option["enabled"], true)) title += " (-)";
                     string sub = "-> " + (steps.ContainsKey(target) ? FlowStepLabel(target, (Dictionary<string, object>)steps[target]) : target);
                     host.Children.Add(ItemLine(title, sub, new[] { up, down, edit, remove }));
-                    var optionError = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
-                                                      Visibility = Visibility.Collapsed };
-                    optionError.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
-                    AutomationId(optionError, "FlowOptionError");
-                    host.Children.Add(optionError);
-                    optionErrors[Str(option, "id")] = optionError;
+                    host.Children.Add(NewFlowLine("option." + Str(option, "id"), edit));
                     up.Click += (s, e) => { Swap(options, index, index - 1); redraw(); };
                     down.Click += (s, e) => { Swap(options, index, index + 1); redraw(); };
                     edit.Click += (s, e) => { if (EditFlowOption(option, steps, selfId, options)) redraw(); };
+                    AutomationId(remove, "FlowOptionRemove");
                     remove.Click += (s, e) => { options.RemoveAt(index); redraw(); };
                 }
                 add.IsEnabled = options.Count < MaxFlowOptions;
@@ -1368,7 +1526,7 @@ namespace DoorbellApp.Settings
             redraw();
             readers.Add(next =>
             {
-                if (options.Count == 0) return Texts.T("visitor_flow.no_options");
+                if (options.Count == 0) return Texts.T("flow_error.no_options");
                 var written = new List<object>();
                 foreach (var option in options) written.Add(option);
                 next["options"] = written;
@@ -1440,7 +1598,7 @@ namespace DoorbellApp.Settings
                 var label = draft.ContainsKey("label") ? draft["label"] as Dictionary<string, object> : null;
                 bool hasLabel = label != null && label.Count > 0;
                 if (!hasLabel && Str(draft, "purpose").Length == 0)
-                    return Texts.T("visitor_flow.option_needs_label");
+                    return Texts.T("flow_error.option_needs_label");
                 return null;
             });
             if (!saved) return false;

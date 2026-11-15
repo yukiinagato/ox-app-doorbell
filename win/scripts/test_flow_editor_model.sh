@@ -6,5 +6,6 @@ mkdir -p "$TMP"
 csc -nologo -langversion:7.3 -r:System.Web.Extensions.dll -out:"$TMP/flow-editor-model-test.exe" \
   "$ROOT/win/DoorbellApp/Core/FlowEditorModel.cs" \
   "$ROOT/win/DoorbellApp/Core/FlowIcons.cs" \
+  "$ROOT/win/DoorbellApp/Core/FlowError.cs" \
   "$ROOT/win/tests/FlowEditorModelTests.cs"
 mono "$TMP/flow-editor-model-test.exe"

@@ -4,6 +4,7 @@ using System.Windows.Media;
 using ControlHelper = ModernWpf.Controls.Primitives.ControlHelper;
 using IconElement = ModernWpf.Controls.IconElement;
 using PathIcon = ModernWpf.Controls.PathIcon;
+using ProgressRing = ModernWpf.Controls.ProgressRing;
 using ToggleSwitch = ModernWpf.Controls.ToggleSwitch;
 using WindowHelper = ModernWpf.Controls.Primitives.WindowHelper;
 
@@ -152,6 +153,28 @@ namespace DoorbellApp.Ui
                 HorizontalAlignment = HorizontalAlignment.Right,
                 MinHeight = TouchMin,
                 VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+
+        /// <summary>
+        /// The indeterminate activity indicator of a tapped option: the Fluent progress ring in the
+        /// button's own ink, or a static ellipsis when the user turned animations off.
+        /// </summary>
+        public static FrameworkElement BusyIndicator(double size, Brush ink)
+        {
+            if (!SystemParameters.ClientAreaAnimation)
+            {
+                var still = new TextBlock
+                {
+                    Text = "…", FontSize = size * 0.8, Width = size, Height = size,
+                    TextAlignment = TextAlignment.Center, Foreground = ink,
+                };
+                return still;
+            }
+            return new ProgressRing
+            {
+                IsActive = true, Width = size, Height = size, Foreground = ink,
+                HorizontalAlignment = HorizontalAlignment.Center,
             };
         }
 

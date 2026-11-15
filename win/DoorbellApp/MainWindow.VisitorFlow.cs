@@ -32,7 +32,13 @@ namespace DoorbellApp
         private bool _flowAsked;
         private bool _flowFetchBusy;
         private bool _flowFetchAgain;
+        // True from a tap that waits on Core until its answer, the timeout or a restored page.
         private bool _flowBusy;
+        private int _flowPendingSerial;
+        private string _flowTappedOption;
+        private string _flowPendingStatus = "";
+        private readonly DispatcherTimer _flowHintTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        private readonly DispatcherTimer _flowGiveUpTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         private bool _flowWired;
         // Set by the call-end paths just before ShowIdle: why the call ended ("timeout" = unanswered).
         private string _flowEndReason;
@@ -147,6 +153,16 @@ namespace DoorbellApp
             FlowOptionScroll.ScrollChanged += (s, e) => UpdateFlowFade();
             FlowOptionScroll.SizeChanged += (s, e) => UpdateFlowFade();
             _flowTimer.Tick += (s, e) => OnFlowTimer();
+            _flowHintTimer.Tick += (s, e) =>
+            {
+                _flowHintTimer.Stop();
+                if (_flowBusy) ShowFlowPendingLine(Texts.T(_flowPendingStatus), false);
+            };
+            _flowGiveUpTimer.Tick += (s, e) =>
+            {
+                _flowGiveUpTimer.Stop();
+                if (_flowBusy) FailFlowPending();
+            };
         }
 
         /// <summary>
@@ -165,6 +181,7 @@ namespace DoorbellApp
             FlowOptionZone.Visibility = Visibility.Collapsed;
             FlowBackButton.Visibility = Visibility.Collapsed;
             FlowDoneButton.Visibility = Visibility.Collapsed;
+            FlowPendingLine.Visibility = Visibility.Collapsed;
             if (!active)
             {
                 FlowContent.Visibility = Visibility.Collapsed;
@@ -197,6 +214,7 @@ namespace DoorbellApp
                 LayOutVisitorFlow(ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth,
                                   ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight);
                 PaintFlowPrimary();
+                if (_flowBusy) ApplyFlowPending();
                 QueueInkPass();
             }
             catch (Exception ex)
@@ -445,11 +463,13 @@ namespace DoorbellApp
             var option = button == null ? null : button.Tag as FlowOptionView;
             if (option == null || _flow == null || _flowBusy) return;
             if (_inCall || !string.IsNullOrEmpty(_activeCallId)) return;
+            _flowTappedOption = option.Id;
             try { HandleFlowAction(_flow.Tap(option.Id)); }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("visitor flow tap failed: " + ex.Message);
                 // Any failure while walking degrades to a direct call.
+                _flowTappedOption = null;
                 DoFlowPress("");
             }
         }
@@ -464,7 +484,7 @@ namespace DoorbellApp
 
         private void OnFlowDoneClick(object sender, RoutedEventArgs e)
         {
-            if (_flow == null) return;
+            if (_flow == null || _flowBusy) return;
             _flow.Done();
             RenderVisitorFlow();
             RestartFlowTimer();
@@ -488,6 +508,10 @@ namespace DoorbellApp
             }
         }
 
+        /// <summary>
+        /// The call is placed on the UI thread so its events can never overtake the call id; the
+        /// pending indicator is drawn first, one dispatcher pass before Core is asked.
+        /// </summary>
         private void DoFlowPress(string purpose)
         {
             _activeCallFlow = "purpose_first";
@@ -495,13 +519,29 @@ namespace DoorbellApp
                 _callFeedback = PlayConfigured(_callFeedback,
                     SoundValue("call_sound", "outdoor_call_alert"),
                     ConfigBool("ui.call_sound_loop", false), null, _volumeCall);
-            _activeCallId = App.Core.PressPurpose(App.Boot.Door, purpose ?? "") ?? "";
-            bool placed = !string.IsNullOrEmpty(_activeCallId);
+            int serial = BeginFlowPending("flow.pending_call");
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (serial != _flowPendingSerial || !_flowBusy) return;
+                string id = "";
+                try { id = App.Core.PressPurpose(App.Boot.Door, purpose ?? "") ?? ""; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine("visitor press failed: " + ex.Message); }
+                FinishFlowPress(purpose, id);
+            }), DispatcherPriority.Background);
+        }
+
+        private void FinishFlowPress(string purpose, string callId)
+        {
+            bool placed = callId.Length > 0;
+            EndFlowPending(false);
+            _activeCallId = callId;
             if (_flow != null) _flow.PressResult(placed);
             if (!placed)
             {
                 StopPlayer(ref _callFeedback);
                 RenderVisitorFlow();
+                VisitorStatus.Visibility = Visibility.Collapsed;
+                ShowFlowPendingLine(Texts.T(VisitorFlowWalker.PressFailedNotice), true);
                 RestartFlowTimer();
                 return;
             }
@@ -519,29 +559,140 @@ namespace DoorbellApp
 
         /// <summary>
         /// The notify step: Core is asked off the UI thread with the step id and nothing else.
-        /// The visitor sees the closing page whatever the throttle said; a refusal rings instead.
+        /// The visitor sees the closing page whatever the throttle said; a refusal rings instead,
+        /// and no answer at all (or 15 s) restores the page with a retry line.
         /// </summary>
         private void DoFlowNotify(string step)
         {
-            _flowBusy = true;
+            int serial = BeginFlowPending("flow.pending_notify");
             string door = App.Boot.Door ?? "";
             bool local = _flowTestDocument;
             Task.Run(() =>
             {
-                bool ok = local;
-                if (!local)
+                bool answered = local, ok = local;
+                if (local) System.Threading.Thread.Sleep(UiTestPendingMs);
+                else
                 {
                     string answer = null;
                     try { answer = App.Core.VisitorNotifyJson(door, step); }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine("visitor notify failed: " + ex.Message); }
+                    answered = !string.IsNullOrEmpty(answer);
                     ok = NotifyAccepted(answer);
                 }
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _flowBusy = false;
+                    if (serial != _flowPendingSerial || !_flowBusy) return;
+                    if (!answered)
+                    {
+                        FailFlowPending();
+                        return;
+                    }
+                    EndFlowPending(false);
                     FinishFlowNotify(ok);
                 }));
             });
+        }
+
+        // The suite's own flow answers a notify after this long, so a screenshot can catch the wait.
+        private const int UiTestPendingMs = 4000;
+
+        // ---- the pending state ------------------------------------------------------------------
+
+        private bool _flowPendingLineShown;
+
+        /// <summary>
+        /// Same frame as the tap: the tapped option swaps its icon for the activity ring and stays
+        /// selected, every other option and Back are dimmed and disabled (nothing moves), the idle
+        /// return is suspended. The status line follows after 0.8 s; 15 s ends the wait.
+        /// </summary>
+        private int BeginFlowPending(string statusKey)
+        {
+            _flowBusy = true;
+            _flowPendingStatus = statusKey;
+            _flowPendingLineShown = false;
+            _flowTimer.Stop();
+            FlowPendingLine.Visibility = Visibility.Collapsed;
+            ApplyFlowPending();
+            _flowHintTimer.Stop();
+            _flowHintTimer.Start();
+            _flowGiveUpTimer.Stop();
+            _flowGiveUpTimer.Start();
+            return ++_flowPendingSerial;
+        }
+
+        private IEnumerable<Button> FlowOptionButtons()
+        {
+            foreach (UIElement child in FlowPrimaryHost.Children)
+            {
+                var button = child as Button;
+                if (button != null) yield return button;
+            }
+            foreach (UIElement child in FlowOptionGrid.Children)
+            {
+                var button = child as Button;
+                if (button != null) yield return button;
+            }
+        }
+
+        private void ApplyFlowPending()
+        {
+            foreach (Button button in FlowOptionButtons())
+            {
+                var option = button.Tag as FlowOptionView;
+                if (option != null && option.Id == _flowTappedOption)
+                {
+                    var panel = button.Content as StackPanel;
+                    if (panel == null) continue;
+                    FrameworkElement ring = Fluent.BusyIndicator(34, button.Foreground);
+                    // The icon's slot keeps its size, so nothing in the grid moves.
+                    if (panel.Children.Count > 1) panel.Children[0] = ring;
+                    else panel.Children.Insert(0, ring);
+                    button.SetResourceReference(Control.BorderBrushProperty, "Accent");
+                    button.BorderThickness = new Thickness(3);
+                    string busy = Texts.T(_flowPendingStatus);
+                    System.Windows.Automation.AutomationProperties.SetItemStatus(button, busy);
+                    System.Windows.Automation.AutomationProperties.SetName(button, option.Label + ", " + busy);
+                }
+                else
+                {
+                    button.IsEnabled = false;
+                    button.Opacity = 0.45;
+                }
+            }
+            FlowBackButton.IsEnabled = false;
+            FlowBackButton.Opacity = 0.45;
+            if (_flowPendingLineShown) ShowFlowPendingLine(Texts.T(_flowPendingStatus), false);
+        }
+
+        private void ShowFlowPendingLine(string text, bool failure)
+        {
+            _flowPendingLineShown = !failure;
+            FlowPendingLine.Text = text;
+            FlowPendingLine.SetResourceReference(TextBlock.ForegroundProperty, failure ? "NegativeText" : "Fg");
+            FlowPendingLine.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>Ends the wait; the page is drawn again when asked, which restores every option.</summary>
+        private void EndFlowPending(bool redraw)
+        {
+            _flowHintTimer.Stop();
+            _flowGiveUpTimer.Stop();
+            _flowBusy = false;
+            _flowPendingLineShown = false;
+            FlowPendingLine.Visibility = Visibility.Collapsed;
+            FlowBackButton.IsEnabled = true;
+            FlowBackButton.Opacity = 1;
+            if (!redraw) return;
+            RenderVisitorFlow();
+            RestartFlowTimer();
+        }
+
+        /// <summary>Timeout or no answer: the options come back and a tap on one tries again.</summary>
+        private void FailFlowPending()
+        {
+            _flowPendingSerial++;
+            EndFlowPending(true);
+            ShowFlowPendingLine(Texts.T("flow.pending_failed"), true);
         }
 
         private static bool NotifyAccepted(string answer)
@@ -578,7 +729,7 @@ namespace DoorbellApp
         {
             WireFlowControls();
             _flowTimer.Stop();
-            if (_flow == null || App.Boot.Role != "door_station") return;
+            if (_flow == null || App.Boot.Role != "door_station" || _flowBusy) return;
             double seconds;
             if (_flow.Mode == FlowMode.Page && (_flow.Depth > 1 || _flow.Notice != null))
                 seconds = _flow.Document.IdleSeconds;

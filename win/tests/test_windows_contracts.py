@@ -3463,6 +3463,33 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('suite["walk"]', tests)
         self.assertIn("RunWalk(", tests)
 
+    def test_a_tapped_flow_option_shows_the_pending_state(self):
+        flow = read("win/DoorbellApp/MainWindow.VisitorFlow.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        fluent = read("win/DoorbellApp/Ui/Fluent.cs")
+        smoke = read("win/scripts/ui_smoke.ps1")
+        # The native ring replaces the icon of the tapped option in the same slot; the others and
+        # Back are disabled and dimmed; taps are ignored while busy; the idle return is suspended.
+        self.assertIn("ProgressRing", fluent)
+        self.assertIn("SystemParameters.ClientAreaAnimation", fluent)
+        self.assertIn("Fluent.BusyIndicator(34, button.Foreground)", flow)
+        self.assertIn("button.IsEnabled = false;", flow)
+        self.assertIn("button.Opacity = 0.45;", flow)
+        self.assertIn("|| _flowBusy) return;", flow)
+        self.assertIn("_flowBusy) return;", flow[flow.index("private void RestartFlowTimer"):])
+        self.assertIn("AutomationProperties.SetItemStatus(button, busy)", flow)
+        # After 0.8 s the status line; after 15 s the options come back with a retry line.
+        self.assertIn("TimeSpan.FromMilliseconds(800)", flow)
+        self.assertIn("TimeSpan.FromSeconds(15)", flow)
+        for key in ("flow.pending_notify", "flow.pending_call", "flow.pending_failed"):
+            self.assertIn('"%s"' % key, flow)
+            self.assertIn("%s:" % key, read("i18n/strings.yaml"))
+        self.assertIn('x:Name="FlowPendingLine"', xaml)
+        self.assertIn("AutomationProperties.LiveSetting", xaml[xaml.index('x:Name="FlowPendingLine"'):][:400])
+        # The suite catches the pending option and the editor's field error in both appearances.
+        for shot in ("flow-pending-", "flow-pending-status-", "flow-step-error-"):
+            self.assertIn('"%s"' % shot, smoke)
+
     def test_the_visitor_home_composition_follows_the_ui_guidelines(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
@@ -3506,10 +3533,27 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("_store.Commit", preview)
         for ident in ("FlowPreview", "FlowStepPreview", "FlowPreviewOption", "FlowPreviewBack"):
             self.assertIn('"%s"' % ident, editor)
-        # Core names "step.option": the message goes under that option of the open step.
-        self.assertIn("private bool ShowFlowFieldError(string stepId, string error)", editor)
-        self.assertIn("if (ShowFlowFieldError(id, result.Error)) return;", editor)
-        self.assertIn('AutomationId(optionError, "FlowOptionError");', editor)
+        # Core names the control ("step.option", "step.title.ja", "step.images[0]"): the message
+        # goes beside it in the open step dialog, else in the form header; never a modal alert.
+        self.assertIn("private bool ShowFlowFieldError(string stepId, SettingsWriteResult result)", editor)
+        self.assertIn("if (ShowFlowFieldError(id, result)) return;", editor)
+        self.assertIn('NewFlowLine("option." + Str(option, "id"), edit)', editor)
+        self.assertIn('NewFlowLine(key + "." + lang, box)', editor)
+        self.assertIn('NewFlowLine("image." + index, null)', editor)
+        self.assertIn('AutomationId(line, "FlowFieldError")', editor)
+        self.assertIn('AutomationId(line, "FlowStepError")', editor)
+        for old in ("visitor_flow.bad_text", "visitor_flow.bad_images", "visitor_flow.bad_snapshot",
+                    "visitor_flow.unknown_target", "visitor_flow.bad_target"):
+            self.assertNotIn(old, editor)
+        self.assertIn("FlowError.Parse(", editor)
+        self.assertIn('"flow_error." + info.Code', editor)
+        self.assertIn('Texts.T("flow_error.no_options")', editor)
+        self.assertIn("ReportFlowStart(result, parts, startLine", editor)
+        # A warning of a write that succeeded is a note beside its option.
+        self.assertIn("ShowFlowNotes(id, result)", editor)
+        # Try it simulates the pending ring for about a second and sends nothing.
+        self.assertIn("DoorbellApp.Ui.Fluent.BusyIndicator(20, button.Foreground)", editor)
+        self.assertIn("TimeSpan.FromSeconds(1)", preview)
         # The option icon is chosen from the shared set (stored as its emoji), not typed.
         self.assertIn('Fld("icon", FieldKind.Choice, "flow_editor.option_icon_pick")', editor)
         self.assertIn("FlowIcons.PickerEmoji", editor)
@@ -3557,9 +3601,9 @@ class WindowsContracts(unittest.TestCase):
             self.assertIn('"%s"' % template, editor)
         # Core's validation error is shown in the dialog that caused it, and the conflict error
         # is shown (never retried).
-        self.assertIn("FlowErrorText(result.Error)", editor)
+        self.assertIn("FlowErrorText(result.Error, result.Detail)", editor)
         self.assertIn('"unresolved_config_conflict"', editor)
-        self.assertIn("FlowErrorText(error)", rows)
+        self.assertIn("FlowErrorText(error, detail)", rows)
         # Limits the editor enforces before Core does.
         self.assertIn("MaxFlowSteps = 32", editor)
         self.assertIn("MaxFlowOptions = 12", editor)

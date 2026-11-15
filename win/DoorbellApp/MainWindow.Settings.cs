@@ -129,6 +129,16 @@ namespace DoorbellApp
 
         internal void ReapplyLanguageFromSettings()
         {
+            // The device language is also the door's visitor language until a visitor picks
+            // another one; without this the flow keeps drawing in the old language and closing
+            // Settings puts the old language back.
+            if (App.Boot.Role == "door_station" && _visitorLang != DoorbellApp.Util.Texts.Lang)
+            {
+                _visitorLang = DoorbellApp.Util.Texts.Lang;
+                UpdateLangBarSelection();
+                BuildPurposeButtons();
+                OnFlowLanguageChanged();
+            }
             ApplyStrings();
             RequestHomeRefresh(HomeRefresh.All);
         }

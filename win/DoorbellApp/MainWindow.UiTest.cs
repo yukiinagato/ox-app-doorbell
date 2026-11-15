@@ -144,28 +144,28 @@ namespace DoorbellApp
         }
 
         // A resolved visitor flow for the suite: the delivery branch of Core's built-in wizard in
-        // English, with an end page that stays long enough for a screenshot. Notify steps are
+        // Japanese, English and Chinese, with an end page that stays long enough for a screenshot. Notify steps are
         // answered locally while it is loaded, so the suite never sends a message to a household.
         // Single quotes stand for the JSON quotes.
         private const string UiTestFlow =
             "{'schema_version':1,'enabled':true,'door':'door-uitest1','source':'config'," +
             "'revision':'uitest-flow-1','start':'s_home','idle_s':45,'require_call':true,'steps':{" +
-            "'s_home':{'kind':'page','title':{'ja':'How can we help?','en':'How can we help?','zh':'How can we help?'}," +
+            "'s_home':{'kind':'page','title':{'ja':'ご用件をお選びください','en':'How can we help?','zh':'请选择来访目的'}," +
             "'images':[],'options':[" +
-            "{'id':'o_p_visit','semantic_id':'purpose.button','label':{'ja':'Visit','en':'Visit','zh':'Visit'},'icon':'','style':'normal','to':'c_visit','purpose':'p_visit'}," +
-            "{'id':'o_p_delivery','semantic_id':'purpose.button','label':{'ja':'Delivery','en':'Delivery','zh':'Delivery'},'icon':'','style':'normal','to':'s_parcel','purpose':'p_delivery'}]}," +
-            "'s_parcel':{'kind':'page','title':{'ja':'Can you leave it at the door?','en':'Can you leave it at the door?','zh':'Can you leave it at the door?'}," +
-            "'body':{'ja':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'," +
+            "{'id':'o_p_visit','semantic_id':'purpose.button','label':{'ja':'訪問','en':'Visit','zh':'来访'},'icon':'','style':'normal','to':'c_visit','purpose':'p_visit'}," +
+            "{'id':'o_p_delivery','semantic_id':'purpose.button','label':{'ja':'配達','en':'Delivery','zh':'快递'},'icon':'','style':'normal','to':'s_parcel','purpose':'p_delivery'}]}," +
+            "'s_parcel':{'kind':'page','title':{'ja':'玄関先に置いてもよろしいですか？','en':'Can you leave it at the door?','zh':'可以放在门口吗？'}," +
+            "'body':{'ja':'受け取りの署名が不要なら、玄関先に置いてください。\\n\\n手渡しが必要な場合は「手渡し」を押してください。'," +
             "'en':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'," +
-            "'zh':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'}," +
+            "'zh':'如无需签收，请将包裹放在门口。\\n\\n需要当面交接请按“当面交接”。'}," +
             "'images':[],'options':[" +
-            "{'id':'o_leave','semantic_id':'call.primary','label':{'ja':'Leave it','en':'Leave it','zh':'Leave it'},'icon':'','style':'primary','to':'n_left'}," +
-            "{'id':'o_hand','semantic_id':'purpose.button','label':{'ja':'Hand over','en':'Hand over','zh':'Hand over'},'icon':'','style':'normal','to':'c_delivery'}]}," +
+            "{'id':'o_leave','semantic_id':'call.primary','label':{'ja':'置いていきます','en':'Leave it','zh':'放在门口'},'icon':'','style':'primary','to':'n_left'}," +
+            "{'id':'o_hand','semantic_id':'purpose.button','label':{'ja':'手渡し','en':'Hand over','zh':'当面交接'},'icon':'','style':'normal','to':'c_delivery'}]}," +
             "'c_visit':{'kind':'call','purpose':'p_visit'}," +
             "'c_delivery':{'kind':'call','purpose':'p_delivery','on_unanswered':'s_parcel'}," +
             "'n_left':{'kind':'notify','purpose':'p_delivery','to':'e_thanks'}," +
-            "'e_thanks':{'kind':'end','title':{'ja':'Thank you','en':'Thank you','zh':'Thank you'}," +
-            "'body':{'ja':'The household has been told.','en':'The household has been told.','zh':'The household has been told.'}," +
+            "'e_thanks':{'kind':'end','title':{'ja':'ありがとうございました','en':'Thank you','zh':'谢谢'}," +
+            "'body':{'ja':'ご家族にお知らせしました。','en':'The household has been told.','zh':'已通知住户。'}," +
             "'images':[],'return_s':30}},'issues':[]}";
 
         private string LoadUiTestFlow()

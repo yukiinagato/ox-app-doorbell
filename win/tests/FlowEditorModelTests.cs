@@ -113,6 +113,37 @@ internal static class FlowEditorModelTests
         foreach (string emoji in FlowIcons.PickerEmoji)
             Check(FlowIcons.KeyFor("", emoji) != "IconUser" || emoji == "\U0001F464", "picker emoji map to a glyph: " + emoji);
 
+        // Error codes and locations.
+        var detail = new Dictionary<string, object> { { "lang", "ja" }, { "limit", 60L }, { "value", 71 } };
+        var tooLong = FlowError.Parse("visitor_flow.text_too_long: s_home.title.ja", detail);
+        Check(tooLong.IsFlow && tooLong.Code == "text_too_long", "code");
+        Check(tooLong.Place == FlowErrorPlace.Field && tooLong.Step == "s_home" &&
+              tooLong.Field == "title" && tooLong.Lang == "ja", "title field location");
+        Check(FlowError.Fill("{lang}: {limit}/{value}", tooLong, l => "JA") == "JA: 60/71", "placeholders");
+        var label = FlowError.Parse("visitor_flow.text_required: s_home.o_x.label", null);
+        Check(label.Place == FlowErrorPlace.Option && label.Option == "o_x" && label.Field == "label", "option label");
+        var labelLang = FlowError.Parse("visitor_flow.text_too_long: s_home.o_x.label.en", null);
+        Check(labelLang.Option == "o_x" && labelLang.Lang == "en", "option label language");
+        var alt = FlowError.Parse("visitor_flow.text_too_long: s_a.images[1].alt.zh", null);
+        Check(alt.Place == FlowErrorPlace.Image && alt.Image == 1 && alt.Lang == "zh", "image alt");
+        var image = FlowError.Parse("visitor_flow.unknown_asset: s_a.images[0]", null);
+        Check(image.Place == FlowErrorPlace.Image && image.Image == 0 && image.Step == "s_a", "image row");
+        var option = FlowError.Parse("visitor_flow.unknown_target: s_a.o_b", null);
+        Check(option.Place == FlowErrorPlace.Option && option.Step == "s_a" && option.Option == "o_b", "option");
+        var stepOnly = FlowError.Parse("visitor_flow.no_options: s_a", null);
+        Check(stepOnly.Place == FlowErrorPlace.Step && stepOnly.Step == "s_a", "step");
+        var start = FlowError.Parse("visitor_flow.unknown_start: start", null);
+        Check(start.Place == FlowErrorPlace.Start && start.Option == "", "global start");
+        var doorStart = FlowError.Parse("visitor_flow.start_not_page: doors.front.start", null);
+        Check(doorStart.Place == FlowErrorPlace.Start && doorStart.Option == "front", "door start");
+        var none = FlowError.Parse("visitor_flow.bad_idle_s", new Dictionary<string, object> { { "min", 15 }, { "max", 300 } });
+        Check(none.Place == FlowErrorPlace.None && none.Code == "bad_idle_s", "no location");
+        Check(FlowError.Fill("{min}-{max}", none, null) == "15-300", "min and max");
+        Check(!FlowError.Parse("unresolved_config_conflict", null).IsFlow, "not a flow error");
+        Check(!FlowError.Parse(null, null).IsFlow, "null");
+        Check(FlowError.Parse("visitor_flow.container_write: visitor_flow.steps", null).Place == FlowErrorPlace.None,
+              "a configuration key is not a step");
+
         Console.WriteLine("flow editor model tests passed (" + _assertions + " assertions)");
         return 0;
     }

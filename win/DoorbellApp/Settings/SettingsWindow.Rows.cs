@@ -200,7 +200,7 @@ namespace DoorbellApp.Settings
                     : Texts.T("admin.saved"), false);
                 return true;
             }
-            string message = Texts.T("settings.save_failed_reason", ErrorText(result.Error));
+            string message = Texts.T("settings.save_failed_reason", ErrorText(result.Error, result.Detail));
             if (parts != null && parts.Error != null)
             {
                 parts.Error.Text = message;
@@ -210,13 +210,13 @@ namespace DoorbellApp.Settings
             return false;
         }
 
-        private static string ErrorText(string error)
+        private static string ErrorText(string error, Dictionary<string, object> detail = null)
         {
             if (error == "core_unavailable") return Texts.T("settings.err_core_unavailable");
             if (error == "admin_required") return Texts.T("settings.err_admin_required");
             if (error == "unresolved_config_conflict" ||
                 (error != null && error.StartsWith("visitor_flow.", StringComparison.Ordinal)))
-                return FlowErrorText(error);
+                return FlowErrorText(error, detail);
             return error ?? "";
         }
 
