@@ -145,6 +145,11 @@ Guarantees Core makes (checked by `check_resolved_document` in the reference wal
   repairing a flow. Treat them like any other.
 - `source`: `config` (administrator's steps), `default` (built-in wizard, nothing written yet),
   `fallback` (unusable flow: one page with the Call button). `issues[]` is for editors only.
+- `step_order`: every step id in `steps`, in the order to list them to the administrator. Steps
+  with an `order` come first by ascending `order`; ties and steps without one (or with an unusable
+  value) keep reading order: the start page, then breadth-first through option targets, notify
+  `to` and `on_unanswered`, then unreachable steps by id. `order` never affects walking and is not
+  repeated inside `steps`.
 - `revision` changes whenever anything else in the document changes. Compare it, do not diff.
 
 ## 5. Walker (shell-side model) — port `FlowWalker`
@@ -226,8 +231,14 @@ Raw configuration (see `docs/en/config-schema.md`):
 | `visitor_flow.start` | string leaf, a page id |
 | `visitor_flow.idle_s` | int leaf 15..300 (default 45) |
 | `visitor_flow.require_call` | bool leaf (default true) |
-| `visitor_flow.steps.<id>` | **one whole object per step** |
+| `visitor_flow.steps.<id>` | **one whole object per step**; optional integer member `order` (0..9999) |
 | `doors.<door>.visitor_flow.start` | string leaf |
+
+Reordering: display the ids of `step_order`; after a move, assign consecutive `order` values
+(0, 1, 2, ...) to the steps in their new sequence and write every changed step as a whole-step
+write (`visitor_flow.steps.<id>`, the existing object with its new `order`) in one batch. Keep
+`order` when rewriting a step for any other reason; an editor that drops it only moves that step
+to the end of the list.
 
 Rules Core enforces on write (error string `visitor_flow.<code>[: <step>[.<option>]]`; the part
 before `": "` is also an i18n key, `visitor_flow.invalid` is the generic fallback with `{detail}`):

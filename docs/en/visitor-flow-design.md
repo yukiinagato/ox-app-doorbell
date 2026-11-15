@@ -173,15 +173,13 @@ Extend each purpose with one optional pre-call question (`visit_purposes.<id>.as
 
 ### 2.10 Example
 
-Derived default, abbreviated:
+Derived default with purposes enabled, abbreviated (with no purpose enabled the start page is a single primary `o_call` option to a `c_any` call):
 ```json
 { "enabled": true, "start": "s_home", "idle_s": 45, "steps": {
   "s_home": { "kind": "page", "title": {"ja":"ご用件をお選びください","en":"How can we help?","zh":"请选择来访目的"},
     "options": [
-      {"id":"o_call","label":{"ja":"呼び出す","en":"Call","zh":"呼叫"},"style":"primary","to":"c_any"},
       {"id":"o_visit","purpose":"p_visit","to":"c_visit"},
       {"id":"o_delivery","purpose":"p_delivery","to":"c_delivery"} ] },
-  "c_any": {"kind":"call"},
   "c_visit": {"kind":"call","purpose":"p_visit"},
   "c_delivery": {"kind":"call","purpose":"p_delivery"} } }
 ```
@@ -268,7 +266,7 @@ Each gets a pure flow model fed by the walk fixtures, a renderer, and a settings
    delivery/okihai wizard without anyone opening Admin. So instead of a purely derived
    default that looks like today's screen, Core's default flow (used when
    `visitor_flow` has never been written) is: start page built from the enabled
-   purposes (plus the primary Call option), where the delivery purpose leads to the
+   purposes (with no separate Call option), where the delivery purpose leads to the
    okihai question page -> leave it (instructions page -> notify -> end) / hand over
    (call with the delivery purpose, `on_unanswered` back to the question). Decide
    whether this is derived at resolve time or seeded once into config (seeding makes it
@@ -299,3 +297,7 @@ Each gets a pure flow model fed by the walk fixtures, a renderer, and a settings
 4. **Native flow editors are complete on every platform, including the iOS 5 kiosk**
    (steps, texts per language, images from Assets, options and targets, templates,
    start page, require_call, snapshot camera).
+5. **No generic Call option next to purposes (2026-11-15).** When at least one visit purpose
+   is enabled, the default start page and the `purposes` and `delivery` templates list
+   only the purposes, each leading to its call, and mark no option primary; the single
+   primary Call option remains only when no purpose is enabled.

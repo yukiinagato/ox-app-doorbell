@@ -127,6 +127,14 @@ TEST_CASE("visitor flow: written keys are leaves or one whole step") {
   CHECK(writeKey("visitor_flow.steps", "{}") == "visitor_flow.container_write: visitor_flow.steps");
   CHECK(writeKey("visitor_flow.theme", "1") == "visitor_flow.unknown_key: visitor_flow.theme");
   CHECK(writeKey("visitor_flow.steps.c_any", R"({"kind":"call"})") == "ok");
+  CHECK(writeKey("visitor_flow.steps.c_any", R"({"kind":"call","order":0})") == "ok");
+  CHECK(writeKey("visitor_flow.steps.c_any", R"({"kind":"call","order":9999})") == "ok");
+  for (const char* bad : {"-1", "10000", "1.5", "\"2\"", "null", "true"})
+    CHECK(writeKey("visitor_flow.steps.c_any", std::string(R"({"kind":"call","order":)") + bad + "}") ==
+          "visitor_flow.bad_order: c_any");
+  CHECK(writeKey("visitor_flow.steps.e_x", R"({"kind":"end","order":3})") == "ok");
+  CHECK(writeKey("visitor_flow.steps.n_x",
+                 R"({"kind":"notify","message":{"ja":"m"},"to":"e_x","order":3})") == "ok");
   // A leaf below a step would mask one member of the step object regardless of age.
   CHECK(writeKey("visitor_flow.steps.c_any.purpose", "\"p_visit\"") ==
         "visitor_flow.step_leaf_write: visitor_flow.steps.c_any.purpose");
@@ -342,8 +350,34 @@ TEST_CASE("visitor flow: templates are writable flows") {
                                         &error));
       CHECK(error == "");
     }
+    const cJSON* home = json::get(json::get(json::get(flow.get(), "steps"), "s_home"), "options");
+    CHECK(json::get(json::get(json::get(flow.get(), "steps"), "c_any"), "kind") == nullptr);
+    const cJSON* home_option = nullptr;
+    cJSON_ArrayForEach(home_option, home) {
+      CHECK(json::getString(home_option, "id") != "o_call");
+      CHECK(json::getString(home_option, "style").empty());
+    }
     json::setItem(written.get(), "visitor_flow", std::move(flow));
     CHECK(validate(written.get()) == "ok");
+  }
+  {
+    auto flow = visitor_flow::templateFlow(config, catalog(), "delivery");
+    const cJSON* steps = json::get(flow.get(), "steps");
+    CHECK(json::getInt(json::get(steps, "s_home"), "order", -1) == 0);
+    std::set<int> seen;
+    const cJSON* step = nullptr;
+    cJSON_ArrayForEach(step, steps) seen.insert(static_cast<int>(json::getInt(step, "order", -1)));
+    CHECK(static_cast<int>(seen.size()) == cJSON_GetArraySize(steps));
+    CHECK(*seen.begin() == 0);
+    CHECK(*seen.rbegin() == cJSON_GetArraySize(steps) - 1);
+  }
+  const cJSON* none = json::get(fixtureCase(suite.get(), "default-no-purposes"), "config");
+  for (const char* name : {"default", "purposes"}) {
+    auto flow = visitor_flow::templateFlow(none, catalog(), name);
+    const cJSON* home = json::get(json::get(flow.get(), "steps"), "s_home");
+    CHECK(cJSON_GetArraySize(json::get(home, "options")) == 1);
+    CHECK(json::getString(cJSON_GetArrayItem(json::get(home, "options"), 0), "style") == "primary");
+    CHECK(json::getString(json::get(json::get(flow.get(), "steps"), "c_any"), "kind") == "call");
   }
   CHECK(visitor_flow::templateFlow(config, catalog(), "nonsense") == nullptr);
   auto plain = visitor_flow::templateFlow(config, catalog(), "purposes");

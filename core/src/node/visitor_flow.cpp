@@ -129,6 +129,8 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
   if (!idValid(id)) return fail(error, "bad_step_id", id);
   if (!cJSON_IsObject(step)) return fail(error, "bad_step", id);
   const std::string kind = json::getString(step, "kind");
+  const cJSON* order = json::get(step, "order");
+  if (order && !wholeNumber(order, 0, kMaxStepOrder)) return fail(error, "bad_order", id);
   const cJSON* title = json::get(step, "title");
   const cJSON* body = json::get(step, "body");
   const cJSON* images = json::get(step, "images");
@@ -139,7 +141,7 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     if (images && !imagesValid(images)) return fail(error, "bad_images", id);
   }
   if (kind == "page") {
-    if (!hasOnly(step, {"kind", "title", "body", "images", "options"}))
+    if (!hasOnly(step, {"kind", "title", "body", "images", "options", "order"}))
       return fail(error, "unknown_field", id);
     const cJSON* options = json::get(step, "options");
     if (!cJSON_IsArray(options) || cJSON_GetArraySize(options) < 1)
@@ -179,14 +181,14 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     return true;
   }
   if (kind == "call") {
-    if (!hasOnly(step, {"kind", "purpose", "on_unanswered"}))
+    if (!hasOnly(step, {"kind", "purpose", "on_unanswered", "order"}))
       return fail(error, "unknown_field", id);
     if (purpose && !referenceValid(purpose, 64)) return fail(error, "bad_purpose", id);
     if (!optionalTargetValid(step, "on_unanswered")) return fail(error, "bad_target", id);
     return true;
   }
   if (kind == "notify") {
-    if (!hasOnly(step, {"kind", "message", "purpose", "to", "snapshot"}))
+    if (!hasOnly(step, {"kind", "message", "purpose", "to", "snapshot", "order"}))
       return fail(error, "unknown_field", id);
     const cJSON* message = json::get(step, "message");
     if (!message || !textMapValid(message, 200, 0, true))
@@ -206,7 +208,7 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     return true;
   }
   if (kind == "end") {
-    if (!hasOnly(step, {"kind", "title", "body", "images", "return_s"}))
+    if (!hasOnly(step, {"kind", "title", "body", "images", "return_s", "order"}))
       return fail(error, "unknown_field", id);
     const cJSON* return_s = json::get(step, "return_s");
     if (return_s && !wholeNumber(return_s, 3, 60)) return fail(error, "bad_return_s", id);
@@ -311,6 +313,52 @@ std::string deliveryPurpose(const std::vector<Purpose>& purposes) {
   for (const auto& purpose : purposes)
     if (json::getString(purpose.entry, "icon") == "\xF0\x9F\x93\xA6") return purpose.id;
   return "";
+}
+
+// Steps in the order a visitor meets them: the start page, then breadth-first through option
+// targets, notify targets and unanswered branches, then whatever is unreachable by id.
+std::vector<std::string> readingOrder(const cJSON* steps, const std::string& start) {
+  std::vector<std::string> all;
+  const cJSON* step = nullptr;
+  cJSON_ArrayForEach(step, steps) if (step->string) all.push_back(step->string);
+  std::sort(all.begin(), all.end());
+  std::vector<std::string> out;
+  std::set<std::string> seen;
+  auto visit = [&](const std::string& from) {
+    std::vector<std::string> queue = {from};
+    for (size_t head = 0; head < queue.size(); ++head) {
+      const std::string id = queue[head];
+      const cJSON* node = json::get(steps, id.c_str());
+      if (id.empty() || !node || !seen.insert(id).second) continue;
+      out.push_back(id);
+      const cJSON* option = nullptr;
+      cJSON_ArrayForEach(option, json::get(node, "options")) {
+        if (json::getBool(option, "enabled", true)) queue.push_back(json::getString(option, "to"));
+      }
+      queue.push_back(json::getString(node, "to"));
+      queue.push_back(json::getString(node, "on_unanswered"));
+    }
+  };
+  visit(start);
+  for (const auto& id : all) visit(id);
+  return out;
+}
+
+// The administrator-visible list: explicit orders first (ties and missing values keep the
+// reading order), then steps without a usable order in reading order.
+json::Doc stepOrderList(const cJSON* steps, const cJSON* raw_steps, const std::string& start) {
+  const auto reading = readingOrder(steps, start);
+  std::vector<std::pair<std::pair<int64_t, size_t>, std::string>> keyed;
+  for (size_t rank = 0; rank < reading.size(); ++rank) {
+    const cJSON* order = json::get(json::get(raw_steps, reading[rank].c_str()), "order");
+    const int64_t value = wholeNumber(order, 0, kMaxStepOrder)
+        ? static_cast<int64_t>(order->valuedouble) : kMaxStepOrder + 1;
+    keyed.push_back({{value, rank}, reading[rank]});
+  }
+  std::sort(keyed.begin(), keyed.end());
+  auto out = json::arr();
+  for (const auto& item : keyed) cJSON_AddItemToArray(out.get(), cJSON_CreateString(item.second.c_str()));
+  return out;
 }
 
 cJSON* addStep(cJSON* steps, const std::string& id, const char* kind) {
@@ -692,15 +740,18 @@ json::Doc templateFlow(const cJSON* config, const TextFn& text, const std::strin
   cJSON* home = addStep(steps, "s_home", "page");
   json::setItem(home, "title", builtinLabels(text, "core.flow.home_title"));
   cJSON* options = json::addArr(home, "options");
-  cJSON* call = addOption(options, "o_call", "c_any");
-  json::setItem(call, "label", builtinLabels(text, "core.flow.call"));
-  json::set(call, "style", "primary");
-  addStep(steps, "c_any", "call");
+  // The purposes replace the generic Call option; it remains only when there is nothing else.
+  if (purposes.empty()) {
+    cJSON* call = addOption(options, "o_call", "c_any");
+    json::setItem(call, "label", builtinLabels(text, "core.flow.call"));
+    json::set(call, "style", "primary");
+    addStep(steps, "c_any", "call");
+  }
 
   std::string delivery_call;
   int index = 0;
   for (const auto& purpose : purposes) {
-    // Room is kept for the Call option, and for a delivery option the template may add itself.
+    // Room is kept for a delivery option the template may add itself.
     if (cJSON_GetArraySize(options) >= kMaxOptions - (name == "delivery" && delivery.empty()))
       break;
     ++index;
@@ -728,6 +779,9 @@ json::Doc templateFlow(const cJSON* config, const TextFn& text, const std::strin
     json::setItem(option, "label", builtinLabels(text, "core.seed.purpose.p_delivery"));
   }
   if (!delivery_call.empty()) addDeliveryBranch(steps, text, delivery_call, delivery);
+  int64_t next = 0;
+  for (const auto& id : readingOrder(steps, "s_home"))
+    json::set(json::get(steps, id.c_str()), "order", next++);
   return raw;
 }
 
@@ -942,6 +996,7 @@ json::Doc resolve(const cJSON* config, const std::string& door, const ResolveEnv
             wholeNumber(idle, 15, 300) ? static_cast<int64_t>(idle->valuedouble)
                                        : static_cast<int64_t>(kDefaultIdleS));
   json::setBool(out.get(), "require_call", require_call);
+  json::setItem(out.get(), "step_order", stepOrderList(steps.get(), raw_steps, start));
   json::setItem(out.get(), "steps", std::move(steps));
   json::setItem(out.get(), "issues", std::move(issues));
   return out;

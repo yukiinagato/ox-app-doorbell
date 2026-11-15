@@ -22,6 +22,7 @@ constexpr int kMaxSteps = 32;
 constexpr int kMaxOptions = 12;
 constexpr int kMaxPageDepth = 6;
 constexpr int kMaxImages = 2;
+constexpr int kMaxStepOrder = 9999;
 constexpr int kDefaultIdleS = 45;
 constexpr int kDefaultReturnS = 8;
 

@@ -32,7 +32,7 @@
  "resolve": [
   {
    "name": "default-with-delivery",
-   "note": "visitor_flow was never written and a delivery purpose is enabled: the built-in wizard with the leave-at-door branch.",
+   "note": "visitor_flow was never written and a delivery purpose is enabled: the built-in wizard lists only the purposes, with the leave-at-door branch.",
    "door": "d_front",
    "assets_cached": [],
    "config": {
@@ -90,10 +90,17 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_p_visit",
+     "s_parcel",
+     "c_p_sales",
+     "s_where",
+     "c_p_delivery",
+     "n_left",
+     "e_thanks"
+    ],
     "steps": {
-     "c_any": {
-      "kind": "call"
-     },
      "c_p_delivery": {
       "kind": "call",
       "purpose": "p_delivery",
@@ -136,18 +143,6 @@
       },
       "images": [],
       "options": [
-       {
-        "id": "o_call",
-        "semantic_id": "call.primary",
-        "label": {
-         "ja": "呼び出す",
-         "en": "Call",
-         "zh": "呼叫"
-        },
-        "icon": "",
-        "style": "primary",
-        "to": "c_any"
-       },
        {
         "id": "o_p_visit",
         "semantic_id": "purpose.button",
@@ -263,7 +258,7 @@
   },
   {
    "name": "default-without-delivery",
-   "note": "No delivery-like purpose is enabled: the plain start page, one call per purpose.",
+   "note": "No delivery-like purpose is enabled: the plain start page, one call per purpose and no generic Call option.",
    "door": "d_front",
    "assets_cached": [],
    "config": {
@@ -322,10 +317,12 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_p_visit",
+     "c_p_sales"
+    ],
     "steps": {
-     "c_any": {
-      "kind": "call"
-     },
      "c_p_sales": {
       "kind": "call",
       "purpose": "p_sales"
@@ -343,18 +340,6 @@
       },
       "images": [],
       "options": [
-       {
-        "id": "o_call",
-        "semantic_id": "call.primary",
-        "label": {
-         "ja": "呼び出す",
-         "en": "Call",
-         "zh": "呼叫"
-        },
-        "icon": "",
-        "style": "primary",
-        "to": "c_any"
-       },
        {
         "id": "o_p_visit",
         "semantic_id": "purpose.button",
@@ -380,6 +365,104 @@
         "style": "normal",
         "to": "c_p_sales",
         "purpose": "p_sales"
+       }
+      ]
+     }
+    },
+    "issues": []
+   }
+  },
+  {
+   "name": "default-no-purposes",
+   "note": "No purpose is enabled: the start page keeps the single primary Call option.",
+   "door": "d_front",
+   "assets_cached": [],
+   "config": {
+    "ui": {
+     "languages": [
+      "ja",
+      "en",
+      "zh"
+     ],
+     "call_flow": "purpose_first"
+    },
+    "doors": {
+     "d_front": {
+      "label": {
+       "ja": "玄関"
+      }
+     }
+    },
+    "visit_purposes": {
+     "p_visit": {
+      "label": {
+       "ja": "訪問",
+       "en": "Visit",
+       "zh": "访客"
+      },
+      "icon": "🏠",
+      "order": 1,
+      "enabled": false
+     },
+     "p_delivery": {
+      "label": {
+       "ja": "宅配便",
+       "en": "Delivery",
+       "zh": "快递"
+      },
+      "icon": "📦",
+      "order": 2,
+      "enabled": false
+     },
+     "p_sales": {
+      "label": {
+       "ja": "営業・集金",
+       "en": "Sales",
+       "zh": "推销/收费"
+      },
+      "icon": "💼",
+      "order": 3,
+      "enabled": false
+     }
+    }
+   },
+   "write": "ok",
+   "expect": {
+    "schema_version": 1,
+    "enabled": true,
+    "door": "d_front",
+    "source": "default",
+    "start": "s_home",
+    "idle_s": 45,
+    "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any"
+    ],
+    "steps": {
+     "c_any": {
+      "kind": "call"
+     },
+     "s_home": {
+      "kind": "page",
+      "title": {
+       "ja": "ご用件をお選びください",
+       "en": "How can we help?",
+       "zh": "请选择来访目的"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_call",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "呼び出す",
+         "en": "Call",
+         "zh": "呼叫"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "c_any"
        }
       ]
      }
@@ -615,6 +698,1230 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "c_visit",
+     "s_parcel",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "e_thanks"
+    ],
+    "steps": {
+     "c_any": {
+      "kind": "call"
+     },
+     "c_delivery": {
+      "kind": "call",
+      "purpose": "p_delivery",
+      "on_unanswered": "s_parcel"
+     },
+     "c_visit": {
+      "kind": "call",
+      "purpose": "p_visit"
+     },
+     "e_thanks": {
+      "kind": "end",
+      "title": {
+       "ja": "ありがとうございました",
+       "en": "Thank you",
+       "zh": "谢谢"
+      },
+      "images": [],
+      "return_s": 8
+     },
+     "n_left": {
+      "kind": "notify",
+      "purpose": "p_delivery",
+      "to": "e_thanks"
+     },
+     "s_home": {
+      "kind": "page",
+      "title": {
+       "ja": "ご用件をお選びください",
+       "en": "How can we help?",
+       "zh": "请选择来访目的"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_call",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "呼び出す",
+         "en": "Call",
+         "zh": "呼叫"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "c_any"
+       },
+       {
+        "id": "o_visit",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "訪問",
+         "en": "Visit",
+         "zh": "访客"
+        },
+        "icon": "🏠",
+        "style": "normal",
+        "to": "c_visit",
+        "purpose": "p_visit"
+       },
+       {
+        "id": "o_delivery",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "宅配便",
+         "en": "Delivery",
+         "zh": "快递"
+        },
+        "icon": "📦",
+        "style": "normal",
+        "to": "s_parcel",
+        "purpose": "p_delivery"
+       }
+      ]
+     },
+     "s_parcel": {
+      "kind": "page",
+      "title": {
+       "ja": "置き配できますか？",
+       "en": "Can you leave it at the door?",
+       "zh": "可以放在门口吗？"
+      },
+      "body": {
+       "ja": "サイン不要のお荷物は玄関前に置いてください。",
+       "en": "If no signature is needed, please leave the parcel by the door.",
+       "zh": "无需签收的包裹请放在门口。"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_leave",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置き配する",
+         "en": "Leave it",
+         "zh": "放在门口"
+        },
+        "icon": "📦",
+        "style": "primary",
+        "to": "s_where"
+       },
+       {
+        "id": "o_hand",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "手渡し・サイン必要",
+         "en": "Hand over / signature",
+         "zh": "需当面签收"
+        },
+        "icon": "✍️",
+        "style": "normal",
+        "to": "c_delivery"
+       }
+      ]
+     },
+     "s_where": {
+      "kind": "page",
+      "title": {
+       "ja": "置き場所",
+       "en": "Where to leave it",
+       "zh": "放置位置"
+      },
+      "body": {
+       "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+       "en": "Place it on the box left of the door.\n\nThen press the button below.",
+       "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+      },
+      "images": [
+       {
+        "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "url": "/asset/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "path": "/assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "alt": {
+         "ja": "置き場所の写真",
+         "en": "Photo of the drop spot",
+         "zh": "放置位置照片"
+        },
+        "place": "above"
+       }
+      ],
+      "options": [
+       {
+        "id": "o_done",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置きました",
+         "en": "I left it",
+         "zh": "已放好"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "n_left"
+       }
+      ]
+     }
+    },
+    "issues": []
+   }
+  },
+  {
+   "name": "step-order-explicit",
+   "note": "Explicit orders put the steps in that order, regardless of reading order.",
+   "door": "d_front",
+   "assets_cached": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   ],
+   "config": {
+    "ui": {
+     "languages": [
+      "ja",
+      "en",
+      "zh"
+     ],
+     "call_flow": "purpose_first"
+    },
+    "doors": {
+     "d_front": {
+      "label": {
+       "ja": "玄関"
+      }
+     }
+    },
+    "visit_purposes": {
+     "p_visit": {
+      "label": {
+       "ja": "訪問",
+       "en": "Visit",
+       "zh": "访客"
+      },
+      "icon": "🏠",
+      "order": 1
+     },
+     "p_delivery": {
+      "label": {
+       "ja": "宅配便",
+       "en": "Delivery",
+       "zh": "快递"
+      },
+      "icon": "📦",
+      "order": 2
+     },
+     "p_sales": {
+      "label": {
+       "ja": "営業・集金",
+       "en": "Sales",
+       "zh": "推销/收费"
+      },
+      "icon": "💼",
+      "order": 3
+     }
+    },
+    "visitor_flow": {
+     "enabled": true,
+     "start": "s_home",
+     "idle_s": 45,
+     "steps": {
+      "s_home": {
+       "kind": "page",
+       "title": {
+        "ja": "ご用件をお選びください",
+        "en": "How can we help?",
+        "zh": "请选择来访目的"
+       },
+       "options": [
+        {
+         "id": "o_call",
+         "label": {
+          "ja": "呼び出す",
+          "en": "Call",
+          "zh": "呼叫"
+         },
+         "style": "primary",
+         "to": "c_any"
+        },
+        {
+         "id": "o_visit",
+         "purpose": "p_visit",
+         "to": "c_visit"
+        },
+        {
+         "id": "o_delivery",
+         "purpose": "p_delivery",
+         "to": "s_parcel"
+        }
+       ],
+       "order": 8
+      },
+      "c_any": {
+       "kind": "call",
+       "order": 7
+      },
+      "c_visit": {
+       "kind": "call",
+       "purpose": "p_visit",
+       "order": 6
+      },
+      "c_delivery": {
+       "kind": "call",
+       "purpose": "p_delivery",
+       "on_unanswered": "s_parcel",
+       "order": 5
+      },
+      "s_parcel": {
+       "kind": "page",
+       "title": {
+        "ja": "置き配できますか？",
+        "en": "Can you leave it at the door?",
+        "zh": "可以放在门口吗？"
+       },
+       "body": {
+        "ja": "サイン不要のお荷物は玄関前に置いてください。",
+        "en": "If no signature is needed, please leave the parcel by the door.",
+        "zh": "无需签收的包裹请放在门口。"
+       },
+       "options": [
+        {
+         "id": "o_leave",
+         "icon": "📦",
+         "label": {
+          "ja": "置き配する",
+          "en": "Leave it",
+          "zh": "放在门口"
+         },
+         "style": "primary",
+         "to": "s_where"
+        },
+        {
+         "id": "o_hand",
+         "icon": "✍️",
+         "label": {
+          "ja": "手渡し・サイン必要",
+          "en": "Hand over / signature",
+          "zh": "需当面签收"
+         },
+         "to": "c_delivery"
+        }
+       ],
+       "order": 4
+      },
+      "s_where": {
+       "kind": "page",
+       "title": {
+        "ja": "置き場所",
+        "en": "Where to leave it",
+        "zh": "放置位置"
+       },
+       "body": {
+        "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+        "en": "Place it on the box left of the door.\n\nThen press the button below.",
+        "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+       },
+       "images": [
+        {
+         "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "place": "above",
+         "alt": {
+          "ja": "置き場所の写真",
+          "en": "Photo of the drop spot",
+          "zh": "放置位置照片"
+         }
+        }
+       ],
+       "options": [
+        {
+         "id": "o_done",
+         "label": {
+          "ja": "置きました",
+          "en": "I left it",
+          "zh": "已放好"
+         },
+         "style": "primary",
+         "to": "n_left"
+        }
+       ],
+       "order": 3
+      },
+      "n_left": {
+       "kind": "notify",
+       "purpose": "p_delivery",
+       "message": {
+        "ja": "荷物が玄関前に置かれました",
+        "en": "A parcel was left at the door",
+        "zh": "包裹已放在门口"
+       },
+       "snapshot": {
+        "source": "media_source",
+        "id": "porch_camera"
+       },
+       "to": "e_thanks",
+       "order": 2
+      },
+      "e_thanks": {
+       "kind": "end",
+       "title": {
+        "ja": "ありがとうございました",
+        "en": "Thank you",
+        "zh": "谢谢"
+       },
+       "return_s": 8,
+       "order": 1
+      }
+     }
+    },
+    "assets": {
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "type": "image/jpeg",
+      "size": 1000
+     },
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "type": "image/png",
+      "size": 1000
+     }
+    },
+    "media_sources": {
+     "porch_camera": {
+      "schema_version": 1,
+      "kind": "ip_camera",
+      "streams": {
+       "snapshot": {
+        "url": "https://192.0.2.20/snapshot.jpg"
+       }
+      },
+      "secret_ref": "secret:media.porch_camera"
+     }
+    }
+   },
+   "write": "ok",
+   "expect": {
+    "schema_version": 1,
+    "enabled": true,
+    "door": "d_front",
+    "source": "config",
+    "start": "s_home",
+    "idle_s": 45,
+    "require_call": true,
+    "step_order": [
+     "e_thanks",
+     "n_left",
+     "s_where",
+     "s_parcel",
+     "c_delivery",
+     "c_visit",
+     "c_any",
+     "s_home"
+    ],
+    "steps": {
+     "c_any": {
+      "kind": "call"
+     },
+     "c_delivery": {
+      "kind": "call",
+      "purpose": "p_delivery",
+      "on_unanswered": "s_parcel"
+     },
+     "c_visit": {
+      "kind": "call",
+      "purpose": "p_visit"
+     },
+     "e_thanks": {
+      "kind": "end",
+      "title": {
+       "ja": "ありがとうございました",
+       "en": "Thank you",
+       "zh": "谢谢"
+      },
+      "images": [],
+      "return_s": 8
+     },
+     "n_left": {
+      "kind": "notify",
+      "purpose": "p_delivery",
+      "to": "e_thanks"
+     },
+     "s_home": {
+      "kind": "page",
+      "title": {
+       "ja": "ご用件をお選びください",
+       "en": "How can we help?",
+       "zh": "请选择来访目的"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_call",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "呼び出す",
+         "en": "Call",
+         "zh": "呼叫"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "c_any"
+       },
+       {
+        "id": "o_visit",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "訪問",
+         "en": "Visit",
+         "zh": "访客"
+        },
+        "icon": "🏠",
+        "style": "normal",
+        "to": "c_visit",
+        "purpose": "p_visit"
+       },
+       {
+        "id": "o_delivery",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "宅配便",
+         "en": "Delivery",
+         "zh": "快递"
+        },
+        "icon": "📦",
+        "style": "normal",
+        "to": "s_parcel",
+        "purpose": "p_delivery"
+       }
+      ]
+     },
+     "s_parcel": {
+      "kind": "page",
+      "title": {
+       "ja": "置き配できますか？",
+       "en": "Can you leave it at the door?",
+       "zh": "可以放在门口吗？"
+      },
+      "body": {
+       "ja": "サイン不要のお荷物は玄関前に置いてください。",
+       "en": "If no signature is needed, please leave the parcel by the door.",
+       "zh": "无需签收的包裹请放在门口。"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_leave",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置き配する",
+         "en": "Leave it",
+         "zh": "放在门口"
+        },
+        "icon": "📦",
+        "style": "primary",
+        "to": "s_where"
+       },
+       {
+        "id": "o_hand",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "手渡し・サイン必要",
+         "en": "Hand over / signature",
+         "zh": "需当面签收"
+        },
+        "icon": "✍️",
+        "style": "normal",
+        "to": "c_delivery"
+       }
+      ]
+     },
+     "s_where": {
+      "kind": "page",
+      "title": {
+       "ja": "置き場所",
+       "en": "Where to leave it",
+       "zh": "放置位置"
+      },
+      "body": {
+       "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+       "en": "Place it on the box left of the door.\n\nThen press the button below.",
+       "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+      },
+      "images": [
+       {
+        "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "url": "/asset/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "path": "/assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "alt": {
+         "ja": "置き場所の写真",
+         "en": "Photo of the drop spot",
+         "zh": "放置位置照片"
+        },
+        "place": "above"
+       }
+      ],
+      "options": [
+       {
+        "id": "o_done",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置きました",
+         "en": "I left it",
+         "zh": "已放好"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "n_left"
+       }
+      ]
+     }
+    },
+    "issues": []
+   }
+  },
+  {
+   "name": "step-order-ties-and-missing",
+   "note": "Equal orders fall back to reading order, and steps without an order follow the ordered ones in reading order.",
+   "door": "d_front",
+   "assets_cached": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   ],
+   "config": {
+    "ui": {
+     "languages": [
+      "ja",
+      "en",
+      "zh"
+     ],
+     "call_flow": "purpose_first"
+    },
+    "doors": {
+     "d_front": {
+      "label": {
+       "ja": "玄関"
+      }
+     }
+    },
+    "visit_purposes": {
+     "p_visit": {
+      "label": {
+       "ja": "訪問",
+       "en": "Visit",
+       "zh": "访客"
+      },
+      "icon": "🏠",
+      "order": 1
+     },
+     "p_delivery": {
+      "label": {
+       "ja": "宅配便",
+       "en": "Delivery",
+       "zh": "快递"
+      },
+      "icon": "📦",
+      "order": 2
+     },
+     "p_sales": {
+      "label": {
+       "ja": "営業・集金",
+       "en": "Sales",
+       "zh": "推销/收费"
+      },
+      "icon": "💼",
+      "order": 3
+     }
+    },
+    "visitor_flow": {
+     "enabled": true,
+     "start": "s_home",
+     "idle_s": 45,
+     "steps": {
+      "s_home": {
+       "kind": "page",
+       "title": {
+        "ja": "ご用件をお選びください",
+        "en": "How can we help?",
+        "zh": "请选择来访目的"
+       },
+       "options": [
+        {
+         "id": "o_call",
+         "label": {
+          "ja": "呼び出す",
+          "en": "Call",
+          "zh": "呼叫"
+         },
+         "style": "primary",
+         "to": "c_any"
+        },
+        {
+         "id": "o_visit",
+         "purpose": "p_visit",
+         "to": "c_visit"
+        },
+        {
+         "id": "o_delivery",
+         "purpose": "p_delivery",
+         "to": "s_parcel"
+        }
+       ],
+       "order": 5
+      },
+      "c_any": {
+       "kind": "call",
+       "order": 5
+      },
+      "c_visit": {
+       "kind": "call",
+       "purpose": "p_visit"
+      },
+      "c_delivery": {
+       "kind": "call",
+       "purpose": "p_delivery",
+       "on_unanswered": "s_parcel",
+       "order": 0
+      },
+      "s_parcel": {
+       "kind": "page",
+       "title": {
+        "ja": "置き配できますか？",
+        "en": "Can you leave it at the door?",
+        "zh": "可以放在门口吗？"
+       },
+       "body": {
+        "ja": "サイン不要のお荷物は玄関前に置いてください。",
+        "en": "If no signature is needed, please leave the parcel by the door.",
+        "zh": "无需签收的包裹请放在门口。"
+       },
+       "options": [
+        {
+         "id": "o_leave",
+         "icon": "📦",
+         "label": {
+          "ja": "置き配する",
+          "en": "Leave it",
+          "zh": "放在门口"
+         },
+         "style": "primary",
+         "to": "s_where"
+        },
+        {
+         "id": "o_hand",
+         "icon": "✍️",
+         "label": {
+          "ja": "手渡し・サイン必要",
+          "en": "Hand over / signature",
+          "zh": "需当面签收"
+         },
+         "to": "c_delivery"
+        }
+       ]
+      },
+      "s_where": {
+       "kind": "page",
+       "title": {
+        "ja": "置き場所",
+        "en": "Where to leave it",
+        "zh": "放置位置"
+       },
+       "body": {
+        "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+        "en": "Place it on the box left of the door.\n\nThen press the button below.",
+        "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+       },
+       "images": [
+        {
+         "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "place": "above",
+         "alt": {
+          "ja": "置き場所の写真",
+          "en": "Photo of the drop spot",
+          "zh": "放置位置照片"
+         }
+        }
+       ],
+       "options": [
+        {
+         "id": "o_done",
+         "label": {
+          "ja": "置きました",
+          "en": "I left it",
+          "zh": "已放好"
+         },
+         "style": "primary",
+         "to": "n_left"
+        }
+       ]
+      },
+      "n_left": {
+       "kind": "notify",
+       "purpose": "p_delivery",
+       "message": {
+        "ja": "荷物が玄関前に置かれました",
+        "en": "A parcel was left at the door",
+        "zh": "包裹已放在门口"
+       },
+       "snapshot": {
+        "source": "media_source",
+        "id": "porch_camera"
+       },
+       "to": "e_thanks"
+      },
+      "e_thanks": {
+       "kind": "end",
+       "title": {
+        "ja": "ありがとうございました",
+        "en": "Thank you",
+        "zh": "谢谢"
+       },
+       "return_s": 8
+      }
+     }
+    },
+    "assets": {
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "type": "image/jpeg",
+      "size": 1000
+     },
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "type": "image/png",
+      "size": 1000
+     }
+    },
+    "media_sources": {
+     "porch_camera": {
+      "schema_version": 1,
+      "kind": "ip_camera",
+      "streams": {
+       "snapshot": {
+        "url": "https://192.0.2.20/snapshot.jpg"
+       }
+      },
+      "secret_ref": "secret:media.porch_camera"
+     }
+    }
+   },
+   "write": "ok",
+   "expect": {
+    "schema_version": 1,
+    "enabled": true,
+    "door": "d_front",
+    "source": "config",
+    "start": "s_home",
+    "idle_s": 45,
+    "require_call": true,
+    "step_order": [
+     "c_delivery",
+     "s_home",
+     "c_any",
+     "c_visit",
+     "s_parcel",
+     "s_where",
+     "n_left",
+     "e_thanks"
+    ],
+    "steps": {
+     "c_any": {
+      "kind": "call"
+     },
+     "c_delivery": {
+      "kind": "call",
+      "purpose": "p_delivery",
+      "on_unanswered": "s_parcel"
+     },
+     "c_visit": {
+      "kind": "call",
+      "purpose": "p_visit"
+     },
+     "e_thanks": {
+      "kind": "end",
+      "title": {
+       "ja": "ありがとうございました",
+       "en": "Thank you",
+       "zh": "谢谢"
+      },
+      "images": [],
+      "return_s": 8
+     },
+     "n_left": {
+      "kind": "notify",
+      "purpose": "p_delivery",
+      "to": "e_thanks"
+     },
+     "s_home": {
+      "kind": "page",
+      "title": {
+       "ja": "ご用件をお選びください",
+       "en": "How can we help?",
+       "zh": "请选择来访目的"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_call",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "呼び出す",
+         "en": "Call",
+         "zh": "呼叫"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "c_any"
+       },
+       {
+        "id": "o_visit",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "訪問",
+         "en": "Visit",
+         "zh": "访客"
+        },
+        "icon": "🏠",
+        "style": "normal",
+        "to": "c_visit",
+        "purpose": "p_visit"
+       },
+       {
+        "id": "o_delivery",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "宅配便",
+         "en": "Delivery",
+         "zh": "快递"
+        },
+        "icon": "📦",
+        "style": "normal",
+        "to": "s_parcel",
+        "purpose": "p_delivery"
+       }
+      ]
+     },
+     "s_parcel": {
+      "kind": "page",
+      "title": {
+       "ja": "置き配できますか？",
+       "en": "Can you leave it at the door?",
+       "zh": "可以放在门口吗？"
+      },
+      "body": {
+       "ja": "サイン不要のお荷物は玄関前に置いてください。",
+       "en": "If no signature is needed, please leave the parcel by the door.",
+       "zh": "无需签收的包裹请放在门口。"
+      },
+      "images": [],
+      "options": [
+       {
+        "id": "o_leave",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置き配する",
+         "en": "Leave it",
+         "zh": "放在门口"
+        },
+        "icon": "📦",
+        "style": "primary",
+        "to": "s_where"
+       },
+       {
+        "id": "o_hand",
+        "semantic_id": "purpose.button",
+        "label": {
+         "ja": "手渡し・サイン必要",
+         "en": "Hand over / signature",
+         "zh": "需当面签收"
+        },
+        "icon": "✍️",
+        "style": "normal",
+        "to": "c_delivery"
+       }
+      ]
+     },
+     "s_where": {
+      "kind": "page",
+      "title": {
+       "ja": "置き場所",
+       "en": "Where to leave it",
+       "zh": "放置位置"
+      },
+      "body": {
+       "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+       "en": "Place it on the box left of the door.\n\nThen press the button below.",
+       "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+      },
+      "images": [
+       {
+        "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "url": "/asset/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "path": "/assets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "alt": {
+         "ja": "置き場所の写真",
+         "en": "Photo of the drop spot",
+         "zh": "放置位置照片"
+        },
+        "place": "above"
+       }
+      ],
+      "options": [
+       {
+        "id": "o_done",
+        "semantic_id": "call.primary",
+        "label": {
+         "ja": "置きました",
+         "en": "I left it",
+         "zh": "已放好"
+        },
+        "icon": "",
+        "style": "primary",
+        "to": "n_left"
+       }
+      ]
+     }
+    },
+    "issues": []
+   }
+  },
+  {
+   "name": "step-order-older-editor",
+   "note": "Steps written by an editor that does not know order carry no order; they follow the ordered steps in reading order.",
+   "door": "d_front",
+   "assets_cached": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   ],
+   "config": {
+    "ui": {
+     "languages": [
+      "ja",
+      "en",
+      "zh"
+     ],
+     "call_flow": "purpose_first"
+    },
+    "doors": {
+     "d_front": {
+      "label": {
+       "ja": "玄関"
+      }
+     }
+    },
+    "visit_purposes": {
+     "p_visit": {
+      "label": {
+       "ja": "訪問",
+       "en": "Visit",
+       "zh": "访客"
+      },
+      "icon": "🏠",
+      "order": 1
+     },
+     "p_delivery": {
+      "label": {
+       "ja": "宅配便",
+       "en": "Delivery",
+       "zh": "快递"
+      },
+      "icon": "📦",
+      "order": 2
+     },
+     "p_sales": {
+      "label": {
+       "ja": "営業・集金",
+       "en": "Sales",
+       "zh": "推销/收费"
+      },
+      "icon": "💼",
+      "order": 3
+     }
+    },
+    "visitor_flow": {
+     "enabled": true,
+     "start": "s_home",
+     "idle_s": 45,
+     "steps": {
+      "s_home": {
+       "kind": "page",
+       "title": {
+        "ja": "ご用件をお選びください",
+        "en": "How can we help?",
+        "zh": "请选择来访目的"
+       },
+       "options": [
+        {
+         "id": "o_call",
+         "label": {
+          "ja": "呼び出す",
+          "en": "Call",
+          "zh": "呼叫"
+         },
+         "style": "primary",
+         "to": "c_any"
+        },
+        {
+         "id": "o_visit",
+         "purpose": "p_visit",
+         "to": "c_visit"
+        },
+        {
+         "id": "o_delivery",
+         "purpose": "p_delivery",
+         "to": "s_parcel"
+        }
+       ],
+       "order": 8
+      },
+      "c_any": {
+       "kind": "call",
+       "order": 7
+      },
+      "c_visit": {
+       "kind": "call",
+       "purpose": "p_visit"
+      },
+      "c_delivery": {
+       "kind": "call",
+       "purpose": "p_delivery",
+       "on_unanswered": "s_parcel",
+       "order": 5
+      },
+      "s_parcel": {
+       "kind": "page",
+       "title": {
+        "ja": "置き配できますか？",
+        "en": "Can you leave it at the door?",
+        "zh": "可以放在门口吗？"
+       },
+       "body": {
+        "ja": "サイン不要のお荷物は玄関前に置いてください。",
+        "en": "If no signature is needed, please leave the parcel by the door.",
+        "zh": "无需签收的包裹请放在门口。"
+       },
+       "options": [
+        {
+         "id": "o_leave",
+         "icon": "📦",
+         "label": {
+          "ja": "置き配する",
+          "en": "Leave it",
+          "zh": "放在门口"
+         },
+         "style": "primary",
+         "to": "s_where"
+        },
+        {
+         "id": "o_hand",
+         "icon": "✍️",
+         "label": {
+          "ja": "手渡し・サイン必要",
+          "en": "Hand over / signature",
+          "zh": "需当面签收"
+         },
+         "to": "c_delivery"
+        }
+       ],
+       "order": 4
+      },
+      "s_where": {
+       "kind": "page",
+       "title": {
+        "ja": "置き場所",
+        "en": "Where to leave it",
+        "zh": "放置位置"
+       },
+       "body": {
+        "ja": "ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+        "en": "Place it on the box left of the door.\n\nThen press the button below.",
+        "zh": "请放在门左侧的箱子上。\n\n放好后请按下方按钮。"
+       },
+       "images": [
+        {
+         "asset": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "place": "above",
+         "alt": {
+          "ja": "置き場所の写真",
+          "en": "Photo of the drop spot",
+          "zh": "放置位置照片"
+         }
+        }
+       ],
+       "options": [
+        {
+         "id": "o_done",
+         "label": {
+          "ja": "置きました",
+          "en": "I left it",
+          "zh": "已放好"
+         },
+         "style": "primary",
+         "to": "n_left"
+        }
+       ],
+       "order": 3
+      },
+      "n_left": {
+       "kind": "notify",
+       "purpose": "p_delivery",
+       "message": {
+        "ja": "荷物が玄関前に置かれました",
+        "en": "A parcel was left at the door",
+        "zh": "包裹已放在门口"
+       },
+       "snapshot": {
+        "source": "media_source",
+        "id": "porch_camera"
+       },
+       "to": "e_thanks",
+       "order": 2
+      },
+      "e_thanks": {
+       "kind": "end",
+       "title": {
+        "ja": "ありがとうございました",
+        "en": "Thank you",
+        "zh": "谢谢"
+       },
+       "return_s": 8
+      }
+     }
+    },
+    "assets": {
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "type": "image/jpeg",
+      "size": 1000
+     },
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "type": "image/png",
+      "size": 1000
+     }
+    },
+    "media_sources": {
+     "porch_camera": {
+      "schema_version": 1,
+      "kind": "ip_camera",
+      "streams": {
+       "snapshot": {
+        "url": "https://192.0.2.20/snapshot.jpg"
+       }
+      },
+      "secret_ref": "secret:media.porch_camera"
+     }
+    }
+   },
+   "write": "ok",
+   "expect": {
+    "schema_version": 1,
+    "enabled": true,
+    "door": "d_front",
+    "source": "config",
+    "start": "s_home",
+    "idle_s": 45,
+    "require_call": true,
+    "step_order": [
+     "n_left",
+     "s_where",
+     "s_parcel",
+     "c_delivery",
+     "c_any",
+     "s_home",
+     "c_visit",
+     "e_thanks"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -1033,6 +2340,17 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "c_visit",
+     "s_parcel",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "e_thanks",
+     "c_sales"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -1430,6 +2748,18 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "__call",
+     "s_parcel",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "__end",
+     "c_visit",
+     "e_thanks"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -1862,6 +3192,17 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "c_visit",
+     "s_parcel",
+     "x_survey",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "e_thanks"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -2304,6 +3645,17 @@
     "start": "s_back",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_back",
+     "c_any",
+     "s_parcel",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "e_thanks",
+     "c_visit",
+     "s_home"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -2616,6 +3968,11 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "c_visit"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -2919,6 +4276,16 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "c_any",
+     "c_visit",
+     "s_parcel",
+     "s_where",
+     "c_delivery",
+     "n_left",
+     "e_thanks"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -3189,6 +4556,12 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "n_left",
+     "__call",
+     "e_thanks"
+    ],
     "steps": {
      "e_thanks": {
       "kind": "end",
@@ -3356,6 +4729,11 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": false,
+    "step_order": [
+     "s_home",
+     "n_left",
+     "e_thanks"
+    ],
     "steps": {
      "e_thanks": {
       "kind": "end",
@@ -3887,6 +5265,10 @@
     "start": "__home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "__home",
+     "__call"
+    ],
     "steps": {
      "__home": {
       "kind": "page",
@@ -4066,6 +5448,13 @@
     "start": "s_home",
     "idle_s": 45,
     "require_call": true,
+    "step_order": [
+     "s_home",
+     "s_two",
+     "c_any",
+     "__call",
+     "s_empty"
+    ],
     "steps": {
      "c_any": {
       "kind": "call"
@@ -4179,11 +5568,6 @@
     "title": "ご用件をお選びください",
     "options": [
      {
-      "id": "o_call",
-      "semantic_id": "call.primary",
-      "label": "呼び出す"
-     },
-     {
       "id": "o_p_visit",
       "semantic_id": "purpose.button",
       "label": "訪問"
@@ -4285,11 +5669,6 @@
       "title": "ご用件をお選びください",
       "options": [
        {
-        "id": "o_call",
-        "semantic_id": "call.primary",
-        "label": "呼び出す"
-       },
-       {
         "id": "o_p_visit",
         "semantic_id": "purpose.button",
         "label": "訪問"
@@ -4315,8 +5694,8 @@
   },
   {
    "name": "default-direct-call",
-   "note": "The primary option rings without a purpose; a visitor cancel returns to the start page.",
-   "flow": "default-with-delivery",
+   "note": "No purpose is enabled: the primary Call option rings without a purpose; a visitor cancel returns to the start page.",
+   "flow": "default-no-purposes",
    "start": {
     "mode": "page",
     "page": "s_home",
@@ -4326,21 +5705,6 @@
       "id": "o_call",
       "semantic_id": "call.primary",
       "label": "呼び出す"
-     },
-     {
-      "id": "o_p_visit",
-      "semantic_id": "purpose.button",
-      "label": "訪問"
-     },
-     {
-      "id": "o_p_delivery",
-      "semantic_id": "purpose.button",
-      "label": "宅配便"
-     },
-     {
-      "id": "o_p_sales",
-      "semantic_id": "purpose.button",
-      "label": "営業・集金"
      }
     ],
     "back": false,
@@ -4383,21 +5747,6 @@
         "id": "o_call",
         "semantic_id": "call.primary",
         "label": "呼び出す"
-       },
-       {
-        "id": "o_p_visit",
-        "semantic_id": "purpose.button",
-        "label": "訪問"
-       },
-       {
-        "id": "o_p_delivery",
-        "semantic_id": "purpose.button",
-        "label": "宅配便"
-       },
-       {
-        "id": "o_p_sales",
-        "semantic_id": "purpose.button",
-        "label": "営業・集金"
        }
       ],
       "back": false,
@@ -4417,11 +5766,6 @@
     "page": "s_home",
     "title": "ご用件をお選びください",
     "options": [
-     {
-      "id": "o_call",
-      "semantic_id": "call.primary",
-      "label": "呼び出す"
-     },
      {
       "id": "o_p_visit",
       "semantic_id": "purpose.button",
@@ -4474,11 +5818,6 @@
       "page": "s_home",
       "title": "ご用件をお選びください",
       "options": [
-       {
-        "id": "o_call",
-        "semantic_id": "call.primary",
-        "label": "呼び出す"
-       },
        {
         "id": "o_p_visit",
         "semantic_id": "purpose.button",

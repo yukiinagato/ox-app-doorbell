@@ -1157,6 +1157,11 @@ state) and never reads this configuration itself.
 "doors": { "d_back": { "visitor_flow": { "start": "s_back" } } }   // string leaf per door
 ```
 
+Every step may carry an integer `order` (0..9999, lower first). It only controls the order in
+which editors list the steps (the resolved document's `step_order`); ties and missing values fall
+back to reading order, and it never affects what a visitor sees. The built-in wizard and the
+templates number their steps consecutively from 0, the start page first.
+
 Step kinds:
 
 - `page`: `title`, `body`, `images` (at most 2) and `options` (1..12). An option has `id`, a
@@ -1196,7 +1201,7 @@ page, cannot reach a `call`. Set it to false to allow a notify-only door; the wr
 with warning `visitor_flow.no_call`.
 
 **Defaults.** While no step has ever been written, Core serves a built-in wizard and nothing is
-stored: an entry page with the primary Call option and one option per enabled purpose. When a
+stored: an entry page with one option per enabled purpose and no generic Call option (the primary Call option appears only when no purpose is enabled). When a
 delivery purpose is enabled (`p_delivery`, or any purpose with the 📦 icon) its option leads to
 "Can you leave it at the door?", then either instructions, a `notify` and a closing page, or a
 call for that purpose whose `on_unanswered` returns to the question. Without one, the wizard is

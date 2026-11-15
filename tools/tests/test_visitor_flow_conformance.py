@@ -49,7 +49,7 @@ class VisitorFlowConformanceTests(unittest.TestCase):
         cls.walks = {case["name"]: case for case in cls.suite["walk"]}
 
     def test_fixture_replays_against_the_reference_walker(self):
-        self.assertEqual(run_visitor_flow_suite(FIXTURE), 89)
+        self.assertEqual(run_visitor_flow_suite(FIXTURE), 93)
 
     def test_resolve_cases_cover_the_contract(self):
         self.assertLessEqual({
@@ -86,8 +86,13 @@ class VisitorFlowConformanceTests(unittest.TestCase):
         with_delivery = self.flows["default-with-delivery"]
         self.assertEqual(with_delivery["source"], "default")
         home = {option["id"]: option for option in with_delivery["steps"]["s_home"]["options"]}
-        self.assertEqual(home["o_call"]["semantic_id"], "call.primary")
+        self.assertNotIn("o_call", home)
+        self.assertNotIn("c_any", with_delivery["steps"])
+        self.assertTrue(all(option["style"] == "normal" for option in home.values()))
         self.assertEqual(home["o_p_delivery"]["to"], "s_parcel")
+        bare = {option["id"]: option
+                for option in self.flows["default-no-purposes"]["steps"]["s_home"]["options"]}
+        self.assertEqual(bare["o_call"]["semantic_id"], "call.primary")
         self.assertEqual(with_delivery["steps"]["c_p_delivery"]["on_unanswered"], "s_parcel")
         self.assertEqual(with_delivery["steps"]["n_left"]["to"], "e_thanks")
         self.assertEqual(with_delivery["steps"]["s_where"]["images"], [])
