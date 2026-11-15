@@ -48,6 +48,20 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     internal var config: JSONObject? = null
     internal var status: JSONObject? = null
+    /** Effective volumes and secure-store presence, read with the snapshot off the main thread. */
+    internal var effectiveAudio: JSONObject? = null
+    private var coreVersion = ""
+    private var secretPresence: Map<String, Boolean> = emptyMap()
+    private var snapshotLoaded = false
+    private var renderWanted = false
+    private var lastFingerprint = ""
+    private val reloadGate = ReloadGate()
+    private val pendingWrites = PendingWrites()
+    private val renderGate = RenderGate()
+    /** One ordered lane for snapshot reads and config writes, so a reload sees every earlier write. */
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "doorbell-settings-io").apply { isDaemon = true }
+    }
     internal var nodeId = ""
     private var pairing: JSONObject? = null
     /** Where writes go: core when it exports them, otherwise the loopback session. */
@@ -79,19 +93,15 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         readOnly = writer == null
         adminSession = pendingSession
         pendingSession = null
-        refreshSnapshots()
-        texts.setConfig(config)
         texts.setLang(app.boot.uiLang)
-        palette = resolvePalette()
+        palette = PlatformUi.tokens(this)
         setContentView(buildShell())
-        render()
     }
 
     override fun onResume() {
         super.onResume()
         app.bindForeground(this)
-        refreshSnapshots()
-        render()
+        reload()
     }
 
     override fun onPause() {
@@ -175,10 +185,8 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             "config_changed", "peers_changed", "notice_changed", "time_changed",
             "power_changed", "cluster_key_changed", "peer_rejected", "pairing_state", "display",
             -> ui.post {
-                if (isFinishing) return@post
-                refreshSnapshots()
-                texts.setConfig(config)
-                render()
+                if (isFinishing || !pendingWrites.idle) return@post
+                reload()
             }
         }
     }
@@ -192,11 +200,74 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         if (app.coreOk) app.runtime.airSensors.onPermissionsChanged()
     }
 
-    internal fun refreshSnapshots() {
-        config = if (app.coreOk) app.core.config() else null
-        status = if (app.coreOk) app.core.status() else null
-        pairing = if (app.coreOk) app.core.pairingInfo() else null
-        nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
+    private class Loaded(
+        val config: JSONObject?, val status: JSONObject?, val pairing: JSONObject?,
+        val audio: JSONObject?, val version: String, val secrets: Map<String, Boolean>,
+        val fingerprint: String,
+    )
+
+    private fun loadSnapshots(): Loaded {
+        val ok = app.coreOk
+        val cfg = if (ok) app.core.config() else null
+        val st = if (ok) app.core.status() else null
+        val pair = if (ok) app.core.pairingInfo() else null
+        val id = st?.optJSONObject("node")?.optString("id").orEmpty()
+        val audio = if (ok) app.core.audio(id) else null
+        val secrets = HashMap<String, Boolean>()
+        if (ok) for (name in SettingsFingerprint.secretNames(cfg)) {
+            secrets[name] = app.core.hasPlatformSecret(name)
+        }
+        val version = if (ok) app.core.version() else ""
+        return Loaded(cfg, st, pair, audio, version, secrets,
+                      SettingsFingerprint.of(cfg, st, pair, audio))
+    }
+
+    /** Secure-store presence from the last snapshot; a name it did not list is read directly. */
+    internal fun hasSecret(name: String): Boolean =
+        secretPresence[name] ?: app.core.hasPlatformSecret(name)
+
+    /**
+     * Reads Core off the main thread and applies the result on it. Bursts coalesce into one
+     * more load, and the page is rebuilt only when the snapshot differs from what it shows.
+     */
+    internal fun reload(renderAfter: Boolean = true) {
+        if (renderAfter) renderWanted = true
+        if (reloadGate.request()) startLoad()
+    }
+
+    private fun startLoad() {
+        io.execute {
+            val loaded = try { loadSnapshots() } catch (e: Exception) {
+                ShellLog.ignored("SettingsActivity", e)
+                null
+            }
+            ui.post {
+                if (isFinishing) return@post
+                if (loaded != null) applyLoaded(loaded)
+                if (reloadGate.complete()) startLoad()
+            }
+        }
+    }
+
+    private fun applyLoaded(loaded: Loaded) {
+        config = loaded.config
+        status = loaded.status
+        pairing = loaded.pairing
+        effectiveAudio = loaded.audio
+        coreVersion = loaded.version
+        secretPresence = loaded.secrets
+        nodeId = loaded.status?.optJSONObject("node")?.optString("id").orEmpty()
+        lastFingerprint = loaded.fingerprint
+        texts.setConfig(config)
+        val first = !snapshotLoaded
+        snapshotLoaded = true
+        if (first) {
+            palette = resolvePalette()
+            setContentView(buildShell())
+            renderWanted = true
+        }
+        if (renderWanted && (first || renderGate.needed(loaded.fingerprint))) render()
+        renderWanted = false
     }
 
     private fun resolvePalette(): Palette =
@@ -322,6 +393,8 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     internal fun render() {
+        if (!snapshotLoaded) return
+        renderGate.rendered(lastFingerprint)
         // Every render follows a fresh snapshot; an appearance changed on this very screen is
         // reported here so it shows at once.
         resolvePalette()
@@ -759,7 +832,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     private fun sectionVolume() {
         val card = section(texts.t("volume.title", R.string.volume_title))
-        val effective = if (app.coreOk) app.core.audio(nodeId) else null
+        val effective = effectiveAudio
         for ((level, titleKey, titleRes) in listOf(
             Triple("call", "volume.call", R.string.volume_call),
             Triple("sos", "volume.sos", R.string.volume_sos),
@@ -856,8 +929,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             val value = notice?.text ?: texts.t("notice.none", R.string.notice_none)
             card.row(ShellUi.row(this, palette, doorLabel(door), value) {
                 NoticeDialog.show(this, app, texts, palette, door, doors, ::doorLabel) {
-                    refreshSnapshots()
-                    render()
+                    reload()
                 }
             })
             // Three answers, not a toggle: an absent show_button means "only when an unlock
@@ -1041,7 +1113,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             ShellUi.versionLine(
                 app.boot.name,
                 status?.optJSONObject("node")?.optString("version").orEmpty().ifEmpty {
-                    app.core.version()
+                    coreVersion
                 },
                 appVersion(),
                 power?.optInt("battery_pct", -1) ?: -1,
@@ -1140,7 +1212,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             onChange = { readout.text = it.toString() },
             onCommit = { value ->
                 val json = SettingsModel.encodeInt(spec, value.toString())
-                if (json != null) write(key, json) { ok -> if (!ok) slider?.value = current }
+                if (json != null) write(key, json, rerender = false) { ok -> if (!ok) slider?.value = current }
             },
         )
         return sliderBlock(title, note, readout, slider.view)
@@ -1156,7 +1228,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             this, min, max, current, !readOnly,
             onChange = { readout.text = it.toString() },
             onCommit = { value ->
-                write(key, value.coerceIn(min, max).toString()) { ok ->
+                write(key, value.coerceIn(min, max).toString(), rerender = false) { ok ->
                     if (!ok) slider?.value = current
                 }
             },
@@ -1373,9 +1445,11 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             toast(texts.t("settings.offline", R.string.settings_offline))
             return
         }
-        Thread({
+        pendingWrites.begin()
+        io.execute {
             val result = active.applyOps(ops)
             ui.post {
+                pendingWrites.end()
                 if (isFinishing) return@post
                 if (result.adminRequired) {
                     reauthenticateThen { writeOps(ops) }
@@ -1385,11 +1459,9 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                     if (result.ok) texts.t("admin.saved", R.string.admin_saved)
                     else texts.t("admin.save_failed", R.string.admin_save_failed),
                 )
-                refreshSnapshots()
-                texts.setConfig(config)
-                render()
+                reload()
             }
-        }, "doorbell-config-batch").apply { isDaemon = true }.start()
+        }
     }
 
     // ---------- row builders ----------
@@ -1593,7 +1665,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         val bar = PlatformUi.slider(
             this, 0, 100, value, !readOnly,
             onChange = { readout.text = it.toString() },
-            onCommit = { write(deviceKey, it.toString()) { } },
+            onCommit = { write(deviceKey, it.toString(), rerender = false) { } },
         )
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1735,16 +1807,23 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     // ---------- writes ----------
 
-    internal fun write(key: String, valueJson: String, done: (Boolean) -> Unit) {
+    /**
+     * [rerender] false is for a control that already shows the value (a slider): the snapshot
+     * is still reloaded, but the page is rebuilt only if something else changed meanwhile.
+     */
+    internal fun write(key: String, valueJson: String, rerender: Boolean = true,
+                       done: (Boolean) -> Unit) {
         val active = writer
         if (active == null) {
             toast(texts.t("settings.offline", R.string.settings_offline))
             done(false)
             return
         }
-        Thread({
+        pendingWrites.begin()
+        io.execute {
             val result = active.setKey(key, valueJson)
             ui.post {
+                pendingWrites.end()
                 if (isFinishing) return@post
                 if (result.ok) {
                     // A colour below the WCAG ratio is still saved; core returns the measured
@@ -1755,11 +1834,9 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                         else texts.t(key, R.string.admin_saved)
                     }
                     toast(advisory.ifEmpty { texts.t("admin.saved", R.string.admin_saved) })
-                    refreshSnapshots()
-                    texts.setConfig(config)
-                    render()
+                    reload(renderAfter = rerender)
                 } else if (result.adminRequired) {
-                    reauthenticateThen { write(key, valueJson, done) }
+                    reauthenticateThen { write(key, valueJson, rerender, done) }
                     return@post
                 } else {
                     toast(
@@ -1770,7 +1847,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                 }
                 done(result.ok)
             }
-        }, "doorbell-config-write").apply { isDaemon = true }.start()
+        }
     }
 
     internal fun deleteKey(key: String) {
@@ -1778,9 +1855,11 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             toast(texts.t("settings.offline", R.string.settings_offline))
             return
         }
-        Thread({
+        pendingWrites.begin()
+        io.execute {
             val result = active.deleteKey(key)
             ui.post {
+                pendingWrites.end()
                 if (isFinishing) return@post
                 if (result.adminRequired) {
                     reauthenticateThen { deleteKey(key) }
@@ -1790,10 +1869,9 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                     if (result.ok) texts.t("admin.saved", R.string.admin_saved)
                     else texts.t("admin.save_failed", R.string.admin_save_failed),
                 )
-                refreshSnapshots()
-                render()
+                reload()
             }
-        }, "doorbell-config-delete").apply { isDaemon = true }.start()
+        }
     }
 
     // ---------- helpers ----------

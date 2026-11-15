@@ -176,7 +176,7 @@ internal object SettingsModel {
                                  0, 3600, 60),
             SettingSpec.IntRange("call.indoor.return_s", "settings.item_cluster_return_s",
                                  5, 600, 60),
-            SettingSpec.IntRange("reply.display_ttl_s", "settings.item_reply_ttl", 5, 600, 30),
+            SettingSpec.IntRange("reply.display_ttl_s", "settings.item_reply_ttl", 5, 300, 30),
         )
         SettingsCategory.EMERGENCY -> listOf(
             SettingSpec.IntRange("emergency.trigger.countdown_s", "sos.countdown_s", 0, 10, 3,

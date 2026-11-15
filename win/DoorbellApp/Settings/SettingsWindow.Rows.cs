@@ -157,6 +157,36 @@ namespace DoorbellApp.Settings
             return Report(_store.Commit(sets, null), parts);
         }
 
+        /// <summary>
+        /// Like <see cref="Write"/> for a control that already shows the new value: a plain
+        /// configuration write runs on the write lane and [done] runs on the dispatcher with the
+        /// outcome; handler, boot and local keys stay synchronous.
+        /// </summary>
+        private void WriteAsync(SettingItem item, object value, RowParts parts, Action<bool> done)
+        {
+            if (!_store.EditingOther &&
+                (item.Handler == "identity" || item.Handler == "ui_lang" ||
+                 item.Key.StartsWith(SettingsStore.BootPrefix, StringComparison.Ordinal) ||
+                 item.Key.StartsWith(LocalPrefix, StringComparison.Ordinal)))
+            {
+                done(Write(item, value, parts));
+                return;
+            }
+            parts.Error.Visibility = Visibility.Collapsed;
+            var sets = new List<KeyValuePair<string, object>>
+            {
+                new KeyValuePair<string, object>(item.Key, value),
+            };
+            if (item.AlsoWrites != null)
+                foreach (string key in item.AlsoWrites)
+                    sets.Add(new KeyValuePair<string, object>(key, value));
+            _writes.Run(() =>
+            {
+                SettingsWriteResult result = _store.Commit(sets, null);
+                Dispatcher.BeginInvoke(new Action(() => done(Report(result, parts))));
+            });
+        }
+
         private bool Report(SettingsWriteResult result, RowParts parts)
         {
             if (result.Ok)
@@ -197,10 +227,13 @@ namespace DoorbellApp.Settings
             {
                 if (reverting) return;
                 bool next = toggle.IsOn;
-                if (Write(item, next, parts)) return;
-                reverting = true;
-                toggle.IsOn = !next;
-                reverting = false;
+                WriteAsync(item, next, parts, ok =>
+                {
+                    if (ok) return;
+                    reverting = true;
+                    toggle.IsOn = !next;
+                    reverting = false;
+                });
             };
             return toggle;
         }
@@ -242,12 +275,12 @@ namespace DoorbellApp.Settings
                 settle.Stop();
                 double next = slider.Value;
                 if (Math.Abs(next - committed) < 1e-9) return;
-                if (Write(item, SettingsStore.NumberValue(next, item.Step), parts)) committed = next;
-                else
+                WriteAsync(item, SettingsStore.NumberValue(next, item.Step), parts, ok =>
                 {
+                    if (ok) { committed = next; return; }
                     slider.Value = committed;
                     value.Text = FormatNumber(committed, item);
-                }
+                });
             };
             slider.ValueChanged += (s, e) =>
             {
@@ -276,33 +309,50 @@ namespace DoorbellApp.Settings
                 VerticalAlignment = VerticalAlignment.Center,
             };
             AutomationLabel(box, Texts.T(item.LabelKey));
-            double committed = stored;
-            Action<double> commit = wanted =>
+            var steps = new StepAccumulator(stored, item.Min, item.Max, item.Step);
+            // Clicks and typing change the box at once; the write follows 300 ms after the last
+            // one, so a run of clicks is one write of the final value.
+            var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            Action flush = () =>
             {
-                double next = Clamp(Math.Round(wanted / item.Step) * item.Step, item);
-                if (Math.Abs(next - committed) >= 1e-9 &&
-                    Write(item, SettingsStore.NumberValue(next, item.Step), parts))
-                    committed = next;
-                box.Text = FormatStep(committed, item.Step);
+                settle.Stop();
+                if (!steps.Dirty) return;
+                double next = steps.Shown;
+                WriteAsync(item, SettingsStore.NumberValue(next, item.Step), parts, ok =>
+                {
+                    if (ok) { steps.Succeeded(next); return; }
+                    if (!settle.IsEnabled) box.Text = FormatStep(steps.Failed(), item.Step);
+                });
+            };
+            settle.Tick += (s, e) => flush();
+            Action<double> change = wanted =>
+            {
+                box.Text = FormatStep(steps.Set(wanted), item.Step);
+                settle.Stop();
+                settle.Start();
             };
             Action typed = () =>
             {
                 double value;
-                // Anything that is not a number goes back to the stored value.
-                commit(double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture,
-                                       out value) ? value : committed);
+                // Anything that is not a number goes back to the shown value.
+                if (double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture,
+                                    out value))
+                    steps.Set(value);
+                box.Text = FormatStep(steps.Shown, item.Step);
+                flush();
             };
             box.LostKeyboardFocus += (s, e) => typed();
             box.KeyDown += (s, e) =>
             {
                 if (e.Key == Key.Enter) { typed(); e.Handled = true; }
-                else if (e.Key == Key.Up) { commit(committed + item.Step); e.Handled = true; }
-                else if (e.Key == Key.Down) { commit(committed - item.Step); e.Handled = true; }
+                else if (e.Key == Key.Up) { change(steps.Shown + item.Step); e.Handled = true; }
+                else if (e.Key == Key.Down) { change(steps.Shown - item.Step); e.Handled = true; }
             };
             var less = StepButton(false, Texts.T("settings.decrease"));
             var more = StepButton(true, Texts.T("settings.increase"));
-            less.Click += (s, e) => commit(committed - item.Step);
-            more.Click += (s, e) => commit(committed + item.Step);
+            less.Click += (s, e) => change(steps.Shown - item.Step);
+            more.Click += (s, e) => change(steps.Shown + item.Step);
+            Unloaded += (s, e) => flush();
             panel.Children.Add(less);
             panel.Children.Add(box);
             panel.Children.Add(more);

@@ -262,8 +262,7 @@ internal class SettingsParitySections(private val a: SettingsActivity) {
         }) { result ->
             val ok = result?.optInt("http") == 200 && result.optString("err").isEmpty()
             a.toast(if (ok) L("security.rebuild_done") else L("admin.save_failed"))
-            a.refreshSnapshots()
-            a.render()
+            a.reload()
         }
     }
 

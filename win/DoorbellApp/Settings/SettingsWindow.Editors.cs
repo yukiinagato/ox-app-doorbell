@@ -83,8 +83,7 @@ namespace DoorbellApp.Settings
             var parts = new RowParts();
             var panel = EditorPanel(item, parts, out var head);
             string reference = _store.Get(item.Key) as string;
-            bool stored = !string.IsNullOrEmpty(reference) && App.Core != null &&
-                          App.Core.HasSecret(SecretNameOf(reference));
+            bool stored = !string.IsNullOrEmpty(reference) && SecretStored(reference);
             var status = new TextBlock
             {
                 Text = Texts.T(stored ? "settings.secret_stored"
@@ -144,11 +143,11 @@ namespace DoorbellApp.Settings
             var parts = new RowParts();
             var panel = EditorPanel(item, parts, out var head);
             var found = new SortedDictionary<string, string>(StringComparer.Ordinal);
-            CollectSecretRefs(App.Core == null ? null : App.Core.Config(), "", found);
+            CollectSecretRefs(_store.Snapshot, "", found);
             foreach (var pair in found)
             {
                 string reference = pair.Key;
-                bool stored = App.Core != null && App.Core.HasSecret(SecretNameOf(reference));
+                bool stored = SecretStored(reference);
                 var set = CommandButton(Texts.T(stored ? "settings.secret_replace" : "settings.secret_enter"));
                 set.Click += (s, e) =>
                 {

@@ -20,7 +20,7 @@ namespace DoorbellApp.Settings
         private HashSet<string> DoorsServedByOthers()
         {
             var served = new HashSet<string>(StringComparer.Ordinal);
-            var status = App.Core == null ? null : App.Core.Status();
+            var status = CoreStatusOnce();
             var peers = status != null && status.ContainsKey("peers")
                 ? status["peers"] as IEnumerable : null;
             if (peers == null) return served;

@@ -51,6 +51,9 @@ namespace DoorbellApp.Settings
                 ? Context : new SettingsContext { NodeId = Target, Role = role ?? "" };
         }
 
+        /// <summary>The configuration as last read; no Core call.</summary>
+        public Dictionary<string, object> Snapshot { get { return _config; } }
+
         public void Reload()
         {
             _config = (App.Core == null ? null : App.Core.Config()) ??

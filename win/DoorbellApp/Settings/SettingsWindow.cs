@@ -37,6 +37,34 @@ namespace DoorbellApp.Settings
         private readonly List<SettingCategory> _catalog;
         private readonly Func<bool> _previousPrompt;
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _searchTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        private readonly WriteLane _writes = new WriteLane();
+        // Core reads shared by the rows of one render pass instead of one P/Invoke per row.
+        private Dictionary<string, object> _renderStatus;
+        private bool _renderStatusRead;
+        private readonly Dictionary<string, bool> _renderSecrets = new Dictionary<string, bool>();
+
+        private Dictionary<string, object> CoreStatusOnce()
+        {
+            if (!_renderStatusRead)
+            {
+                _renderStatus = App.Core == null ? null : App.Core.Status();
+                _renderStatusRead = true;
+            }
+            return _renderStatus;
+        }
+
+        private bool SecretStored(string reference)
+        {
+            bool stored;
+            if (_renderSecrets.TryGetValue(reference, out stored)) return stored;
+            stored = App.Core != null && App.Core.HasSecret(SecretNameOf(reference));
+            _renderSecrets[reference] = stored;
+            return stored;
+        }
         private string _categoryId;
         private string _query = "";
         private bool? _stackedRows;
@@ -78,6 +106,13 @@ namespace DoorbellApp.Settings
                 AdminHttpSession.PasswordPrompt = null;
                 AdminHttpSession.Clear();
                 _statusTimer.Stop();
+                _searchTimer.Stop();
+                _writes.Dispose();
+            };
+            _searchTimer.Tick += (s, e) =>
+            {
+                _searchTimer.Stop();
+                RenderContent();
             };
             _statusTimer.Interval = TimeSpan.FromSeconds(4);
             _statusTimer.Tick += (s, e) =>
@@ -251,7 +286,10 @@ namespace DoorbellApp.Settings
             _search.TextChanged += (s, e) =>
             {
                 _query = _search.Text.Trim();
-                RenderContent();
+                // Typing filters after a short pause; clearing the box restores the page at once.
+                _searchTimer.Stop();
+                if (_query.Length == 0) RenderContent();
+                else _searchTimer.Start();
             };
             Grid.SetColumn(_search, 1);
             bar.Children.Add(_search);
@@ -322,6 +360,9 @@ namespace DoorbellApp.Settings
             _title.Text = _query.Length > 0 ? Texts.T("settings.title")
                                             : Texts.T(Category(_categoryId).TitleKey);
             _content.Children.Clear();
+            _renderStatus = null;
+            _renderStatusRead = false;
+            _renderSecrets.Clear();
             if (_store.EditingOther) _content.Children.Add(TargetBanner());
             if (_query.Length > 0) RenderSearchResults();
             else RenderCategory(Category(_categoryId));

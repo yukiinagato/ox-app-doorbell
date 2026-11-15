@@ -195,7 +195,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     fun secretRow(card: LinearLayout, title: String, refKey: String, name: String,
                   note: String = L("nset.secret_local_note")) {
         val configured = str(refKey).isNotEmpty()
-        val stored = a.app.core.hasPlatformSecret(name)
+        val stored = configured && a.hasSecret(name)
         val value = when {
             configured && stored -> L("admin.secret_configured")
             configured -> L("nset.secret_missing_here")
@@ -489,7 +489,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                 L("admin.delete")) {
             a.coreCall({ a.app.core.assetRemove(hash) }) { result ->
                 a.toast(if (result?.optBoolean("ok") == true) L("admin.removed") else L("admin.save_failed"))
-                a.refreshSnapshots(); a.render()
+                a.reload()
             }
         }
     }
@@ -1516,7 +1516,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                 DoorbellCore.RESULT_ADMIN_REQUIRED -> a.reauthenticateThen { removeDevice(id) }
                 else -> a.toast(L("admin.save_failed"))
             }
-            a.refreshSnapshots(); a.render()
+            a.reload()
         }
     }
 
@@ -1532,7 +1532,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             val revoked = p.optBoolean("revoked", true)
             val doors = p.optJSONArray("door_scope")?.let { arr -> (0 until arr.length()).joinToString(", ") { a.doorLabel(arr.optString(it)) } }.orEmpty()
             val grants = p.optJSONArray("grants")?.let { arr -> (0 until arr.length()).joinToString(", ") { grantLabel(arr.optString(it)) } }.orEmpty()
-            val stored = SecretRefs.storeKey(p.optString("credential_ref"))?.let { a.app.core.hasPlatformSecret(it) } ?: false
+            val stored = SecretRefs.storeKey(p.optString("credential_ref"))?.let { a.hasSecret(it) } ?: false
             add(card, item("${L("panels.title")} ${id.take(8)}",
                            "${L(if (revoked) "panels.revoked" else "panels.active")} · $doors",
                            grants + if (!revoked && !stored) "\n" + L("panels.provisioning_required") else "") {
@@ -1627,7 +1627,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                         a.reauthenticateThen { savePanel(action, id, p, ref, doors, grants, onDone) }
                     else -> a.toast(L("panels.failed_reason", result?.optString("error_code").orEmpty()))
                 }
-                a.refreshSnapshots(); a.render()
+                a.reload()
             }
             return
         }
@@ -1747,7 +1747,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                 }) { result ->
                     a.toast(if (result?.optBoolean("ok") == true) L("admin.imported")
                             else L("admin.import_error") + " " + result?.optString("error_code").orEmpty())
-                    a.refreshSnapshots(); a.texts.setConfig(a.config); a.render()
+                    a.reload()
                 }
             }
             .setNegativeButton(L("admin.cancel")) { _, _ -> cancelImport(ref, session) }.show()
