@@ -143,3 +143,28 @@ They have no stable operation ID, do not deduplicate independent invocations,
 and must not retry unknown outcomes automatically. The T06 caller map records
 these remaining callers and their migration owners. The new capability covers
 only the tested versioned routes and ABI, not these older paths.
+
+## Visitor messages are not operations
+
+`db_core_visitor_notify_json`, `POST /api/visitor-notify` and `POST /api/panel/visitor-notify`
+send the resident-facing message of one `notify` step of the visitor flow. They are not durable
+operations: there is no `operation_id`, no acknowledgement protocol and no durable state beyond the
+`visitor_message` event Core appends. The caller passes a step id and nothing else.
+
+- Repeats and limits per door: the same step within 60 seconds returns the first `message_id` with
+  `duplicate:true`; otherwise one message per 30 seconds and six per 10 minutes. A throttled call
+  returns `{"ok":true,"throttled":true}` and sends nothing. Errors: `unknown_door`,
+  `flow_disabled` (409), `unknown_step`, `event_persistence_failed` (500).
+- Event `visitor_message`, payload `{schema_version:1,message_id,step,purpose?,text{lang},`
+  `visitor_lang,capture_cutoff_ms,snapshot?:{source,id?,sha256,bytes,type,node}}`. It is never a
+  `press`, so no call, ring, missed-call row or `call_lifecycle` event exists for it. Rules match it
+  with `when.type:"visitor_message"`; `trigger_rules.r_visitor_message_default` is seeded.
+- Indoor shells receive `device_alert` with `kind:"visitor_message"`; Telegram sends a plain message
+  or, when the rule asks for it and the step took one, a photo; MQTT/HA publishes
+  `doorbell/<door>/event` with `event_type:"visitor_message"` and `message_id`, `step`, `purpose`,
+  `visitor_lang`, `text` (Japanese, else the first language) and `has_snapshot`.
+- The snapshot is a content-addressed file kept about seven days. `/asset/<sha256>` serves it only
+  under the authorization live media requires, so the Telegram and indoor-alert paths fetch it by
+  hash over the mesh rather than through the public asset route.
+
+Full contract: `docs/en/visitor-flow-contract.md`.

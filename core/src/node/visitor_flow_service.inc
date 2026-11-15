@@ -20,6 +20,9 @@
   // Snapshot files this node holds for visitor messages, by hash, with the wall time each stops
   // being kept. They are not ledger assets: nothing replicates them and they age out.
   std::map<std::string, int64_t> visitor_snapshot_keep;
+  // The door each kept snapshot belongs to: /asset/<sha256> serves it only to a caller who may
+  // view that door's live media.
+  std::map<std::string, std::string> visitor_snapshot_door;
   bool visitor_snapshot_keep_loaded = false;
   // Resolved public documents by door, dropped whenever configuration or an asset changes.
   std::map<std::string, std::string> visitor_flow_cache;
@@ -217,8 +220,25 @@
     });
   }
 
-  void keepVisitorSnapshot(const std::string& hash, int64_t event_wall_ms) {
-    if (isSha256HexStr(hash)) visitor_snapshot_keep[hash] = event_wall_ms + kVisitorSnapshotKeepMs;
+  void keepVisitorSnapshot(const std::string& hash, int64_t event_wall_ms,
+                           const std::string& door) {
+    if (!isSha256HexStr(hash)) return;
+    visitor_snapshot_keep[hash] = event_wall_ms + kVisitorSnapshotKeepMs;
+    visitor_snapshot_door[hash] = door;
+  }
+
+  // A file under assets/ that is neither a ledger asset nor referenced by configuration is a
+  // visitor snapshot (or a leftover waiting for collection). Such a picture shows what a camera
+  // saw at the door, so it is served under the authorisation live media requires and never from
+  // the public asset route. Returns true when the request may proceed; otherwise *status holds
+  // the refusal.
+  bool visitorSnapshotReadable(const HttpReq& req, const std::string& hash, int* status,
+                               bool* shared) {
+    *shared = cfgAt("assets." + hash) || referencedAssets().count(hash);
+    if (*shared) return true;
+    auto door = visitor_snapshot_door.find(hash);
+    *status = mediaAccessOnLoop(req, door == visitor_snapshot_door.end() ? "" : door->second);
+    return *status == 0;
   }
 
   // Hashes the asset collector must leave alone. Rebuilt once from recent history so a restart
@@ -231,12 +251,14 @@
         if (ev.type != "visitor_message") continue;
         auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
         keepVisitorSnapshot(
-            json::getString(json::get(payload.get(), "snapshot"), "sha256"), ev.wall_ms);
+            json::getString(json::get(payload.get(), "snapshot"), "sha256"), ev.wall_ms,
+            ev.door);
       }
     }
     std::set<std::string> out;
     for (auto it = visitor_snapshot_keep.begin(); it != visitor_snapshot_keep.end();) {
       if (it->second <= now) {
+        visitor_snapshot_door.erase(it->first);
         it = visitor_snapshot_keep.erase(it);
       } else {
         out.insert(it->first);
@@ -278,7 +300,7 @@
         json::set(snapshot, "bytes", static_cast<int64_t>(jpeg.size()));
         json::set(snapshot, "type", "image/jpeg");
         json::set(snapshot, "node", node_id);
-        keepVisitorSnapshot(hash, hlc->correctedWallMs());
+        keepVisitorSnapshot(hash, hlc->correctedWallMs(), door);
       }
     }
     // A snapshot that could not be taken leaves a text-only message, never a dangling reference.
@@ -406,11 +428,12 @@
     // show the text alone if it cannot be had.
     std::weak_ptr<char> w = alive;
     const int64_t event_wall_ms = ev.wall_ms;
-    mesh->fetchBlob(hash, [this, w, hash, deliver, event_wall_ms](Bytes data) {
+    const std::string door = ev.door;
+    mesh->fetchBlob(hash, [this, w, hash, deliver, event_wall_ms, door](Bytes data) {
       if (w.expired()) return;
       if (!data.empty() && sha256Hex(data) == hash && jpegComplete(data) &&
           writeFileBytes(assetFilePath(hash), data))
-        keepVisitorSnapshot(hash, event_wall_ms);
+        keepVisitorSnapshot(hash, event_wall_ms, door);
       deliver();
     });
   }

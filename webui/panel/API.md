@@ -120,6 +120,45 @@ Body: `door=<id>&call_id=<opaque>&purpose=<id>`.
 This is the delayed selection step for `ring_then_purpose`. It succeeds only for the matching
 active call and returns its `call_id` and updated `stage_revision`; a stale call returns 409.
 
+## Visitor flow
+
+The door screen shows the wizard Core resolved for its door; see `docs/en/visitor-flow-contract.md`
+for the document, the walker and the limits. The web panel is not gated by `visitor_flow_v1`: it
+ships with Core.
+
+### GET /api/panel/visitor-flow?door=<id>
+
+Requires the `view` grant for the door (the node's own door when `door` is omitted). Returns the
+resolved document, or `{"schema_version":1,"enabled":false,"door":"<id>","revision":"<hex>",`
+`"reason":"disabled|legacy_call_flow"}` when the door has no flow. `GET /api/panel/state` carries the
+same document as top-level `visitor_flow` (for `?door=` when that door is viewable, otherwise the
+node's own door) and `doors[].visitor_flow_start`. Images are listed as `{asset,url,path,alt,place}`;
+the web client uses `url` (`/asset/<sha256>`), which stays public because the pictures are
+configuration. Re-read after any state poll that reports a different `revision`.
+
+### POST /api/panel/visitor-notify
+
+Parameters (query or form body): `door=<id>&step=<notify step id>`. Requires the `call.initiate`
+grant and the panel CSRF protection, like `/api/panel/press`. There is no text parameter: the
+message is read from the flow, so a visitor screen cannot inject words into a resident's
+notification. Results:
+
+```json
+{"ok":true,"throttled":false,"message_id":"<32 hex>"}
+{"ok":true,"throttled":false,"message_id":"<same id>","duplicate":true}
+{"ok":true,"throttled":true}
+{"ok":false,"err":"unknown_door|flow_disabled|unknown_step|event_persistence_failed"}
+```
+
+Status 200 for every `ok:true`, 409 `flow_disabled`, 500 `event_persistence_failed`, 400 otherwise.
+The same step within 60 seconds returns the first `message_id`; otherwise one message per 30
+seconds and six per 10 minutes per door are accepted, and a throttled request still answers 200 so
+the screen shows the same closing page. On `ok:false` the client rings with `POST /api/panel/press`
+and the step's purpose. Core appends a `visitor_message` event (not a `press`): nothing rings and no
+call exists. Indoor native shells receive it as `device_alert` with `kind:"visitor_message"`; Telegram
+and MQTT/HA map it as documented in the contract. Web panels and Web Push do not present visitor
+messages.
+
 ### POST /api/panel/cancel
 
 Body: `door=<id>&call_id=<opaque>`.
@@ -370,7 +409,10 @@ configured inactivity interval. `GET /api/panel/i18n` returns
 session on the trusted media LAN. Public access applies only to an exact GET path containing a
 64-digit lowercase SHA-256; other methods and asset-shaped paths remain behind the session gate.
 Native shells may use Core's verified local path or the clean loopback asset URL without a query
-credential.
+credential. A visitor-message snapshot is not served here: `/asset/<sha256>` for a file that is
+neither a ledger asset nor referenced by configuration needs the same authorization as the live
+media routes (panel session with `view` for its door, administrator session or local token) and
+answers 401 `media_auth_required` otherwise.
 
 Native UI events may include resolved theme paths, alarm/reply/chime audio paths,
 `visitor_lang`, and `asset_ready`. A null local path means the asset is not cached and must not be

@@ -201,15 +201,15 @@ Verified on this integration: Core build and the full `doorbell_tests` suite, Py
 tests, the conformance runner (visitor flow and event conformance). See the integration
 report for the exact results.
 
-Remaining for Core: node-level visitor-flow tests (notify, rate limit, idempotency,
-old-shell gating, fake camera fetcher, per-step CRDT merge, batch rejection, bridge
-mappings); confirm and pin what an older Core does with an unknown top-level key (reading
-so far: accepted and merged, unconfirmed); API docs (`docs/en/operation-api.md`,
-`webui/panel/API.md`, `webui/admin/API.md` and translations); add the exports to
-`win/abi-probe`. Snapshot limits: only `media_sources.<id>.streams.snapshot.url` is
-supported (no ONVIF discovery, no RTSP still); snapshots are served from the public
-`/asset/<sha256>` route for about seven days, which deserves a security review before
-release.
+Visitor flow Core work is complete: node-level tests (`core/tests/test_visitor_flow_node.cpp`,
+plus the Home Assistant case in `test_ha_bridge.cpp`) cover notify, rate limit, idempotency,
+capability gating, external-camera snapshots with a fake fetcher, per-step merge and delete, batch
+rejection, `require_call`, the default wizard, and the Telegram and HA mappings. An older Core
+accepts and merges the unknown `visitor_flow` key (pinned by a test; see `config-schema.md`,
+"Mixed versions"). Message snapshots are no longer served from the public `/asset/<sha256>` route:
+they need live-media authorization. Snapshot limits: only
+`media_sources.<id>.streams.snapshot.url` is supported (no ONVIF discovery, no RTSP still), and web
+panels and Web Push do not present visitor messages.
 
 ### Visitor flow status
 

@@ -21,3 +21,24 @@ execute：`POST /api/operations/<id>/execute`，携带原动作、门、参数�
 新开门仅在固定权威持久化取得唯一分发资格后直接入 MQTT 队列，不发布可重放的开门事件。冻结命令及 broker/端口/topic 摘要，活动适配器必须匹配；权威也必须符合当前 MQTT bridge 活动条件。新入队需已连接，队列少于 256 包且总包字节不超过 1 MiB；旧 MQTT 路径不在这个新增限额承诺内。入队并非 broker 或物理 ACK；无执行器去重不能保证端到端恰好一次。
 
 SOS 仅追加一个带操作/权威 ID 的持久化意图事件，重试不会追加第二次；`dispatched` 不证明远端提醒已送达。T07 补适配器证据，T12/T36 迁移 SOS/UI。旧 ABI、旧 HTTP、原生壳、SIP 特征码和规则保持明确的一次性尽力提交语义，不承诺跨调用去重、不自动重试未知结果；剩余调用者与迁移归属在 T06 caller map 中登记。
+
+## 访客消息不是 operation
+
+`db_core_visitor_notify_json`、`POST /api/visitor-notify` 和 `POST /api/panel/visitor-notify` 发送访客流程中某个
+`notify` 步骤面向住户的消息。它们不是持久 operation：没有 `operation_id`，没有确认协议，除 Core 追加的
+`visitor_message` 事件外也没有持久状态。调用方只传步骤 id。
+
+- 每个门的重复与限额：同一步骤 60 秒内重复调用返回第一次的 `message_id` 并带 `duplicate:true`；其他情况每
+  30 秒 1 条、每 10 分钟 6 条。被限流的调用返回 `{"ok":true,"throttled":true}` 且不发送。错误：
+  `unknown_door`、`flow_disabled`（409）、`unknown_step`、`event_persistence_failed`（500）。
+- 事件 `visitor_message`，载荷 `{schema_version:1,message_id,step,purpose?,text{lang},`
+  `visitor_lang,capture_cutoff_ms,snapshot?:{source,id?,sha256,bytes,type,node}}`。它不是 `press`，因此没有通话、
+  响铃、未接记录或 `call_lifecycle` 事件。规则用 `when.type:"visitor_message"` 匹配，并 seed
+  `trigger_rules.r_visitor_message_default`。
+- 室内外壳收到 `device_alert`（`kind:"visitor_message"`）；Telegram 发送普通消息，规则要求且步骤拍到照片时发送
+  照片；MQTT/HA 在 `doorbell/<door>/event` 发布 `event_type:"visitor_message"` 以及 `message_id`、`step`、
+  `purpose`、`visitor_lang`、`text`（日语，否则第一种语言）和 `has_snapshot`。
+- 快照是内容寻址文件，保留约 7 天。`/asset/<sha256>` 只在具备实时媒体同等授权时才提供，因此 Telegram 和室内
+  提醒通过网格按哈希获取，而不是走公开的 asset 路由。
+
+完整契约：`docs/en/visitor-flow-contract.md`。

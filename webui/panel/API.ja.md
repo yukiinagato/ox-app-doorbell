@@ -113,6 +113,40 @@
   次の呼出へ用件を誤関連付けしてはならない。
 - 成功: `{"ok":true,"call_id":"…","stage_revision":2}`。
 
+## 来訪者フロー
+
+門口画面は Core が自分のドア向けに解決したウィザードを表示する。ドキュメント、ウォーカー、上限は
+`docs/en/visitor-flow-contract.md` を参照。Web パネルは Core に同梱されるため `visitor_flow_v1` の対象外。
+
+### GET /api/panel/visitor-flow?door=\<id\>
+
+そのドアの `view` 権限が必要（`door` 省略時はノード自身のドア）。解決済みドキュメントを返す。フローが無い
+ドアは `{"schema_version":1,"enabled":false,"door":"<id>","revision":"<hex>","reason":"disabled|legacy_call_flow"}`。
+`GET /api/panel/state` も同じドキュメントを最上位の `visitor_flow`（`?door=` が閲覧可能ならそのドア、
+そうでなければ自ノードのドア）と `doors[].visitor_flow_start` として返す。画像は `{asset,url,path,alt,place}`
+で、Web クライアントは `url`（`/asset/<sha256>`）を使う。画像は設定の一部なので公開のまま。state の
+ポーリングで `revision` が変わったら読み直す。
+
+### POST /api/panel/visitor-notify
+
+パラメータ（クエリまたは form body）: `door=<id>&step=<notify ステップ id>`。`/api/panel/press` と同じく
+`call.initiate` 権限と panel の CSRF 保護が必要。テキストのパラメータは無い。メッセージはフローから読むため、
+来訪者画面は居住者への通知に文言を差し込めない。結果:
+
+```json
+{"ok":true,"throttled":false,"message_id":"<32 hex>"}
+{"ok":true,"throttled":false,"message_id":"<同じ id>","duplicate":true}
+{"ok":true,"throttled":true}
+{"ok":false,"err":"unknown_door|flow_disabled|unknown_step|event_persistence_failed"}
+```
+
+`ok:true` は 200、`flow_disabled` は 409、`event_persistence_failed` は 500、それ以外は 400。同じステップを 60 秒
+以内に再送すると最初の `message_id` が返る。それ以外はドアごとに 30 秒に 1 件・10 分に 6 件まで受理し、
+制限された要求も 200 を返して同じ終了ページを表示させる。`ok:false` のときは `POST /api/panel/press` と
+そのステップの purpose で呼び出す。Core は `press` ではなく `visitor_message` イベントを追記する（鳴動も
+通話も無い）。屋内のネイティブ殻は `device_alert`（`kind:"visitor_message"`）として受け取り、Telegram と
+MQTT/HA は契約に記した通りに写像する。Web パネルと Web Push は来訪者メッセージを表示しない。
+
 ## POST /api/panel/cancel
 
 門口 Web client から現在の呼出を取り消す。Content-Type は form、Body は
@@ -449,6 +483,9 @@ SIP 通話確立時の `{"t":"state","state":"in_call"}` に相手解決結果�
 他の method や asset に似た path は session gate の対象。内容アドレスなので不変 —
 `Cache-Control: immutable` 付き (詳細は docs/config-schema.md の「統一資産 API」)。
 原生殻は core が検証したローカルパス、または query credential のない loopback asset URL を使う。
+来訪者メッセージのスナップショット（台帳にも設定にも参照されないファイル）はここでは配信されない:
+`/asset/<sha256>` はライブ映像と同じ認可（そのドアの `view` を持つ panel セッション、管理セッション、
+ローカルトークン）が必要で、満たさなければ 401 `media_auth_required`。
 
 ### UI イベント追加 (殻向け — 個性化の契約)
 

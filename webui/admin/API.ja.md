@@ -162,6 +162,36 @@ override object 単位に復元して batch 送信する。
 - schema/version/shape が不正または欠落した runtime manifest は部分適用せず、明示的に unavailable
   と表示する。offline/missing manifest を writable default で置換しない。
 
+## 来訪者フロー
+
+解決済みドキュメント、通知、エディタが書く形は `docs/en/visitor-flow-contract.md`（3 節と 8 節）と
+`docs/ja/config-schema.md` の「来訪者フロー」で規定する。ここでは管理者向けのエンドポイントを挙げる。
+
+- `GET /api/visitor-flow?door=<id>`: ドアの解決済みドキュメント（エディタのプレビューやシミュレータ用）。
+  管理セッションまたはローカルトークンが必要。ネイティブ ABI と違い、殻の `visitor_flow_v1` では制限されない。
+  `source` は `config`、`default`（組み込みウィザード、未書き込み）、`fallback`。`issues[]` は修復の一覧。
+- `GET /api/visitor-flow/template?name=default|purposes|delivery`: 設定の形のフロー
+  `{"ok":true,"flow":{enabled,start,idle_s,require_call,steps}}`（そのまま書き込める）。未知の名前は
+  404 `{"ok":false,"err":"unknown_template"}`。
+- `POST /api/visitor-notify` に `{"door":"d_front","step":"n_left"}`: 鳴動せずに 1 つの notify ステップの
+  メッセージを送る（「テスト送信」ボタン用）。セッションと CSRF の規則は `POST /api/press` と同じで、
+  結果とステータスは `/api/panel/visitor-notify` と同じ。レート制限も同じなので、テストもドアの枠を消費する。
+- 書き込みは平坦な `ops` 配列の `POST /api/config/batch`。グラフはバッチ適用後の設定で検証されるため、
+  ステップとその参照先は同じバッチで送る。`visitor_flow.steps.<id>` ごとに完全なオブジェクトを 1 つ書き、
+  `visitor_flow` や `visitor_flow.steps` をコンテナとして書いたり、ステップの下のキーを書いたりしない。
+  組み込みウィザードへの復帰は `visitor_flow` の `delete` 1 回。エラーは
+  `visitor_flow.<code>[: <step>[.<option>]]`、警告（`visitor_flow.crowded_page`、`visitor_flow.no_call`）は
+  成功した書き込みの `warnings[]` に載る。
+- `visitor_flow.require_call`（bool リーフ、既定 true）: true の間は開始ページが通話に到達できないフローを
+  拒否する（`visitor_flow.no_reachable_call: start`）。false なら警告 `visitor_flow.no_call` 付きで受理し、
+  エディタは `flow_editor.require_call_off_warning` を表示する。
+- 競合ジャーナルは `visitor_flow` を 1 つのエンティティとして扱う。分断された 2 ノードが編集した後は、競合を
+  競合ビューで解決するまで通常の編集は `unresolved_config_conflict` を返す。エディタは再試行せず表示すること。
+- notify ステップのスナップショットは、`streams.snapshot.url` を持つソースなら
+  `{"source":"media_source","id":"<media_sources の id>"}`、または `{"source":"door_station"}`。画像は台帳の
+  asset ではなく、メッセージのスナップショットの `/asset/<sha256>` は管理セッション（または他のライブ映像の
+  認可）が必要で、匿名の呼び出しは拒否される。
+
 ## 呼出フローの互換性
 
 `ui.call_flow` は `purpose_first` または `ring_then_purpose` の文字列として、原子的な

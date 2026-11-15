@@ -21,3 +21,27 @@ execute は `POST /api/operations/<id>/execute` で、元の action/door/paramet
 新しい開錠操作は固定担当が永続トランザクションで唯一の送出資格を得て直接 MQTT に入れ、再生可能な開錠イベントを使いません。コマンドと broker/port/topic のダイジェストを固定し、活動中のアダプターと一致させます。担当は既存 MQTT bridge の活動条件も満たす必要があります。新操作の入隊には接続済み、256パケット未満、合計1 MiB以下を要求します。この新制限は旧 MQTT 経路を変更しません。入隊は broker/機器 ACK ではなく、機器側の重複排除なしに end-to-end exactly-once は保証できません。
 
 SOS は操作・担当 ID 付きの永続意図イベントを1回だけ追加します。再試行で2件目を作らず、`dispatched` は遠隔通知の配送成功を意味しません。T07 はアダプター証拠、T12/T36 は SOS/UI 移行を扱います。旧 ABI、HTTP、ネイティブ UI、SIP 特徴コード、ルールは従来の1回限りの best-effort のままで、呼び出し間の重複排除や不明結果の自動再試行を提供しません。残る呼び出し元と移行担当は T06 caller map に記録します。
+
+## 来訪者メッセージは operation ではない
+
+`db_core_visitor_notify_json`、`POST /api/visitor-notify`、`POST /api/panel/visitor-notify` は、来訪者フローの
+1 つの `notify` ステップの居住者向けメッセージを送る。耐久 operation ではない: `operation_id` も確認応答
+プロトコルも無く、Core が追記する `visitor_message` イベント以外の耐久状態も無い。呼び出し側が渡すのは
+ステップ id だけである。
+
+- ドアごとの再送と上限: 同じステップを 60 秒以内に再送すると、最初の `message_id` が `duplicate:true` 付きで
+  返る。それ以外は 30 秒に 1 件、10 分に 6 件。制限された呼び出しは `{"ok":true,"throttled":true}` を返し
+  何も送らない。エラー: `unknown_door`、`flow_disabled`（409）、`unknown_step`、
+  `event_persistence_failed`（500）。
+- イベント `visitor_message`、ペイロード `{schema_version:1,message_id,step,purpose?,text{lang},`
+  `visitor_lang,capture_cutoff_ms,snapshot?:{source,id?,sha256,bytes,type,node}}`。`press` ではないため、
+  通話、鳴動、不在着信の行、`call_lifecycle` イベントは存在しない。ルールは `when.type:"visitor_message"` で
+  一致させ、`trigger_rules.r_visitor_message_default` が seed される。
+- 屋内の殻は `device_alert`（`kind:"visitor_message"`）を受け取る。Telegram は通常のメッセージを送り、ルールが
+  求めステップが撮影した場合は写真を送る。MQTT/HA は `doorbell/<door>/event` に `event_type:"visitor_message"`
+  と `message_id`、`step`、`purpose`、`visitor_lang`、`text`（日本語、無ければ最初の言語）、`has_snapshot` を
+  発行する。
+- スナップショットは内容アドレスのファイルで約 7 日間保持される。`/asset/<sha256>` はライブ映像と同じ認可が
+  あるときだけ配信するため、Telegram と屋内アラートは公開の asset ルートではなくメッシュ経由でハッシュ取得する。
+
+完全な契約: `docs/en/visitor-flow-contract.md`。

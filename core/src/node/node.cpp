@@ -1951,7 +1951,7 @@ bool airQualityConfigValid(const std::string& key, const cJSON* value, std::stri
 
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr,
-                      bool enforce_write_scope = true) {
+                      bool enforce_write_scope = true, bool replicated = false) {
   if (configEditReserved(key)) { *error = "reserved_config_key"; return false; }
   if (!operationConfigValid(key, value, error)) return false;
   if (!callReturnValid(key, value, error)) return false;
@@ -1959,7 +1959,8 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!visitPurposeValid(key, value, error)) return false;
   // Replicated or imported flow data is repaired when it is resolved, never refused here: a
   // step written by a newer core must not make every later commit on this node fail.
-  if (enforce_write_scope && !visitor_flow::writeKeyValid(key, value, error)) return false;
+  if (enforce_write_scope && !replicated && !visitor_flow::writeKeyValid(key, value, error))
+    return false;
   if (!sipDtmfActionsValid(key, value, error)) return false;
   const std::string wake_suffix = ".motion.wake_screen";
   if (key.size() >= wake_suffix.size() &&
@@ -6794,7 +6795,7 @@ struct Node::Impl {
         // Remote ingress can enforce context-free schema and safety rules, but must not depend on
         // this receiver having already discovered the target's ui_manifest. The originating Admin
         // performs manifest-dependent validation; the target shell still applies LKG fail-closed.
-        if (!value || !configWriteValid(entry.key, value.get(), &error)) {
+        if (!value || !configWriteValid(entry.key, value.get(), &error, nullptr, true, true)) {
           DB_LOGW(kTag, "rejected unsafe remote config key " + entry.key + " (" +
                             (error.empty() ? "invalid JSON" : error) + ")");
           rejected_entries.push_back(entry);
@@ -12213,11 +12214,19 @@ struct Node::Impl {
       Bytes data;
       if (!readFileBytes(assetFilePath(hash), data))
         return HttpResp::json("{\"ok\":false,\"err\":\"not cached\"}", 404);
+      int refused = 0;
+      bool shared = true;
+      if (!visitorSnapshotReadable(req, hash, &refused, &shared)) {
+        HttpResp denied =
+            HttpResp::json("{\"ok\":false,\"error_code\":\"media_auth_required\"}", refused);
+        denied.headers["Cache-Control"] = "no-store";
+        return denied;
+      }
       HttpResp r;
       r.content_type = json::getString(cfgAt("assets." + hash), "type",
                                        "application/octet-stream");
       r.body.assign(data.begin(), data.end());
-      r.headers["Cache-Control"] = "max-age=31536000, immutable";
+      r.headers["Cache-Control"] = shared ? "max-age=31536000, immutable" : "private, no-store";
       return r;
     });
 
@@ -12762,10 +12771,7 @@ struct Node::Impl {
     httpd->route("POST", "/api/panel/visitor-notify", [this](const HttpReq& req) {
       if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
         return mediaFailure(403, "permission_denied");
-      const std::string door = req.param("door");
-      if (door.empty() || !cfgAt("doors." + door))
-        return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
-      const std::string result = doVisitorNotify(door, req.param("step"));
+      const std::string result = doVisitorNotify(req.param("door"), req.param("step"));
       return HttpResp::json(result, visitorNotifyStatus(result));
     });
 

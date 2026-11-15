@@ -17,7 +17,9 @@ Only a settings/Admin editor reads and writes raw configuration.
 Advertise feature `visitor_flow_v1` in `db_core_set_capabilities_json` (`features` object) only
 once the renderer exists, and keep `purpose.button`, `call.primary` and `cancel.call` in the UI
 manifest. Until then `db_core_visitor_flow_json` returns
-`{"enabled":false,"reason":"unsupported_shell"}` and the shell keeps today's purpose screen.
+`{"schema_version":1,"enabled":false,"door":"…","revision":"…","reason":"unsupported_shell"}` and the
+shell keeps today's purpose screen. Only the feature and the three manifest elements
+(`purpose.button`, `call.primary`, `cancel.call`) gate the flow; `flow.*` elements are optional.
 The web panel is not gated (it ships with Core).
 
 ## 2. ABI (all additive; `db_platform_v2` is unchanged)
@@ -30,7 +32,8 @@ char* db_core_visitor_notify_json(db_core* c, const char* door_id, const char* s
 char* db_core_press_v2(db_core* c, const char* door_id, const char* purpose);
 ```
 
-All three return owned strings (`db_free`). `door_id` NULL/empty = this shell's door. They
+All three return owned strings (`db_free`). `door_id` NULL/empty = this shell's door; a NULL
+`name` is `"default"`. NULL comes back only for a null core or step id. They
 marshal to Core's loop: call them off the UI thread. Neither needs the admin window.
 
 UI events (through the existing callback):
@@ -42,7 +45,9 @@ UI events (through the existing callback):
   "purpose":"p_delivery","text":{"ja":"…","en":"…","zh":"…"},"visitor_lang":"ja",
   "snapshot":{"sha256":"…","url":"/asset/<sha256>","path":"/abs/local/file"|null},
   "visual":true,"sticky":false,"ttl_s":60,"channels":["in_app","system_notification"]}` —
-  indoor side, when a rule matches. `snapshot` is absent for a text-only message. Show
+  indoor side, when a rule matches (it also carries `event_id`, `origin`, `seq`, `event_hlc`,
+  `wall_ms`, and `sound` / `audio_path` when the rule sets a sound). `snapshot` is absent for a
+  text-only message. A native shell shows `path`; `url` is not a public link (see `/asset` below). Show
   `text[<UI language>]` (fallback `ja`), title from string `flow.message_title`. It is not a
   call: no ringing UI, no call-log row, no unread-missed badge.
 - `{"t":"event","type":"visitor_message",…same message fields…}` — the generic event feed.
@@ -55,9 +60,9 @@ UI events (through the existing callback):
 | `GET /api/panel/visitor-flow?door=<id>` | panel `view` | resolved document for one door |
 | `POST /api/panel/visitor-notify?door=<id>&step=<step id>` | panel `call.initiate` (same as `/api/panel/press`) | result as below |
 | `GET /api/visitor-flow?door=<id>` | admin session / local | resolved document, not gated by shell capability |
-| `GET /api/visitor-flow/template?name=default\|purposes\|delivery` | admin session / local | `{"ok":true,"flow":{…}}` |
+| `GET /api/visitor-flow/template?name=default\|purposes\|delivery` | admin session / local | `{"ok":true,"flow":{…}}`; unknown name: 404 `{"ok":false,"err":"unknown_template"}` |
 | `POST /api/visitor-notify` body `{"door":"d_front","step":"n_left"}` | admin session / local | same gate as `/api/press` |
-| `GET /asset/<sha256>` | public | flow images and message snapshots |
+| `GET /asset/<sha256>` | public for ledger assets (flow images); **live-media authorization for message snapshots** | A file that is neither in the `assets` ledger nor referenced by configuration is a snapshot: it needs an admin session, the local token, a panel credential with `view` for the snapshot's door, or a peer MAC, and answers 401 `media_auth_required` otherwise (`Cache-Control: private, no-store`) |
 
 Notify result (ABI and HTTP):
 
@@ -68,7 +73,9 @@ Notify result (ABI and HTTP):
 {"ok":false,"err":"unknown_door|flow_disabled|unknown_step|event_persistence_failed"}
 ```
 
-HTTP status: 200 for ok, 409 `flow_disabled`, 500 `event_persistence_failed`, 400 otherwise.
+HTTP status: 200 for ok (also `throttled`), 409 `flow_disabled`, 500 `event_persistence_failed`,
+400 otherwise. The panel route accepts `door` and `step` as query or form parameters; an omitted
+`door` is the node's own door, an unknown one is `unknown_door` (400).
 **The visitor side passes a step id and nothing else.** There is no text parameter anywhere.
 
 ## 4. Resolved document (one full example)
@@ -188,7 +195,10 @@ Python reference: `python3 tools/conformance/run.py` and
 | title/body text block | `flow.text` | new, not safety critical |
 | Done on an end page | `flow.done` | new, not safety critical (added beyond the design: an end page needs one control) |
 
-Each resolved option carries its `semantic_id`; use it rather than deriving it.
+Each resolved option carries its `semantic_id`; use it rather than deriving it. Core emits
+`semantic_id` only on options (`call.primary`, `purpose.button`); `flow.back`, `flow.text` and
+`flow.done` are shell-side controls and Core's built-in web manifest does not declare them yet, so
+they get no style override unless a shell declares them in its own manifest.
 `sos.trigger`, `cancel.call`, `call.end` must stay always present.
 
 ## 7. Layout (design 2.7)
@@ -245,6 +255,11 @@ before `": "` is also an i18n key, `visitor_flow.invalid` is the generic fallbac
 - `visitor_flow.require_call` true (default): `start` and every door start must reach a `call`.
   False: notify-only doors are accepted and the write returns warning
   `visitor_flow.no_call`; show `flow_editor.require_call_off_warning` next to the switch.
+- Replicated and imported flow keys are never refused: shape and graph rules apply to local
+  writes only, and the resolver repairs what arrives (`issues[]`).
+- The retained-conflict journal treats `visitor_flow` as one entity. After two partitioned nodes
+  edited it (even different steps, which still merge by key), ordinary writes return
+  `unresolved_config_conflict` until the administrator resolves it: show it, do not retry.
 - Warnings ride along in `warnings[]` (`message_key` `visitor_flow.crowded_page`,
   `visitor_flow.no_call`); the write succeeded.
 
@@ -271,5 +286,14 @@ select and say why. Strings: `flow_editor.*`, `visitor_flow.*`, `flow.*` in `i18
 - Snapshot: taken by the node that accepted the notify, from the step's camera
   (`media_sources.<id>.streams.snapshot.url`, credentials from `secret_ref` as a request header
   only). The message is published when the picture arrives or after 4 s without it. The JPEG is
-  a content-addressed blob (`/asset/<sha256>`), not a ledger asset; other nodes fetch it by hash
-  on demand and it is kept about 7 days.
+  a content-addressed blob, not a ledger asset; other nodes fetch it by hash over the mesh on
+  demand (Telegram and the indoor alert do this, not the public route) and it is kept about
+  7 days. Reading it over HTTP needs live-media authorization, see the `/asset` row in section 3.
+- Mixed versions: a Core without the visitor flow accepts, merges and replicates `visitor_flow`
+  like any unknown top-level key and ignores it; see `config-schema.md` ("Mixed versions").
+  A shell that does not advertise `visitor_flow_v1` never receives a flow.
+- The Telegram message is a plain message (door label, text in the notify language, time; the
+  purpose headline above it), with the photo when the rule has `with_snapshot` and the step took
+  one. MQTT/HA publishes `doorbell/<door>/event` with `event_type:"visitor_message"`,
+  `message_id`, `step`, `purpose`, `visitor_lang`, `text` and `has_snapshot`; it is never a `press`.
+  Web panels and Web Push do not present visitor messages.

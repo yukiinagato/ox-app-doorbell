@@ -989,6 +989,10 @@ legacy reply_id/free-text announcement only when no call is active). Implementat
   credential. Only a GET whose path contains exactly 64 lowercase hex digits after `/asset/` is
   admitted without a session. A missing valid hash is 404; authenticated malformed hashes are 400.
   Other methods and asset-shaped paths do not receive this public access (path-traversal defense).
+  The one exception is a visitor-message snapshot: a file that is neither a ledger asset nor
+  referenced by configuration is served only to a caller who may read live media (administrator
+  session, local token, a panel credential with the `view` grant for the snapshot's door, or a
+  peer MAC), with `Cache-Control: private, no-store`; anyone else receives 401.
 - `DELETE /api/assets/<sha256>` (admin session) — tombstones the ledger entry `assets.<hash>` and
   immediately deletes the local cache on this node. Other nodes see the ledger removal (CRDT
   replication) and reclaim it naturally via grace-period GC.
@@ -1230,9 +1234,24 @@ The snapshot is taken by the node that accepted the notify. For a media source i
 that node's secure storage to an `Authorization` header (`{"username","password"}`,
 `{"bearer_token"}` or `user:password`). The address and the credential never enter an event, a
 log or a resolved document. The message is published when the picture arrives or after four
-seconds without it. The JPEG is stored as a content-addressed file served at `/asset/<sha256>`;
-it is not an `assets` ledger entry, other nodes fetch it by hash on demand, and it is kept for
-about seven days.
+seconds without it. The JPEG is stored as a content-addressed file named by `/asset/<sha256>`,
+which is readable only with the authorization live media requires (see the asset route above);
+it is not an `assets` ledger entry, other nodes fetch it by hash over the mesh on demand, and it
+is kept for about seven days.
+
+**Mixed versions.** A Core that predates the visitor flow has no list of known top-level keys:
+its write validation only applies rules to keys it knows and its merge is generic over key
+paths. It therefore accepts, stores, merges, replicates and returns `visitor_flow.*` and
+`doors.<id>.visitor_flow` written by a newer Core exactly like any unknown key, validates none of
+it, and ignores it. Its own Admin cannot edit the flow, and it can damage a flow only by replacing
+or deleting whole step keys. A Core that knows the key applies the shape and graph rules to local
+writes only; replicated flow keys are never refused, so one bad key cannot block later commits,
+and the resolver repairs what arrives. The retained-conflict journal treats `visitor_flow` as one
+entity (the first path component): edits of different steps on two partitioned nodes merge by key
+and the section is also reported as an unresolved conflict, after which ordinary edits of
+`visitor_flow` return `unresolved_config_conflict` until an administrator resolves it. Editors must
+show that error. Nodes that predate the journal do not report it. A door shell that does not
+advertise `visitor_flow_v1` receives no flow whatever the configuration holds.
 
 ### Local configuration revisions and conditional commits
 

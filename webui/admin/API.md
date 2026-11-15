@@ -494,6 +494,40 @@ administrator confirms removal on the device itself, the shell deletes the secur
 fields of `boot.json`, **and** name/role/door/`setup_complete`, then restarts into first-run setup.
 A device that kept its old role and door would rejoin the next cluster half-configured.
 
+## Visitor flow
+
+Resolved document, notify and the shape of an editor write are specified in
+`docs/en/visitor-flow-contract.md` (sections 3 and 8) and `docs/en/config-schema.md`
+("Visitor flow"); this section lists the administrator endpoints.
+
+- `GET /api/visitor-flow?door=<id>`: the resolved document for a door, for an editor preview or
+  simulator. Needs an administrator session or the local token. Unlike the native ABI it is not
+  gated by the shell's `visitor_flow_v1`. `source` is `config`, `default` (the built-in wizard,
+  nothing written yet) or `fallback`; `issues[]` lists repairs.
+- `GET /api/visitor-flow/template?name=default|purposes|delivery`: `{"ok":true,"flow":{enabled,
+  start,idle_s,require_call,steps}}` in configuration shape, ready to write; an unknown name is
+  404 `{"ok":false,"err":"unknown_template"}`.
+- `POST /api/visitor-notify` with `{"door":"d_front","step":"n_left"}`: sends one notify step's
+  message without ringing, for a "send test message" button. Same session and CSRF rules as
+  `POST /api/press`, same result and statuses as `/api/panel/visitor-notify`, and the same rate
+  limits, so a test counts against the door's quota.
+- Writes use `POST /api/config/batch` with the plain `ops` array: a step and every step it points
+  to must travel in one batch because the graph is validated on the configuration the batch
+  would leave. Write one whole object per `visitor_flow.steps.<id>`; never write `visitor_flow` or
+  `visitor_flow.steps` as a container or any key below a step. Resetting to the built-in wizard is
+  one `delete` of `visitor_flow`. Errors are `visitor_flow.<code>[: <step>[.<option>]]`; warnings
+  (`visitor_flow.crowded_page`, `visitor_flow.no_call`) ride in `warnings[]` of a successful write.
+- `visitor_flow.require_call` (bool leaf, default true): while true, a flow whose entry page cannot
+  reach a call is refused (`visitor_flow.no_reachable_call: start`); false accepts it with warning
+  `visitor_flow.no_call`, and the editor shows `flow_editor.require_call_off_warning`.
+- The conflict journal treats `visitor_flow` as one entity. After two partitioned nodes edit it,
+  further ordinary edits return `unresolved_config_conflict` until the conflict is resolved in the
+  conflicts view; the editor must show it, not retry.
+- A notify step's snapshot is `{"source":"media_source","id":"<media_sources id>"}` for a source
+  that has `streams.snapshot.url`, or `{"source":"door_station"}`. The picture is not a ledger
+  asset: `/asset/<sha256>` of a message snapshot needs the administrator session (or another
+  live-media authorization) and is refused for anonymous callers.
+
 ## Visit purposes can be switched off
 
 `visit_purposes.<id>.enabled` (bool, default true) hides a purpose from visitors without deleting

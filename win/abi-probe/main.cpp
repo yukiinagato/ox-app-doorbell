@@ -72,7 +72,9 @@ int main(int argc, char** argv) {
       "db_core_admin_password_verify",   "db_core_admin_password_set",
       "db_core_set_config_json",         "db_core_last_write_warnings_json",
       "db_core_config_batch_json",       "db_core_delete_config_key",
-      "db_core_sip_set_mic_muted",       "db_core_air_quality_json"};
+      "db_core_sip_set_mic_muted",       "db_core_air_quality_json",
+      "db_core_visitor_flow_json",       "db_core_visitor_flow_template_json",
+      "db_core_visitor_notify_json"};
   for (const char* name : kShellExports) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required shell export is missing: " << name << "\n";

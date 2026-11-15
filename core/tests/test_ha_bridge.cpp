@@ -585,3 +585,58 @@ TEST_CASE("ha bridge: a Node feeds call state, history and SOS details through i
   }));
   node.stop();
 }
+
+TEST_CASE("ha bridge: a visitor message is its own event and never a press or a call") {
+  RecordingBroker broker;
+  NodeOptions o;
+  o.data_dir = ":memory:";
+  o.name = "front";
+  o.role = "door_station";
+  o.door = "d_front";
+  o.listen_addr = "127.0.0.1:" + std::to_string(testing::freeListenPort());
+  o.enable_beacon = false;
+  o.psk.fill(0x6c);
+  o.http_port = 0;
+  o.caps_json = "{\"mqtt_reachable\":true,\"mains_power\":true,\"cpu_score\":10}";
+  Node node(o);
+  REQUIRE(node.start());
+  node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"front\",\"en\":\"Front door\"}}");
+  node.setConfigKey("integrations.mqtt.host", "\"127.0.0.1\"");
+  node.setConfigKey("integrations.mqtt.port", std::to_string(broker.port));
+  const std::string flow =
+      R"({"ops":[{"op":"set","key":"visitor_flow.start","value":"s_home"},)"
+      R"({"op":"set","key":"visitor_flow.steps.s_home","value":{"kind":"page","title":{"ja":"home"},"options":[)"
+      R"({"id":"o_call","label":{"ja":"call"},"to":"c_any","style":"primary"},)"
+      R"({"id":"o_leave","label":{"ja":"leave"},"to":"n_left"}]}},)"
+      R"({"op":"set","key":"visitor_flow.steps.c_any","value":{"kind":"call"}},)"
+      R"({"op":"set","key":"visitor_flow.steps.n_left","value":{"kind":"notify","purpose":"p_delivery",)"
+      R"("message":{"ja":"ja-parcel","en":"A parcel was left at the door"},"to":"e_thanks"}},)"
+      R"({"op":"set","key":"visitor_flow.steps.e_thanks","value":{"kind":"end","title":{"ja":"thanks"}}}]})";
+  REQUIRE(json::getBool(json::parse(node.configBatchJson(flow)).get(), "ok"));
+
+  auto latest = [&](const std::string& topic) {
+    std::string p;
+    broker.latest(topic, &p);
+    return p;
+  };
+  REQUIRE(waitUntil([&] { return latest("doorbell/d_front/call_state") == "idle"; }, 10000));
+
+  auto sent = json::parse(node.visitorNotifyJson("d_front", "n_left"));
+  REQUIRE(json::getBool(sent.get(), "ok"));
+  const std::string message_id = json::getString(sent.get(), "message_id");
+  REQUIRE(waitUntil([&] {
+    auto ev = json::parse(latest("doorbell/d_front/event"));
+    return ev && json::getString(ev.get(), "event_type") == "visitor_message";
+  }, 10000));
+  auto ev = json::parse(latest("doorbell/d_front/event"));
+  CHECK(json::getString(ev.get(), "message_id") == message_id);
+  CHECK(json::getString(ev.get(), "step") == "n_left");
+  CHECK(json::getString(ev.get(), "purpose") == "p_delivery");
+  CHECK(json::getString(ev.get(), "text") == "ja-parcel");
+  CHECK_FALSE(json::getBool(ev.get(), "has_snapshot", true));
+  CHECK(json::get(ev.get(), "call_id") == nullptr);
+  // No call: the call state and the press automations are untouched.
+  CHECK(latest("doorbell/d_front/call_state") == "idle");
+  CHECK(latest("doorbell/d_front/last_call").find("press") == std::string::npos);
+  node.stop();
+}
