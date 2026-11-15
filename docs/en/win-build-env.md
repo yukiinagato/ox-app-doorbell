@@ -140,7 +140,7 @@ win/scripts/run_remote_tests.sh <host> [user] --run <id>   # a specific Actions 
 win/scripts/run_remote_tests.sh <host> [user] --zip <file> # a local bundle
 ```
 
-The driver downloads the `doorbell-win-test-bundle` artifact of the `windows-contract` CI job
+The driver downloads the `doorbell-win-test-bundle` artifact (uploaded on pull requests and on pushes to main) of the `windows-contract` CI job
 (an unsigned SIP-stub build), copies it to the PC, runs `win/scripts/ui_smoke.ps1` once as an
 indoor panel and once as a door station, and copies back `result-<role>.json`, the app logs
 and a screenshot of every screen in light and dark under
