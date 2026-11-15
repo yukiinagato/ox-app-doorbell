@@ -711,7 +711,7 @@
     $("flowBack").disabled = false; $("flowDone").disabled = false;
     var status = $("flowStatus");
     if (ok) { C.setText(status, ""); status.className = ""; }
-    else { C.setText(status, t("flow.notify_failed")); status.className = "failed"; }
+    else { C.setText(status, t("flow.pending_failed")); status.className = "failed"; }
     if (flowWalker && flowWalker.mode === "page") armIdle();
     return true;
   }
@@ -806,9 +806,11 @@
     R.panelRequest("POST", "/api/panel/visitor-notify", DoorbellCallFlow.notifyForm(doorId, act.step),
       function (st, j) {
         var ok = st >= 200 && st < 300 && !!j && j.ok === true;
-        if (!flowPendingEnd(seq, ok) || !ok) return;
+        var answered = st > 0;
+        if (!flowPendingEnd(seq, ok || answered)) return;
+        if (!ok && !answered) { C.setText($("flowStatus"), t("flow.pending_failed")); $("flowStatus").className = "failed"; return; }
         if (!flowWalker || currentCall) return;
-        flowAct(flowWalker.notifyResult(true, act.step));
+        flowAct(flowWalker.notifyResult(ok, act.step));
       });
   }
   function onFlowOption(id) {

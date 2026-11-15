@@ -174,6 +174,7 @@ State: `mode` (`page` | `calling` | `end` | `legacy`), `stack` of page ids (`sta
 | visitor language change | re-render text only |
 
 Any error while rendering or walking degrades to a direct call. A visitor is never stranded.
+An explicit failure answer to a notify rings the household (`notifyResult(false)`); only no answer within 15 s restores the options and shows the retry line `flow.pending_failed`.
 `sos.trigger`, `cancel.call`, `call.end`, the language bar and the notice banner stay exactly
 where they are today. PIN gates are unchanged. There is still no route from the visitor screen
 to settings, Admin, a URL or text input: the option shape has no member that could carry one.

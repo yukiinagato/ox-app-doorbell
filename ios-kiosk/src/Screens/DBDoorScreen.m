@@ -2648,8 +2648,8 @@ static const NSTimeInterval kFlowPendingStatusDelay = 0.8;
   NSString *action = [plan objectForKey:@"action"];
   __weak DBDoorScreen *weakSelf = self;
   if ([action isEqualToString:@"notify"]) {
-    // The visitor sees the next page when Core says the message went out; a failure or silence
-    // restores the options with a retry line.
+    // The visitor sees the next page when Core says the message went out; a failure rings the
+    // household, silence restores the options with a retry line.
     NSString *stepID = [plan objectForKey:@"step"];
     NSString *door = _boot.door ?: @"";
     DBCoreBridge *core = _core;
@@ -2754,13 +2754,12 @@ static BOOL DBFlowReduceMotion(void) {
     [self flowEndPending];
     return;
   }
-  if (![[result objectForKey:@"ok"] boolValue]) {
-    if (_flowPending) [self flowPendingFailed:NO];
-    return;
-  }
-  // Also taken after the timeout line: the message did go out.
+  BOOL sent = [[result objectForKey:@"ok"] boolValue];
+  // An explicit failure rings the household; only silence (the timeout) restores the options.
+  // A success arriving after the timeout line is still taken: the message did go out.
+  if (!sent && !_flowPending) return;
   [self flowEndPending];
-  NSArray *calls = [_flow applyEvent:@{ @"tap" : optionID, @"notify_result" : result }];
+  NSArray *calls = [_flow applyEvent:@{ @"tap" : optionID, @"notify_result" : result ?: @{ @"ok" : @NO } }];
   [self flowPerformCalls:calls];
   [self flowStateChanged];
 }

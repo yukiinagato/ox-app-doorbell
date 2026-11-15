@@ -1488,7 +1488,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     /**
      * The household is notified by Core, which takes seconds: the tapped option shows a spinner at
      * once, a status line follows after [FLOW_STATUS_DELAY_MS], and the page is restored with a retry
-     * hint when Core fails or [FLOW_PENDING_TIMEOUT_MS] pass. The idle return is suspended meanwhile.
+     * hint when [FLOW_PENDING_TIMEOUT_MS] pass without an answer; an explicit failure rings instead. The idle return is suspended meanwhile.
      */
     private fun flowNotify(optionId: String, target: FlowTarget.Notify, label: String) {
         val worker = homeHandler ?: return
@@ -1515,8 +1515,14 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                     return@post
                 }
                 // A throttled result is ok: the visitor sees the same page and never learns of the limit.
+                // An explicit failure rings the household; only the timeout restores the options.
                 if (!FlowDocuments.notifyOk(result)) {
-                    flowPendingFailed()
+                    endFlowPending()
+                    flowPanel.setPending(null)
+                    val placed = flowRing(target.purpose, if (target.purpose.isEmpty()) "" else label)
+                    walker.apply(FlowEvent.Tap(optionId, notifyOk = false, pressFailed = !placed))
+                    flowPanel.forgetAnnouncement()
+                    if (placed) showCalling(callTitleOverride) else showIdle()
                     return@post
                 }
                 endFlowPending()
