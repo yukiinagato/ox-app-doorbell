@@ -1,12 +1,14 @@
-# Native UI redesign: handoff (state after the third integration)
+# Native UI redesign: handoff (state after the fourth integration)
 
 This file describes `main` after the air-quality work, the Core/CI fixes, the
 per-platform fixes and the kiosk settings audit were brought together, the second
 integration (the Core visitor-flow completion, the full-screen quick-reply overlay on
 every shell, the language-switch and settings responsiveness work), and the third
 integration: the visitor flow implemented on Core, the web door page, Admin, the kiosk,
-iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
-0.3.1.32), Android 0.6.1 (55), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.1 (102)
+iOS and tvOS, Android and Windows. The fourth integration adds the per-shell polish of that
+flow (step ordering, option icons, preview, start-page composition, no classic-screen flash)
+on every shell and the web Admin. Current versions: Windows 0.4.0 (file version
+0.4.0.33), Android 0.6.1 (55), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.1 (102)
 with the iOS 9 profile 0.8.1 (425). Verification is stated per deliverable; anything
 under "Not verified" is untested, not passing.
 
@@ -65,11 +67,21 @@ and `tools/check_icons.py` rejects hand-drawn icons.
 - Android: Material Symbols (`ic_ms_*.xml`).
 - Windows: Fluent UI System Icons as filled geometries (`assets/icons/fluent/`),
   including the sales, utility and other purposes. Host checks only; never rendered.
-- Web: the vendored Tabler set.
+- Web: the vendored Tabler set. `tools/gen_icons.py` skips Tabler's invisible
+  `stroke="none"` background path; existing sprite symbols are unchanged.
 
 ## State per deliverable
 
-### Windows (0.3.1, file version 0.3.1.32)
+### Windows (0.4.0, file version 0.4.0.33)
+
+Polish (0.4.0): the flow editor lists steps by Core's `order` and moves them with buttons
+(consecutive `order` values, changed steps written whole); options draw vendored Fluent icons
+(`FlowIcons.cs`) from the purpose id or the mapped emoji, with an icon picker; the caption line
+sits at the bottom edge with a small clock; the editor has a preview that walks the flow without
+sending; option-level Core errors show under the option; no classic screen shows before the first
+flow answer. Verified on the host only: `win/scripts/test_flow_editor_model.sh`,
+`test_visitor_flow.sh`, the other `win/scripts/test_*.sh`, `win/tests/test_windows_contracts.py`
+and `typecheck_host.py`. The polish has not been compiled on Windows or seen on a PC.
 
 Visitor flow (0.3.0): the door-station start page and wizard renderer (model, start-page
 renderer) and the full flow editor, with a UI suite and a debug sample document. The sample
@@ -77,7 +89,7 @@ and `win/scripts/ui_smoke.ps1` follow the purposes-only default start page (no `
 Verified: `win/scripts/test_visitor_flow.sh` (19 documents, 21 walks), the other
 `win/scripts/test_*.sh`, `win/tests/test_windows_contracts.py` and `typecheck_host.py`.
 Not verified: the Windows app was never compiled or run, so the flow renderer, the editor
-and the UI suite have not been seen. No preview in the editor.
+and the UI suite have not been seen.
 
 Earlier work: Fluent redesign, NavigationView home, settings parity list emptied, SOS flow,
 zoom host, conversation fixes, Fluent icons, stepper chevrons sized, a read-only
@@ -261,9 +273,13 @@ name) instead of the raw id for seeded `r_*_default` rules, and the unknown-trig
 instead of "Button press" for triggers it does not list.
 
 Visitor flow: the shared walker (`webui/panel/visitor-flow.js`), the wizard on the door
-page and the Admin flow editor (with simulator). Verified against a real local Core node
-with screenshots; `webui/tests/*.test.js` pass. Known gaps: multi-door web panels use the
-classic screen; Admin saves the flow through the batch route with a snapshot comparison
+page and the Admin flow editor (with simulator). Polish: Admin lists steps in Core's
+`step_order` and moves them with buttons or drag (consecutive `order` values written as whole
+steps in one batch); option icons map purpose ids and known emoji to vendored Tabler icons
+(briefcase, tool, dots and user added) with a picker; the door page keeps options in the content
+column, shows nothing of the classic screen before the first state and opens a door's own flow on
+multi-door panels. Verified against a real local Core node with screenshots;
+`webui/tests/*.test.js` pass. Known gap: Admin saves the flow through the batch route with a snapshot comparison
 instead of the revision-checked commit.
 
 Not verified: iOS 5 Safari, a real H.264 stream,
@@ -305,18 +321,33 @@ panels and Web Push do not present visitor messages.
 ### Visitor flow status
 
 Implemented on Core, the web door page, Admin, the kiosk, iOS and tvOS, Android and
-Windows (see each deliverable for what was verified). Known gaps: step reordering in the
-editors is not implemented although Core now has `order` and `step_order`; option icons on
-Android are emoji from the purpose data; the version caption sits mid-screen on Android;
-the Windows and Android editors have no preview; multi-door web panels use the classic
-screen; Admin saves the flow through the batch route with a snapshot comparison instead of
-the revision-checked commit. Verification gaps: Windows was never compiled or run; the
-kiosk and iOS were seen only through static debug screenshots; the iOS editor saves were not
-run against a live Core.
+Windows (see each deliverable for what was verified). Done on every shell in the polish round:
+step ordering by Core's `order`, option icons from the purpose id or emoji, an editor preview,
+start-page composition (centred block, small clock, caption at the bottom), and no classic-screen
+flash before the first flow answer. Admin saves the flow through the batch route with a snapshot
+comparison instead of the revision-checked commit.
+
+Remaining known items:
+
+- Windows: the polish was never compiled or seen on a PC; the remote re-test is outstanding and
+  the earlier screenshots were never opened. The UIA test flakes on the dark notice dialog.
+- Android: legacy19 has never run on a device; drag reordering is absent (the item menu is the
+  only control).
+- iOS 5 kiosk: the step kind cannot be changed; iOS 5 Safari is untested for the web pages; the
+  selected language segment's label may be invisible on the iOS 9 kiosk profile.
+- The door-station iPad mini at 10.10.38.49 has not been updated to the new kiosk build.
+- Verification gaps from earlier rounds remain: the iOS editor saves were not run against a live
+  Core, and no shell was exercised on a physical device in this round.
 
 String keys shared by several shells (`flow_editor.conflict`, `flow_editor.image_upload`,
 `flow_editor.call_flow_superseded`) keep one wording each in `i18n/strings.yaml`; Android's
 image placement label with a value is `flow_editor.image_place_current`.
+Icon picker labels differ per shell and keep separate keys: web `icon_auto`, `icon_home`, `icon_package`,
+`icon_dots`, `icon_user`; kiosk `icon_house`, `icon_box`, `icon_envelope`, `icon_bag`, `icon_ellipsis`,
+`icon_bell`; iOS `icon_parcel`, `icon_sales`, `icon_work`, `icon_other`, `icon_default`, `icon_custom`;
+Android `icon_kind_*`; Windows `icon_wrench`, `icon_other_ellipsis`, `option_icon_pick`, `preview_note_walk`,
+`preview_notify_step`. Identical wording is shared (`icon_none`, `icon_person`, `icon_mail`, `icon_tool`,
+`preview_close`, `preview_restart`).
 
 ### PM2.5 air-quality sensors (unverified WIP)
 
