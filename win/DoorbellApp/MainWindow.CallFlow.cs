@@ -125,6 +125,22 @@ namespace DoorbellApp
         private ReplyDismissGuard _replyGuard;
         private long _replyTtlMs = 30000;
 
+        /// <summary>The full-screen quick reply with its dismiss hint and countdown.</summary>
+        private void PresentReply(string text, double ttlSeconds)
+        {
+            ReplyText.Text = text;
+            ReplyBanner.Visibility = Visibility.Visible;
+            FitReply();
+            _replyTtlMs = (long)((ttlSeconds <= 0 ? 30 : ttlSeconds) * 1000);
+            _replyClock.Restart();
+            _replyGuard = new ReplyDismissGuard(0);
+            _replyTimeout.Interval = TimeSpan.FromMilliseconds(250);
+            _replyTimeout.Stop();
+            _replyTimeout.Start();
+            ReplyTick();
+            ReplyBanner.Focus();
+        }
+
         private void HideReply()
         {
             _replyTimeout.Stop();
@@ -395,19 +411,9 @@ namespace DoorbellApp
                         string spokenLang = ev.Str("lang");
                         PlayAudio(ev.Str("audio_path"), () => App.Core.SpeakText(spoken, spokenLang));
                     }
-                    ReplyText.Text = ev.Str("text");
-                    ReplyBanner.Visibility = Visibility.Visible;
-                    FitReply();
                     double ttl = 30;
                     double.TryParse(ev.Str("ttl_s"), out ttl);
-                    _replyTtlMs = (long)((ttl <= 0 ? 30 : ttl) * 1000);
-                    _replyClock.Restart();
-                    _replyGuard = new ReplyDismissGuard(0);
-                    _replyTimeout.Interval = TimeSpan.FromMilliseconds(250);
-                    _replyTimeout.Stop();
-                    _replyTimeout.Start();
-                    ReplyTick();
-                    ReplyBanner.Focus();
+                    PresentReply(ev.Str("text"), ttl);
                     _callTimeout.Stop();
                     _activeCallId = "";
                     ShowIdle();

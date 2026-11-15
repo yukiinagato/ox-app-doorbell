@@ -965,6 +965,7 @@
     <string name="flow_editor_icon_mail">封筒</string>
     <string name="flow_editor_icon_none">アイコンなし</string>
     <string name="flow_editor_icon_other">その他</string>
+    <string name="flow_editor_icon_other_ellipsis">その他（三点リーダー）</string>
     <string name="flow_editor_icon_package">荷物</string>
     <string name="flow_editor_icon_parcel">荷物</string>
     <string name="flow_editor_icon_pencil">ペン</string>
@@ -974,6 +975,7 @@
     <string name="flow_editor_icon_tool">工具</string>
     <string name="flow_editor_icon_user">人</string>
     <string name="flow_editor_icon_work">工具</string>
+    <string name="flow_editor_icon_wrench">レンチ</string>
     <string name="flow_editor_idle_s">無操作で最初に戻るまで（秒）</string>
     <string name="flow_editor_idle_short">最初に戻るまで</string>
     <string name="flow_editor_image_above">本文の上</string>
@@ -1002,6 +1004,7 @@
     <string name="flow_editor_on_unanswered_none">最初のページに戻る</string>
     <string name="flow_editor_option_enabled">表示する</string>
     <string name="flow_editor_option_icon">アイコン</string>
+    <string name="flow_editor_option_icon_pick">アイコン</string>
     <string name="flow_editor_option_label">ラベル</string>
     <string name="flow_editor_option_primary">大きな主ボタンにする</string>
     <string name="flow_editor_option_purpose">用件のラベルとアイコンを使う</string>
@@ -1016,9 +1019,14 @@
     <string name="flow_editor_preview_call_purpose">ここで呼び出しが始まります（用件: %1$s）</string>
     <string name="flow_editor_preview_close">閉じる</string>
     <string name="flow_editor_preview_hint">現在の設定を来訪者と同じ画面で操作できます。呼び出しや通知は実行されません。</string>
+    <string name="flow_editor_preview_no_start">試せる最初のページがありません</string>
     <string name="flow_editor_preview_note">プレビュー: 通知も発信も行いません。</string>
+    <string name="flow_editor_preview_note_walk">何も送信されません。来訪者と同じようにウィザードをたどります。</string>
     <string name="flow_editor_preview_notify">住人に通知が送られます: %1$s</string>
+    <string name="flow_editor_preview_notify_step">お知らせを送ります（ステップ %1$s）</string>
     <string name="flow_editor_preview_off">ウィザードは無効か、使える状態ではありません。</string>
+    <string name="flow_editor_preview_press">呼び出し: 住人を呼び出します</string>
+    <string name="flow_editor_preview_press_purpose">呼び出し: 「%1$s」で住人を呼び出します</string>
     <string name="flow_editor_preview_restart">最初から</string>
     <string name="flow_editor_preview_would_call">呼び出します: %1$s</string>
     <string name="flow_editor_preview_would_call_none">呼び出します（用件なし）</string>

@@ -148,7 +148,11 @@ namespace DoorbellApp
             ApplyRoleHome();
             // The first answer, and every one until Core has answered at all; afterwards the
             // visitor_flow_changed event says when to read again.
-            if (!_flowFetched) RequestFlowRefresh();
+            if (!_flowFetched)
+            {
+                if (App.Boot.Role == "door_station") RenderVisitorFlow();
+                RequestFlowRefresh();
+            }
             RefreshAdminLink();
             RefreshDeviceCounters();
             _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);

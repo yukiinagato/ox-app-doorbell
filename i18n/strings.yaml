@@ -1426,6 +1426,14 @@ flow_editor.icon_pencil: { ja: "ペン", en: "Pen", zh: "笔" }
 flow_editor.icon_user: { ja: "人", en: "Person", zh: "人物" }
 flow_editor.icon_current: { ja: "現在の設定", en: "Current value", zh: "当前设置" }
 flow_editor.order_hint: { ja: "ステップは、ここで決めた順に一覧表示されます。ドラッグするか矢印ボタンで並べ替えられます。来訪者の操作の流れには影響しません。", en: "Steps are listed in this order. Drag a step or use the arrows to move it. The order does not change what visitors see.", zh: "步骤按此顺序列出。可拖动步骤或使用箭头移动；顺序不影响访客看到的流程。" }
+flow_editor.option_icon_pick: { ja: "アイコン", en: "Icon", zh: "图标" }
+flow_editor.icon_wrench: { ja: "レンチ", en: "Wrench", zh: "扳手" }
+flow_editor.icon_other_ellipsis: { ja: "その他（三点リーダー）", en: "Other (ellipsis)", zh: "其他（省略号）" }
+flow_editor.preview_note_walk: { ja: "何も送信されません。来訪者と同じようにウィザードをたどります。", en: "Nothing is sent. This walks the wizard the way a visitor would.", zh: "不会发送任何内容，只是按访客的方式演示向导。" }
+flow_editor.preview_press: { ja: "呼び出し: 住人を呼び出します", en: "Ring: a call would be placed", zh: "呼叫：将呼叫住户" }
+flow_editor.preview_press_purpose: { ja: "呼び出し: 「{purpose}」で住人を呼び出します", en: "Ring: a call for “{purpose}” would be placed", zh: "呼叫：将以“{purpose}”呼叫住户" }
+flow_editor.preview_notify_step: { ja: "お知らせを送ります（ステップ {step}）", en: "A notification would be sent (step {step})", zh: "将发送通知（步骤 {step}）" }
+flow_editor.preview_no_start: { ja: "試せる最初のページがありません", en: "There is no start page to try", zh: "没有可试用的起始页" }
 flow_editor.option_purpose: { ja: "用件のラベルとアイコンを使う", en: "Use a visit purpose's label and icon", zh: "使用来访目的的标签和图标" }
 flow_editor.option_purpose_none: { ja: "使わない（独自のラベル）", en: "None (own label)", zh: "不使用（自定义标签）" }
 flow_editor.option_primary: { ja: "大きな主ボタンにする", en: "Show as the large main button", zh: "显示为主按钮" }

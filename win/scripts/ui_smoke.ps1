@@ -612,6 +612,11 @@ function Test-DoorStation {
             [void](Click-Id 'door station settings' 'SettingsClose')
             Assert-Gone 'door station settings' 'SettingsNavigation'
         }
+        # The resident's quick reply covers the screen with its hint and countdown.
+        [void](Assert-Command 'reply-sample')
+        foreach ($id in @('ReplyText', 'ReplyHintText', 'ReplyCountText')) { [void](Assert-Element 'reply overlay' $id) }
+        Save-Shot ("reply-overlay-" + $look)
+        [void](Assert-Command 'reply-hide')
         [void](Assert-Command 'incall')
         foreach ($id in @('InCallTitle', 'EndCallButton')) { [void](Assert-Element 'visitor in call' $id) }
         Save-Shot ("visitor-in-call-" + $look)

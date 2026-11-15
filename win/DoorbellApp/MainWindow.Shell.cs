@@ -70,8 +70,7 @@ namespace DoorbellApp
             double scale = LayoutMetrics.TextScale();
 
             LayOutVisitorTopBar(size);
-            ClockText.FontSize = (compact ? 52 : (expanded ? 84 : 68));
-            DateText.FontSize = (compact ? 17 : (expanded ? 26 : 22)) * scale;
+            ApplyVisitorClockSize();
             VisitorAirText.FontSize = (compact ? 16 : (expanded ? 22 : 20)) * scale;
             VisitorDoorName.FontSize = (compact ? 18 : 22) * scale;
             CallButton.MinWidth = 0;
@@ -101,6 +100,25 @@ namespace DoorbellApp
             // Sampling the background under an element needs its arranged bounds, so the ink pass
             // waits for the layout this call just requested.
             QueueInkPass();
+        }
+
+        /// <summary>
+        /// The clock is a display headline on the classic visitor screen; on the flow's pages it is
+        /// a small secondary line in the top row, so the title is the first thing a visitor reads.
+        /// </summary>
+        private void ApplyVisitorClockSize()
+        {
+            bool compact = _sizeClass == SizeClass.Compact;
+            bool expanded = _sizeClass == SizeClass.Expanded;
+            double scale = LayoutMetrics.TextScale();
+            if (FlowHomeActive)
+            {
+                ClockText.FontSize = (compact ? 24 : 30) * scale;
+                DateText.FontSize = (compact ? 14 : 16) * scale;
+                return;
+            }
+            ClockText.FontSize = compact ? 52 : (expanded ? 84 : 68);
+            DateText.FontSize = (compact ? 17 : (expanded ? 26 : 22)) * scale;
         }
 
         /// <summary>Compact windows put the clock on its own line under door name and language.</summary>

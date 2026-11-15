@@ -967,6 +967,7 @@
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>アイコンなし</value></data>
   <data name="flow_editor_icon_other" xml:space="preserve"><value>その他</value></data>
+  <data name="flow_editor_icon_other_ellipsis" xml:space="preserve"><value>その他（三点リーダー）</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_parcel" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>ペン</value></data>
@@ -976,6 +977,7 @@
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人</value></data>
   <data name="flow_editor_icon_work" xml:space="preserve"><value>工具</value></data>
+  <data name="flow_editor_icon_wrench" xml:space="preserve"><value>レンチ</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>無操作で最初に戻るまで（秒）</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>最初に戻るまで</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>本文の上</value></data>
@@ -1004,6 +1006,7 @@
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>最初のページに戻る</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>表示する</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>アイコン</value></data>
+  <data name="flow_editor_option_icon_pick" xml:space="preserve"><value>アイコン</value></data>
   <data name="flow_editor_option_label" xml:space="preserve"><value>ラベル</value></data>
   <data name="flow_editor_option_primary" xml:space="preserve"><value>大きな主ボタンにする</value></data>
   <data name="flow_editor_option_purpose" xml:space="preserve"><value>用件のラベルとアイコンを使う</value></data>
@@ -1018,9 +1021,14 @@
   <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>ここで呼び出しが始まります（用件: {0}）</value></data>
   <data name="flow_editor_preview_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="flow_editor_preview_hint" xml:space="preserve"><value>現在の設定を来訪者と同じ画面で操作できます。呼び出しや通知は実行されません。</value></data>
+  <data name="flow_editor_preview_no_start" xml:space="preserve"><value>試せる最初のページがありません</value></data>
   <data name="flow_editor_preview_note" xml:space="preserve"><value>プレビュー: 通知も発信も行いません。</value></data>
+  <data name="flow_editor_preview_note_walk" xml:space="preserve"><value>何も送信されません。来訪者と同じようにウィザードをたどります。</value></data>
   <data name="flow_editor_preview_notify" xml:space="preserve"><value>住人に通知が送られます: {0}</value></data>
+  <data name="flow_editor_preview_notify_step" xml:space="preserve"><value>お知らせを送ります（ステップ {0}）</value></data>
   <data name="flow_editor_preview_off" xml:space="preserve"><value>ウィザードは無効か、使える状態ではありません。</value></data>
+  <data name="flow_editor_preview_press" xml:space="preserve"><value>呼び出し: 住人を呼び出します</value></data>
+  <data name="flow_editor_preview_press_purpose" xml:space="preserve"><value>呼び出し: 「{0}」で住人を呼び出します</value></data>
   <data name="flow_editor_preview_restart" xml:space="preserve"><value>最初から</value></data>
   <data name="flow_editor_preview_would_call" xml:space="preserve"><value>呼び出します: {0}</value></data>
   <data name="flow_editor_preview_would_call_none" xml:space="preserve"><value>呼び出します（用件なし）</value></data>

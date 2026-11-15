@@ -56,8 +56,7 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// One purpose badge: the Fluent icon for a seeded purpose, or an administrator's own
-        /// icon text when there is nothing to map, then the label.
+        /// One purpose badge: the Fluent icon the purpose maps to, then the label.
         /// </summary>
         private void FillPurposeBadge(System.Windows.Controls.Panel into,
                                       Dictionary<string, object> entry, string id, string label)
@@ -65,25 +64,11 @@ namespace DoorbellApp
             if (into == null) return;
             into.Children.Clear();
             var stroke = ThemeContrast.Brush(Color.FromRgb(0xF2, 0xF5, 0xF8));
-            FrameworkElement glyph = FluentIcon(PurposeIconKey(id), 18, stroke);
-            if (glyph != null)
-            {
-                into.Children.Add(glyph);
-            }
-            else
-            {
-                object icon;
-                string iconText = entry != null && entry.TryGetValue("icon", out icon) &&
-                                  icon != null ? icon.ToString() : "";
-                if (iconText.Length != 0)
-                    into.Children.Add(new TextBlock
-                    {
-                        Text = iconText,
-                        FontSize = 18,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Foreground = stroke,
-                    });
-            }
+            object icon;
+            string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
+                ? icon.ToString() : "";
+            FrameworkElement glyph = FluentIcon(PurposeIconKey(id, iconText), 18, stroke);
+            if (glyph != null) into.Children.Add(glyph);
             into.Children.Add(new TextBlock
             {
                 Text = label,

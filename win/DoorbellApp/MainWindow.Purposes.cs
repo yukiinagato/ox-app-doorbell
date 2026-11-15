@@ -67,8 +67,8 @@ namespace DoorbellApp
         private bool ShowsHomePurposes()
         {
             // With a visitor flow the start page replaces the classic purpose grid.
-            return App.Boot.Role == "door_station" && !FlowHomeActive && _callFlow == "purpose_first" &&
-                PurposeGrid.Children.Count > 0;
+            return App.Boot.Role == "door_station" && !FlowHomeActive && !FlowPending &&
+                _callFlow == "purpose_first" && PurposeGrid.Children.Count > 0;
         }
 
         private bool ShowsCallingPurposes()
@@ -108,22 +108,10 @@ namespace DoorbellApp
             CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>
-        /// The Fluent icon for a purpose core seeds. An administrator's own purpose keeps whatever
-        /// icon they typed, because there is nothing to map it to.
-        /// </summary>
-        private static string PurposeIconKey(string id)
+        /// <summary>The vendored Fluent glyph for a purpose or option; configuration emoji are never drawn.</summary>
+        private static string PurposeIconKey(string id, string emoji)
         {
-            switch (id)
-            {
-                case "p_visit": return "IconHome";
-                case "p_delivery": return "IconPackage";
-                case "p_mail": return "IconMail";
-                case "p_sales": return "IconBriefcase";
-                case "p_utility": return "IconWrench";
-                case "p_other": return "IconQuestionCircle";
-                default: return null;
-            }
+            return FlowIcons.KeyFor(id, emoji);
         }
 
         /// <summary>
@@ -168,17 +156,8 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            FrameworkElement glyph = FluentIcon(PurposeIconKey(id), 34, null);
+            FrameworkElement glyph = FluentIcon(PurposeIconKey(id, icon), 34, null);
             if (glyph != null) panel.Children.Add(glyph);
-            else if (!string.IsNullOrEmpty(icon))
-                panel.Children.Add(new TextBlock
-                {
-                    Text = icon,
-                    FontSize = 34,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                });
             panel.Children.Add(new TextBlock
             {
                 Text = label,

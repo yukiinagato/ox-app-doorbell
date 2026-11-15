@@ -106,6 +106,14 @@ namespace DoorbellApp
                     return "ok";
                 case "flow-sample":
                     return LoadUiTestFlow();
+                case "reply-sample":
+                    // The overlay a door station shows for a resident's quick reply, with its
+                    // dismiss hint and countdown, for the screenshots.
+                    PresentReply("Please wait a moment. Someone is coming.", 60);
+                    return ReplyBanner.Visibility == Visibility.Visible ? "ok" : "error: not shown";
+                case "reply-hide":
+                    HideReply();
+                    return ReplyBanner.Visibility == Visibility.Collapsed ? "ok" : "error: still shown";
                 case "flow-core":
                     _flowTestDocument = false;
                     _flowFetched = false;

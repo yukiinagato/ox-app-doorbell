@@ -28,6 +28,8 @@ namespace DoorbellApp
         private VisitorFlowWalker _flow;
         private string _flowRevision = "";
         private bool _flowFetched;
+        // Core has answered at least once (with a document or with nothing).
+        private bool _flowAsked;
         private bool _flowFetchBusy;
         private bool _flowFetchAgain;
         private bool _flowBusy;
@@ -48,6 +50,20 @@ namespace DoorbellApp
             {
                 return App.Boot.Role == "door_station" && _flow != null &&
                        _flow.Mode != FlowMode.Legacy;
+            }
+        }
+
+        /// <summary>
+        /// A door station whose Core publishes a flow has not been told yet whether there is one:
+        /// the visitor sees an empty home rather than the classic screen flashing before the
+        /// start page replaces it.
+        /// </summary>
+        private bool FlowPending
+        {
+            get
+            {
+                return App.Boot.Role == "door_station" && !_flowFetched && !_flowAsked &&
+                       !_flowTestDocument && App.Core != null && App.Core.VisitorFlowAvailable;
             }
         }
 
@@ -76,7 +92,12 @@ namespace DoorbellApp
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _flowFetchBusy = false;
-                    if (generation == App.Core.Generation) ApplyFlowJson(json);
+                    if (generation == App.Core.Generation)
+                    {
+                        _flowAsked = true;
+                        ApplyFlowJson(json);
+                        if (json == null) RenderVisitorFlow();
+                    }
                     if (_flowFetchAgain)
                     {
                         _flowFetchAgain = false;
@@ -136,8 +157,10 @@ namespace DoorbellApp
         {
             WireFlowControls();
             bool active = FlowHomeActive;
-            CallButton.Visibility = active ? Visibility.Collapsed : Visibility.Visible;
-            TouchHint.Visibility = active ? Visibility.Collapsed : Visibility.Visible;
+            bool hidden = active || FlowPending;
+            CallButton.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
+            TouchHint.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
+            ApplyVisitorClockSize();
             FlowContent.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             FlowOptionZone.Visibility = Visibility.Collapsed;
             FlowBackButton.Visibility = Visibility.Collapsed;
@@ -332,17 +355,8 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            FrameworkElement glyph = FluentIcon(PurposeIconKey(option.Purpose), 34, null);
+            FrameworkElement glyph = FluentIcon(PurposeIconKey(option.Purpose, option.Icon), 34, null);
             if (glyph != null) panel.Children.Add(glyph);
-            else if (!string.IsNullOrEmpty(option.Icon))
-                panel.Children.Add(new TextBlock
-                {
-                    Text = option.Icon,
-                    FontSize = 34,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                });
             panel.Children.Add(new TextBlock
             {
                 Text = option.Label,
@@ -367,8 +381,9 @@ namespace DoorbellApp
                 // The Call button's look: the same large accent style, capped like CallButton.
                 button.Style = (Style)FindResource("BigButton");
                 button.MaxWidth = 620;
-                button.HorizontalAlignment = HorizontalAlignment.Center;
-                button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                // Stretch inside the cap: the button fills its width and is centred in the zone.
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.HorizontalContentAlignment = HorizontalAlignment.Center;
             }
             else button.Padding = new Thickness(12, 10, 12, 10);
             button.Click += OnFlowOptionClick;

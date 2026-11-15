@@ -70,15 +70,19 @@
             <!-- B · door-station visitor screen: top bar, notice, purpose grid, then the fixed
                  bottom action zone with the full-width Call button (VisitorCallBlock). -->
             <Grid x:Name="VisitorHome" Margin="20,18,20,18" Visibility="Collapsed">
-                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
                 <ScrollViewer x:Name="VisitorContentScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
-                    <Grid>
+                    <Grid MinHeight="{Binding ViewportHeight, ElementName=VisitorContentScroll}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -140,7 +144,8 @@
                      body text, images below. It shares the row with the classic purpose grid, and
                      only one of the two is ever visible. The options live in the fixed zone below. -->
                 <StackPanel x:Name="FlowContent" Grid.Row="3" Visibility="Collapsed"
-                            Margin="0,16,0,8" MaxWidth="860" HorizontalAlignment="Stretch">
+                            Margin="0,16,0,8" MaxWidth="860" HorizontalAlignment="Stretch"
+                            VerticalAlignment="Bottom">
                     <TextBlock x:Name="FlowTitle" FontSize="34" FontWeight="SemiBold"
                                TextWrapping="Wrap" TextAlignment="Center"
                                Foreground="{DynamicResource OnSurface}"
@@ -158,14 +163,16 @@
                     <UniformGrid x:Name="PurposeGrid" Columns="3" HorizontalAlignment="Stretch"/>
                 </StackPanel>
 
-                <Grid x:Name="VisitorFooter" Grid.Row="4" Margin="0,12,0,0">
+                <Grid x:Name="VisitorSosHost" Grid.Row="5" Margin="0,16,0,0"/>
+                    </Grid>
+                </ScrollViewer>
+                <!-- The caption line (device, version, battery) sits on the bottom edge of the
+                     screen, small and quiet, under every page and the action zone. -->
+                <Grid x:Name="VisitorFooter" Grid.Row="2" Margin="0,10,0,0">
                     <TextBlock x:Name="VisitorVersionLine" FontSize="14" TextWrapping="Wrap"
                                Foreground="{DynamicResource Muted}" HorizontalAlignment="Left"
                                VerticalAlignment="Center"/>
                 </Grid>
-                <Grid x:Name="VisitorSosHost" Grid.Row="5" Margin="0,16,0,0"/>
-                    </Grid>
-                </ScrollViewer>
                 <StackPanel x:Name="VisitorCallBlock" Grid.Row="1">
                     <TextBlock x:Name="VisitorStatus" Visibility="Collapsed" FontSize="22"
                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,12"

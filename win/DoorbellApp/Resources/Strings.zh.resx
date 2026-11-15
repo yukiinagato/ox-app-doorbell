@@ -967,6 +967,7 @@
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>信封</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>无图标</value></data>
   <data name="flow_editor_icon_other" xml:space="preserve"><value>省略号</value></data>
+  <data name="flow_editor_icon_other_ellipsis" xml:space="preserve"><value>其他（省略号）</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>包裹</value></data>
   <data name="flow_editor_icon_parcel" xml:space="preserve"><value>包裹</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>笔</value></data>
@@ -976,6 +977,7 @@
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人物</value></data>
   <data name="flow_editor_icon_work" xml:space="preserve"><value>工具</value></data>
+  <data name="flow_editor_icon_wrench" xml:space="preserve"><value>扳手</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>无操作返回起始页（秒）</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>返回起始页前等待</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>正文上方</value></data>
@@ -1004,6 +1006,7 @@
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>返回起始页</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>显示</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>图标</value></data>
+  <data name="flow_editor_option_icon_pick" xml:space="preserve"><value>图标</value></data>
   <data name="flow_editor_option_label" xml:space="preserve"><value>标签</value></data>
   <data name="flow_editor_option_primary" xml:space="preserve"><value>显示为主按钮</value></data>
   <data name="flow_editor_option_purpose" xml:space="preserve"><value>使用来访目的的标签和图标</value></data>
@@ -1018,9 +1021,14 @@
   <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>此处将发起呼叫（目的：{0}）</value></data>
   <data name="flow_editor_preview_close" xml:space="preserve"><value>关闭</value></data>
   <data name="flow_editor_preview_hint" xml:space="preserve"><value>用访客看到的界面操作当前向导。不会发起呼叫，也不会发送消息。</value></data>
+  <data name="flow_editor_preview_no_start" xml:space="preserve"><value>没有可试用的起始页</value></data>
   <data name="flow_editor_preview_note" xml:space="preserve"><value>预览：不会发送通知，也不会呼叫。</value></data>
+  <data name="flow_editor_preview_note_walk" xml:space="preserve"><value>不会发送任何内容，只是按访客的方式演示向导。</value></data>
   <data name="flow_editor_preview_notify" xml:space="preserve"><value>将向住户发送：{0}</value></data>
+  <data name="flow_editor_preview_notify_step" xml:space="preserve"><value>将发送通知（步骤 {0}）</value></data>
   <data name="flow_editor_preview_off" xml:space="preserve"><value>向导已关闭或暂不可用。</value></data>
+  <data name="flow_editor_preview_press" xml:space="preserve"><value>呼叫：将呼叫住户</value></data>
+  <data name="flow_editor_preview_press_purpose" xml:space="preserve"><value>呼叫：将以“{0}”呼叫住户</value></data>
   <data name="flow_editor_preview_restart" xml:space="preserve"><value>重新开始</value></data>
   <data name="flow_editor_preview_would_call" xml:space="preserve"><value>将呼叫：{0}</value></data>
   <data name="flow_editor_preview_would_call_none" xml:space="preserve"><value>将呼叫（无来访目的）</value></data>

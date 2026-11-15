@@ -1690,7 +1690,8 @@ class WindowsContracts(unittest.TestCase):
         # An icon inside a button shares the vertical centre line with its label.
         icon = window[window.index("private Button MakePurposeButton"):
                       window.index("private void OnPurposeClick")]
-        self.assertEqual(icon.count("VerticalAlignment = VerticalAlignment.Center"), 2)
+        self.assertEqual(icon.count("VerticalAlignment = VerticalAlignment.Center"), 1)
+        self.assertIn("FluentIcon(PurposeIconKey(id, icon), 34, null)", icon)
 
     def test_sos_slider_uses_a_contained_track_and_round_thumb(self):
         app = read("win/DoorbellApp/App.xaml")
@@ -2140,11 +2141,18 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("GetWidenedPathGeometry", read("win/DoorbellApp/Ui/Fluent.cs"))
         mapped = code[code.index("private static string PurposeIconKey("):
                       code.index("private FrameworkElement FluentIcon(")]
-        for purpose, key in (("p_visit", "IconHome"), ("p_delivery", "IconPackage"),
-                             ("p_mail", "IconMail")):
-            self.assertIn('case "%s": return "%s";' % (purpose, key), mapped)
-        # An administrator's own purpose keeps whatever icon they typed.
-        self.assertIn("default: return null;", mapped)
+        self.assertIn("FlowIcons.KeyFor(id, emoji)", mapped)
+        icons = read("win/DoorbellApp/Core/FlowIcons.cs")
+        for purpose, key in (("p_visit", "Home"), ("p_delivery", "Package"), ("p_mail", "Mail"),
+                             ("p_sales", "Briefcase"), ("p_utility", "Wrench"), ("p_other", "Other")):
+            self.assertIn('{ "%s", %s }' % (purpose, key), icons)
+        # Configuration emoji are never drawn: an unknown icon is a person, not a text glyph.
+        self.assertIn("Person", icons)
+        for rel in ("MainWindow.Purposes.cs", "MainWindow.VisitorFlow.cs", "MainWindow.CallControls.cs"):
+            shown = read("win/DoorbellApp/" + rel)
+            self.assertNotIn("Text = icon,", shown, rel)
+            self.assertNotIn("Text = option.Icon,", shown, rel)
+            self.assertNotIn("Text = iconText,", shown, rel)
 
     def test_the_theme_backdrop_is_admin_configurable(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
@@ -2982,7 +2990,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('SetAutomationId(b, "Purpose_" + id);',
                       read("win/DoorbellApp/MainWindow.Purposes.cs"))
         names |= {"Purpose_" + ident for ident in
-                  re.findall(r'case "(p_[a-z]+)":', read("win/DoorbellApp/MainWindow.Purposes.cs"))}
+                  re.findall(r'\{ "(p_[a-z]+)", ', read("win/DoorbellApp/Core/FlowIcons.cs"))}
         # Flow option buttons carry "FlowOption_" and the option id of the document the test
         # hook loads (MainWindow.UiTest.cs), which is the document the suite walks.
         self.assertIn('"FlowOption_" + option.Id',
@@ -3455,6 +3463,61 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('suite["walk"]', tests)
         self.assertIn("RunWalk(", tests)
 
+    def test_the_visitor_home_composition_follows_the_ui_guidelines(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        flow = read("win/DoorbellApp/MainWindow.VisitorFlow.cs")
+        # The caption line (device, version, battery) is the last row of the visitor home, below
+        # the action zone, never between the title and the options.
+        home = xaml[xaml.index('<Grid x:Name="VisitorHome"'):xaml.index('x:Name="DashboardHome"')]
+        self.assertIn('<StackPanel x:Name="VisitorCallBlock" Grid.Row="1">', home)
+        self.assertIn('<Grid x:Name="VisitorFooter" Grid.Row="2"', home)
+        self.assertEqual(home.count('x:Name="VisitorFooter"'), 1)
+        # The flow's content sits right above the options zone.
+        self.assertIn('VerticalAlignment="Bottom"', home[home.index('x:Name="FlowContent"'):
+                                                       home.index('x:Name="PurposeSection"')])
+        # The clock is a small secondary line on the flow's pages and a headline otherwise.
+        clock = shell[shell.index("private void ApplyVisitorClockSize()"):
+                      shell.index("private void LayOutVisitorTopBar")]
+        self.assertIn("if (FlowHomeActive)", clock)
+        self.assertIn("ClockText.FontSize = (compact ? 24 : 30) * scale;", clock)
+        self.assertIn("ClockText.FontSize = compact ? 52 : (expanded ? 84 : 68);", clock)
+        self.assertEqual(shell.count("ApplyVisitorClockSize();"), 1)
+        self.assertIn("ApplyVisitorClockSize();", flow)
+        # Nothing of the classic screen shows before Core has said whether there is a flow.
+        self.assertIn("private bool FlowPending", flow)
+        self.assertIn("App.Core.VisitorFlowAvailable", flow)
+        self.assertIn("bool hidden = active || FlowPending;", flow)
+        self.assertIn("!FlowHomeActive && !FlowPending", read("win/DoorbellApp/MainWindow.Purposes.cs"))
+        self.assertIn("_flowAsked = true;", flow)
+        # The main option fills its width up to the cap and is centred; it never shrinks to its text.
+        self.assertIn("button.HorizontalAlignment = HorizontalAlignment.Stretch;", flow)
+
+    def test_the_flow_editor_previews_the_draft_and_shows_errors_by_the_option(self):
+        editor = read("win/DoorbellApp/Settings/SettingsWindow.Flow.cs")
+        # Try it: the shared walker over the configured steps (or an unsaved page), no Core call.
+        preview = editor[editor.index("private void ShowFlowPreview("):editor.index("// ---- images ---")]
+        self.assertIn("new VisitorFlowWalker(document, lang)", preview)
+        self.assertIn("walker.Tap(chosen.Id)", preview)
+        self.assertIn("walker.Back()", preview)
+        self.assertIn("flow_editor.preview_press", preview)
+        self.assertIn("flow_editor.preview_notify_step", preview)
+        self.assertNotIn("App.Core", preview)
+        self.assertNotIn("_store.Commit", preview)
+        for ident in ("FlowPreview", "FlowStepPreview", "FlowPreviewOption", "FlowPreviewBack"):
+            self.assertIn('"%s"' % ident, editor)
+        # Core names "step.option": the message goes under that option of the open step.
+        self.assertIn("private bool ShowFlowFieldError(string stepId, string error)", editor)
+        self.assertIn("if (ShowFlowFieldError(id, result.Error)) return;", editor)
+        self.assertIn('AutomationId(optionError, "FlowOptionError");', editor)
+        # The option icon is chosen from the shared set (stored as its emoji), not typed.
+        self.assertIn('Fld("icon", FieldKind.Choice, "flow_editor.option_icon_pick")', editor)
+        self.assertIn("FlowIcons.PickerEmoji", editor)
+        self.assertIn("flow_editor.icon_home", editor)
+        # The suite shows the quick-reply overlay through its own hook.
+        self.assertIn('case "reply-sample":', read("win/DoorbellApp/MainWindow.UiTest.cs"))
+        self.assertIn("'reply-sample'", read("win/scripts/ui_smoke.ps1"))
+
     def test_the_flow_editor_writes_whole_steps_in_one_batch_on_the_write_lane(self):
         editor = read("win/DoorbellApp/Settings/SettingsWindow.Flow.cs")
         catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
@@ -3468,7 +3531,20 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("_writes.Run(() =>", editor)
         self.assertIn("_store.Commit(sets, deletes)", editor)
         self.assertIn('"visitor_flow.steps." + id, next', editor)
-        self.assertIn('"visitor_flow.steps." + seed.Key, seed.Value', editor)
+        self.assertIn('"visitor_flow.steps." + step.Key, step.Value', editor)
+        # Order: consecutive values in the new sequence, only changed steps rewritten, a new step
+        # listed last, a copy right after its original, and a rewrite keeps the stored order.
+        self.assertIn("FlowEditorModel.Renumber(", editor)
+        self.assertIn("FlowEditorModel.Move(", editor)
+        self.assertIn("FlowEditorModel.InsertAfter(", editor)
+        self.assertIn("FlowEditorModel.Sequence(", editor)
+        self.assertIn("var next = DeepCopy(original);", editor)
+        self.assertIn('duplicate.Remove("order");', editor)
+        self.assertIn('AutomationId(up, "FlowStepUp")', editor)
+        self.assertIn('AutomationId(down, "FlowStepDown")', editor)
+        model = read("win/DoorbellApp/Core/FlowEditorModel.cs")
+        self.assertIn('copy["order"] = (long)i;', model)
+        self.assertIn("win/DoorbellApp/Core/FlowEditorModel.cs", read("win/scripts/test_flow_editor_model.sh"))
         self.assertNotIn('"visitor_flow.steps"', editor.replace('_store.Get("visitor_flow.steps")', ""))
         self.assertNotRegex(editor, r'"visitor_flow\.steps\.[A-Za-z_]+\.')
         for leaf in ("enabled", "start", "idle_s", "require_call"):

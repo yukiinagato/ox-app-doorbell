@@ -967,6 +967,7 @@ Delete it?</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>Envelope</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>No icon</value></data>
   <data name="flow_editor_icon_other" xml:space="preserve"><value>Ellipsis</value></data>
+  <data name="flow_editor_icon_other_ellipsis" xml:space="preserve"><value>Other (ellipsis)</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>Parcel</value></data>
   <data name="flow_editor_icon_parcel" xml:space="preserve"><value>Package</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>Pen</value></data>
@@ -976,6 +977,7 @@ Delete it?</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>Tool</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>Person</value></data>
   <data name="flow_editor_icon_work" xml:space="preserve"><value>Tools</value></data>
+  <data name="flow_editor_icon_wrench" xml:space="preserve"><value>Wrench</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>Return to the start after inactivity (seconds)</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>Return to start after</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>Above the text</value></data>
@@ -1004,6 +1006,7 @@ Delete it?</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>Return to the start page</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>Shown</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>Icon</value></data>
+  <data name="flow_editor_option_icon_pick" xml:space="preserve"><value>Icon</value></data>
   <data name="flow_editor_option_label" xml:space="preserve"><value>Label</value></data>
   <data name="flow_editor_option_primary" xml:space="preserve"><value>Show as the large main button</value></data>
   <data name="flow_editor_option_purpose" xml:space="preserve"><value>Use a visit purpose's label and icon</value></data>
@@ -1018,9 +1021,14 @@ Delete it?</value></data>
   <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>A call would start here (purpose: {0})</value></data>
   <data name="flow_editor_preview_close" xml:space="preserve"><value>Close</value></data>
   <data name="flow_editor_preview_hint" xml:space="preserve"><value>Walk the current wizard on the visitor screen. No call is started and no message is sent.</value></data>
+  <data name="flow_editor_preview_no_start" xml:space="preserve"><value>There is no start page to try</value></data>
   <data name="flow_editor_preview_note" xml:space="preserve"><value>Preview: nothing is sent and nobody is called.</value></data>
+  <data name="flow_editor_preview_note_walk" xml:space="preserve"><value>Nothing is sent. This walks the wizard the way a visitor would.</value></data>
   <data name="flow_editor_preview_notify" xml:space="preserve"><value>This message would go to the household: {0}</value></data>
+  <data name="flow_editor_preview_notify_step" xml:space="preserve"><value>A notification would be sent (step {0})</value></data>
   <data name="flow_editor_preview_off" xml:space="preserve"><value>The wizard is off or not usable yet.</value></data>
+  <data name="flow_editor_preview_press" xml:space="preserve"><value>Ring: a call would be placed</value></data>
+  <data name="flow_editor_preview_press_purpose" xml:space="preserve"><value>Ring: a call for “{0}” would be placed</value></data>
   <data name="flow_editor_preview_restart" xml:space="preserve"><value>Start again</value></data>
   <data name="flow_editor_preview_would_call" xml:space="preserve"><value>Would ring: {0}</value></data>
   <data name="flow_editor_preview_would_call_none" xml:space="preserve"><value>Would ring (no purpose)</value></data>

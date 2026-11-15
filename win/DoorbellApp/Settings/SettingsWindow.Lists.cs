@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using DoorbellApp.Core;
 using DoorbellApp.Util;
 
 namespace DoorbellApp.Settings
@@ -128,6 +129,21 @@ namespace DoorbellApp.Settings
                 buttons.Children.Add(b);
             }
             row.Children.Add(buttons);
+            if (item.Handler == "visit_purposes")
+            {
+                // The purpose's icon is stored as an emoji for the other shells; here it is its Fluent glyph.
+                var glyph = DoorbellApp.Ui.Fluent.Icon(
+                    FlowIcons.KeyFor(entry.Id, Str(entry.Data, "icon")) ?? FlowIcons.Person);
+                if (glyph != null)
+                {
+                    glyph.Width = 22;
+                    glyph.Height = 22;
+                    glyph.Margin = new Thickness(0, 0, 14, 0);
+                    glyph.VerticalAlignment = VerticalAlignment.Center;
+                    DockPanel.SetDock(glyph, Dock.Left);
+                    row.Children.Add(glyph);
+                }
+            }
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock
             {
@@ -251,8 +267,7 @@ namespace DoorbellApp.Settings
             if (text.Length == 0 && label != null)
                 foreach (string lang in new[] { "ja", "en", "zh" })
                     if ((text = Str(label, lang)).Length > 0) break;
-            string icon = Str(entry.Data, "icon");
-            return (icon.Length > 0 ? icon + "  " : "") + (text.Length > 0 ? text : entry.Id);
+            return text.Length > 0 ? text : entry.Id;
         }
 
         private static string EntrySubtitle(SettingItem item, ListEntry entry)
