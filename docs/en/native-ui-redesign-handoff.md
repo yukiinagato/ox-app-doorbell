@@ -13,7 +13,7 @@ on every shell and the web Admin. Current versions: Windows 0.4.0 (file version
 with the iOS 9 profile 0.8.1 (425). Verification is stated per deliverable; anything
 =======
 iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
-0.3.1.32), Android 0.6.0 (54), iOS 0.7.1 (81), tvOS 0.6.2 (32), iOS 5 kiosk 0.9.0 (101)
+0.3.1.32), Android 0.6.0 (54), iOS 0.7.2 (82), tvOS 0.6.3 (33), iOS 5 kiosk 0.9.0 (101)
 with the iOS 9 profile 0.8.0 (424). Verification is stated per deliverable; anything
 >>>>>>> d6d95a3d (tvOS: screenshot request hook (home/history/settings/monitor/notice/sos/sos_active) behind debug_screenshots; tvOS 0.6.2 (32))
 under "Not verified" is untested, not passing.
@@ -169,7 +169,7 @@ speech, playback policy, logs, capability override, other devices' local setting
 delete confirmations) until `KNOWN_GAPS` and `DYNAMIC_GAPS` in
 `tools/tests/test_android_settings_parity.py` are empty.
 
-### iOS and tvOS (iOS 0.7.1, build 81; tvOS 0.6.2, build 32)
+### iOS and tvOS (iOS 0.7.2, build 82; tvOS 0.6.3, build 33)
 
 Visitor flow: the wizard on the door-station home (`VisitorFlowView.swift`,
 `VisitorFlowPages.swift`) and a full flow editor in Settings (`VisitorFlowEditor.swift`);

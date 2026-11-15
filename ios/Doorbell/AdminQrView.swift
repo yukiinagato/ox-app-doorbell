@@ -13,7 +13,18 @@ final class AdminQrView: UIView {
     private let urlLabel = UILabel()
     private let captionLabel = UILabel()
     private let detailLabel = UILabel()
+    private let isTV: Bool = {
+        #if os(tvOS)
+        return true
+        #else
+        return false
+        #endif
+    }()
     private var renderedUrl = ""
+    /// The current code and address, for a shell that draws its own presentation of them.
+    var qrImage: UIImage? { return imageView.image }
+    var adminAddress: String { return renderedUrl }
+    var onImageReady: (() -> Void)?
     private var hasTargetOverride = false
     private var targetUrlOverride: String?
 
@@ -35,12 +46,12 @@ final class AdminQrView: UIView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
         captionLabel.text = texts.t("web_admin.open")
-        captionLabel.font = SystemStyle.font(compact ? .caption1 : .subheadline, weight: .semibold)
+        captionLabel.font = SystemStyle.font(compact ? .callout : .subheadline, weight: .semibold)
         captionLabel.numberOfLines = 1
         captionLabel.isHidden = !compact || !showsCaption
 
         #if os(tvOS)
-        urlLabel.font = SystemStyle.font(.caption1)
+        urlLabel.font = SystemStyle.font(.callout)
         #else
         urlLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 11 : 13, weight: .regular)
         #endif
@@ -50,7 +61,7 @@ final class AdminQrView: UIView {
         urlLabel.accessibilityIdentifier = "admin_qr_url"
 
         #if os(tvOS)
-        detailLabel.font = SystemStyle.font(.caption2)
+        detailLabel.font = SystemStyle.font(.callout)
         #else
         detailLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 10 : 13,
                                                      weight: .regular)
@@ -89,9 +100,16 @@ final class AdminQrView: UIView {
     /// The code is always drawn on white, because that is what a camera reads; the text beside
     /// it takes the system label colours of the card or screen it sits on.
     func refreshColors() {
+        #if os(tvOS)
+        // Over the household wallpaper behind a scrim: white ink keeps every line above 4.5:1.
+        captionLabel.textColor = .white
+        urlLabel.textColor = .white
+        detailLabel.textColor = UIColor(white: 1, alpha: 0.85)
+        #else
         captionLabel.textColor = SystemStyle.secondaryLabel
         urlLabel.textColor = SystemStyle.label
         detailLabel.textColor = SystemStyle.secondaryLabel
+        #endif
     }
 
     func setDetailText(_ text: String) {
@@ -119,13 +137,14 @@ final class AdminQrView: UIView {
         urlLabel.text = url
         // Encoding is a nested module loop and a bitmap context. It only runs when the address
         // actually changed, but when it does it has no business blocking a frame.
-        let points: CGFloat = compact ? 128 : 144
+        let points: CGFloat = (compact ? 128 : 144) * (isTV ? 1.5 : 1)
         let core = self.core
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let image = PairingQR.image(core: core, text: url, points: points)
             DispatchQueue.main.async {
                 guard let self = self, self.renderedUrl == url else { return }
                 self.imageView.image = image
+                self.onImageReady?()
             }
         }
     }

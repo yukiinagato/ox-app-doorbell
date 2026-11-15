@@ -122,6 +122,7 @@
   <data name="admin_channel_in_app" xml:space="preserve"><value>应用内</value></data>
   <data name="admin_channel_system_notification" xml:space="preserve"><value>系统通知</value></data>
   <data name="admin_channel_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="admin_checking" xml:space="preserve"><value>正在验证…</value></data>
   <data name="admin_choose_door_station" xml:space="preserve"><value>门口机…</value></data>
   <data name="admin_choose_indoor" xml:space="preserve"><value>室内机…</value></data>
   <data name="admin_choose_playback_pair" xml:space="preserve"><value>请选择室内机和门口机</value></data>
@@ -208,6 +209,7 @@
   <data name="admin_filter_type" xml:space="preserve"><value>按类型筛选</value></data>
   <data name="admin_first_frame_timeout" xml:space="preserve"><value>首帧超时</value></data>
   <data name="admin_fleet" xml:space="preserve"><value>管理设备</value></data>
+  <data name="admin_forget_saved" xml:space="preserve"><value>清除已保存的密码</value></data>
   <data name="admin_global" xml:space="preserve"><value>全局</value></data>
   <data name="admin_helper_auto" xml:space="preserve"><value>自动</value></data>
   <data name="admin_helper_mode" xml:space="preserve"><value>恢复助手</value></data>
@@ -361,6 +363,7 @@
   <data name="admin_raw_config" xml:space="preserve"><value>配置 (原始 JSON，只读)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>就绪</value></data>
   <data name="admin_refresh" xml:space="preserve"><value>刷新</value></data>
+  <data name="admin_remember" xml:space="preserve"><value>在此 Apple TV 上记住管理密码</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>移出设备</value></data>
   <data name="admin_remove_device_confirm" xml:space="preserve"><value>移出 {0}？离线记录也会删除，该设备重新连接时将退出集群。</value></data>
   <data name="admin_removed" xml:space="preserve"><value>此设备已被移出集群</value></data>
@@ -386,6 +389,7 @@
   <data name="admin_save_pair_override" xml:space="preserve"><value>保存配对覆盖</value></data>
   <data name="admin_save_unknown" xml:space="preserve"><value>暂时无法确认保存结果。草稿已保留，请检查当前配置后再重试。</value></data>
   <data name="admin_saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="admin_saved_rejected" xml:space="preserve"><value>已保存的密码被拒绝，请重新输入</value></data>
   <data name="admin_saving" xml:space="preserve"><value>正在保存…</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>时间表</value></data>
   <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>有 {0} 个旧 secret 仍被引用或无法删除，清理已延后</value></data>
@@ -393,6 +397,7 @@
   <data name="admin_secret_on_target_only" xml:space="preserve"><value>请在目标节点上配置</value></data>
   <data name="admin_secret_unchanged" xml:space="preserve"><value>留空保持不变</value></data>
   <data name="admin_services" xml:space="preserve"><value>服务</value></data>
+  <data name="admin_sign_in" xml:space="preserve"><value>登录</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP 账号（每台设备）</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 分机 (逗号分隔)</value></data>
   <data name="admin_sos_active" xml:space="preserve"><value>紧急 SOS 已触发</value></data>
@@ -2503,6 +2508,7 @@
   <data name="settings_section_device" xml:space="preserve"><value>本设备</value></data>
   <data name="settings_section_doors" xml:space="preserve"><value>门口</value></data>
   <data name="settings_section_history" xml:space="preserve"><value>呼叫记录</value></data>
+  <data name="settings_section_home" xml:space="preserve"><value>主页</value></data>
   <data name="settings_section_info" xml:space="preserve"><value>本机信息</value></data>
   <data name="settings_section_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="settings_section_rules" xml:space="preserve"><value>通知与规则</value></data>
@@ -2873,6 +2879,15 @@ PIN：{1}</value></data>
   <data name="time_title" xml:space="preserve"><value>时间</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
+  <data name="tv_controls_hint" xml:space="preserve"><value>播放/暂停键通话</value></data>
+  <data name="tv_door_live" xml:space="preserve"><value>实时</value></data>
+  <data name="tv_no_doors" xml:space="preserve"><value>没有可显示的带摄像头门口机</value></data>
+  <data name="tv_qr_hint" xml:space="preserve"><value>按菜单键关闭</value></data>
+  <data name="tv_qr_title" xml:space="preserve"><value>用手机打开设置</value></data>
+  <data name="tv_sos_home" xml:space="preserve"><value>在主页显示 SOS</value></data>
+  <data name="tv_sos_home_hint" xml:space="preserve"><value>关闭时主页不显示 SOS</value></data>
+  <data name="tv_status_doors" xml:space="preserve"><value>门口机 {0}/{1}</value></data>
+  <data name="tv_status_indoor" xml:space="preserve"><value>室内机 {0}/{1}</value></data>
   <data name="ui_back" xml:space="preserve"><value>返回</value></data>
   <data name="ui_close" xml:space="preserve"><value>关闭</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>已配置时显示</value></data>

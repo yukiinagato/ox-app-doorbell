@@ -231,8 +231,8 @@ final class CallHistoryViewController: UIViewController, UISplitViewControllerDe
         guard let split = split else { return }
         let large = IOSAvailability.usesAccessibilityTextSize(traitCollection)
         #if os(tvOS)
-        split.preferredPrimaryColumnWidthFraction = large ? 0.6 : 0.5
-        split.maximumPrimaryColumnWidth = 1200
+        split.preferredPrimaryColumnWidthFraction = large ? 0.5 : 0.36
+        split.maximumPrimaryColumnWidth = 900
         #else
         split.preferredPrimaryColumnWidthFraction = large ? 0.58 : 0.42
         split.maximumPrimaryColumnWidth = large ? 720 : 460
@@ -301,8 +301,18 @@ final class CallHistoryListController: UITableViewController {
             icon: .check, label: texts.t("history.mark_seen"), target: self,
             action: #selector(markAllSeen), identifier: "history_mark_seen")
         #else
-        filterControl.sizeToFit()
-        tableView.tableHeaderView = filterControl
+        filterButton.accessibilityIdentifier = "history_filter"
+        filterButton.addTarget(self, action: #selector(chooseFilter),
+                               for: .primaryActionTriggered)
+        updateFilterButton()
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 120))
+        filterButton.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(filterButton)
+        NSLayoutConstraint.activate([
+            filterButton.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 100),
+            filterButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+        ])
+        tableView.tableHeaderView = header
         #endif
     }
 
@@ -311,7 +321,9 @@ final class CallHistoryListController: UITableViewController {
             .map { ConfigUtil.sortedByOrder($0) } ?? []
         // A segmented control holds a handful of choices; beyond that the per-door filters would
         // be too narrow to read or touch.
+        #if !os(tvOS)
         if doorFilters.count > 3 { doorFilters = Array(doorFilters.prefix(3)) }
+        #endif
         filterControl.removeAllSegments()
         filterControl.insertSegment(withTitle: texts.t("history.filter_all"), at: 0,
                                     animated: false)
@@ -325,9 +337,14 @@ final class CallHistoryListController: UITableViewController {
         // Segments share the width by title length, and the title face stops growing at the first
         // accessibility size: a control cannot wrap, so a larger face only truncates.
         filterControl.apportionsSegmentWidthsByContent = true
+        #if os(tvOS)
+        // Read from the sofa: the chips are as large as the row subtitle beneath them.
+        let face = SystemStyle.font(.headline, weight: .semibold)
+        #else
         let face = IOSAvailability.scaledFont(.systemFont(ofSize: 15, weight: .medium),
                                               style: .subheadline, maximum: 24,
                                               traits: traitCollection)
+        #endif
         filterControl.setTitleTextAttributes([.font: face], for: .normal)
         filterControl.setTitleTextAttributes([.font: face], for: .selected)
         filterControl.selectedSegmentIndex = 0
@@ -364,6 +381,31 @@ final class CallHistoryListController: UITableViewController {
         onSeen?()
         reload(reset: true)
     }
+
+    #if os(tvOS)
+    private lazy var filterButton = SystemStyle.button(.gray, title: "", large: true)
+
+    private func updateFilterButton() {
+        let index = max(0, filterControl.selectedSegmentIndex)
+        filterButton.setTitle((filterControl.titleForSegment(at: index) ?? "") + "  ⌄", for: .normal)
+    }
+
+    /// Every filter in one standard list: nothing is cut off and the focused entry is unmistakable.
+    @objc private func chooseFilter() {
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .alert)
+        for index in 0..<filterControl.numberOfSegments {
+            let title = filterControl.titleForSegment(at: index) ?? ""
+            sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                self.filterControl.selectedSegmentIndex = index
+                self.filterChanged()
+                self.updateFilterButton()
+            })
+        }
+        sheet.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        present(sheet, animated: true)
+    }
+    #endif
 
     @objc private func filterChanged() {
         let index = filterControl.selectedSegmentIndex
@@ -501,6 +543,15 @@ final class CallHistoryDetailController: UITableViewController {
         SystemStyle.style(tableView)
         tableView.accessibilityIdentifier = "history_detail"
         tableView.allowsSelection = false
+        #if os(tvOS)
+        if row == nil {
+            let empty = SystemStyle.label(.title3, color: SystemStyle.secondaryLabel)
+            empty.text = texts.t("history.detail_empty")
+            empty.textAlignment = .center
+            empty.numberOfLines = 0
+            tableView.backgroundView = empty
+        }
+        #endif
         guard let row = row else { return }
         let config = core.config()
         let day = DoorbellClock.dayTitle(core, texts: texts,
@@ -529,7 +580,11 @@ final class CallHistoryDetailController: UITableViewController {
 
     override func tableView(_ tableView: UITableView,
                             titleForFooterInSection section: Int) -> String? {
+        #if os(tvOS)
+        return nil
+        #else
         return row == nil ? texts.t("history.detail_empty") : nil
+        #endif
     }
 
     override func tableView(_ tableView: UITableView,

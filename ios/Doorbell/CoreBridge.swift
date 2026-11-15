@@ -1419,7 +1419,7 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func put(_ key: String, _ value: String) -> Bool {
+    static func put(_ key: String, _ value: String, thisDeviceOnly: Bool = false) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -1427,21 +1427,33 @@ enum Keychain {
             kSecAttrSynchronizable as String: false,
         ]
         let data = value.data(using: .utf8) ?? Data()
+        let accessibility = thisDeviceOnly ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                                           : kSecAttrAccessibleAfterFirstUnlock
         var add = base
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = accessibility
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecDuplicateItem {
             // An item written by an older build may carry a weaker accessibility class, so the
             // update re-applies it instead of only replacing the bytes.
             let attributes: [String: Any] = [
                 kSecValueData as String: data,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+                kSecAttrAccessible as String: accessibility,
             ]
             return SecItemUpdate(base as CFDictionary,
                                  attributes as CFDictionary) == errSecSuccess
         }
         return status == errSecSuccess
+    }
+
+    static func delete(_ key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 
     static func removeAll() -> Bool {
@@ -1455,6 +1467,20 @@ enum Keychain {
     }
 }
 
+
+/// The administrator password an Apple TV may keep because nobody can type one comfortably on a
+/// remote. It lives only in the Keychain, bound to this device, and is dropped as soon as Core
+/// refuses it or the owner asks.
+enum SavedAdminPassword {
+    private static let key = "admin.saved_password"
+    static var value: String? {
+        guard let text = Keychain.get(key), !text.isEmpty else { return nil }
+        return text
+    }
+    static var exists: Bool { return value != nil }
+    static func save(_ password: String) { _ = Keychain.put(key, password, thisDeviceOnly: true) }
+    static func forget() { Keychain.delete(key) }
+}
 
 /// The loopback media credential (security protocol v3 §8). Every request this shell makes to its
 /// own Core's media routes carries `X-Doorbell-Local`; requests anywhere else never do.

@@ -120,6 +120,7 @@
     <string name="admin_channel_in_app">应用内</string>
     <string name="admin_channel_system_notification">系统通知</string>
     <string name="admin_channel_web_push">Web Push</string>
+    <string name="admin_checking">正在验证…</string>
     <string name="admin_choose_door_station">门口机…</string>
     <string name="admin_choose_indoor">室内机…</string>
     <string name="admin_choose_playback_pair">请选择室内机和门口机</string>
@@ -206,6 +207,7 @@
     <string name="admin_filter_type">按类型筛选</string>
     <string name="admin_first_frame_timeout">首帧超时</string>
     <string name="admin_fleet">管理设备</string>
+    <string name="admin_forget_saved">清除已保存的密码</string>
     <string name="admin_global">全局</string>
     <string name="admin_helper_auto">自动</string>
     <string name="admin_helper_mode">恢复助手</string>
@@ -359,6 +361,7 @@
     <string name="admin_raw_config">配置 (原始 JSON，只读)</string>
     <string name="admin_ready">就绪</string>
     <string name="admin_refresh">刷新</string>
+    <string name="admin_remember">在此 Apple TV 上记住管理密码</string>
     <string name="admin_remove_device">移出设备</string>
     <string name="admin_remove_device_confirm">移出 %1$s？离线记录也会删除，该设备重新连接时将退出集群。</string>
     <string name="admin_removed">此设备已被移出集群</string>
@@ -384,6 +387,7 @@
     <string name="admin_save_pair_override">保存配对覆盖</string>
     <string name="admin_save_unknown">暂时无法确认保存结果。草稿已保留，请检查当前配置后再重试。</string>
     <string name="admin_saved">已保存</string>
+    <string name="admin_saved_rejected">已保存的密码被拒绝，请重新输入</string>
     <string name="admin_saving">正在保存…</string>
     <string name="admin_schedule">时间表</string>
     <string name="admin_secret_cleanup_deferred">有 %1$s 个旧 secret 仍被引用或无法删除，清理已延后</string>
@@ -391,6 +395,7 @@
     <string name="admin_secret_on_target_only">请在目标节点上配置</string>
     <string name="admin_secret_unchanged">留空保持不变</string>
     <string name="admin_services">服务</string>
+    <string name="admin_sign_in">登录</string>
     <string name="admin_sip_accounts">SIP 账号（每台设备）</string>
     <string name="admin_sip_extensions">SIP 分机 (逗号分隔)</string>
     <string name="admin_sos_active">紧急 SOS 已触发</string>
@@ -2501,6 +2506,7 @@
     <string name="settings_section_device">本设备</string>
     <string name="settings_section_doors">门口</string>
     <string name="settings_section_history">呼叫记录</string>
+    <string name="settings_section_home">主页</string>
     <string name="settings_section_info">本机信息</string>
     <string name="settings_section_purposes">来访目的</string>
     <string name="settings_section_rules">通知与规则</string>
@@ -2871,6 +2877,15 @@ PIN：%2$s</string>
     <string name="time_title">时间</string>
     <string name="time_zone">时区</string>
     <string name="time_zone_hint">此设置用于整个集群的时钟、呼叫记录与规则时段</string>
+    <string name="tv_controls_hint">播放/暂停键通话</string>
+    <string name="tv_door_live">实时</string>
+    <string name="tv_no_doors">没有可显示的带摄像头门口机</string>
+    <string name="tv_qr_hint">按菜单键关闭</string>
+    <string name="tv_qr_title">用手机打开设置</string>
+    <string name="tv_sos_home">在主页显示 SOS</string>
+    <string name="tv_sos_home_hint">关闭时主页不显示 SOS</string>
+    <string name="tv_status_doors">门口机 %1$s/%2$s</string>
+    <string name="tv_status_indoor">室内机 %1$s/%2$s</string>
     <string name="ui_back">返回</string>
     <string name="ui_close">关闭</string>
     <string name="unlock_auto">已配置时显示</string>

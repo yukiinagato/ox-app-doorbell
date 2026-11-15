@@ -160,11 +160,11 @@ final class PanelTabBarController: UITabBarController, UITabBarControllerDelegat
         case home, history, settings
     }
 
-    let home: HomeViewController
+    let home: UIViewController
     let history: CallHistoryViewController
     let settingsGate: SettingsGateViewController
 
-    init(home: HomeViewController, history: CallHistoryViewController,
+    init(home: UIViewController, history: CallHistoryViewController,
          settingsGate: SettingsGateViewController, texts: Texts) {
         self.home = home
         self.history = history
@@ -207,10 +207,15 @@ final class PanelTabBarController: UITabBarController, UITabBarControllerDelegat
 
     func show(_ tab: Tab) {
         guard tab != currentTab else { return }
+        #if os(tvOS)
+        // The tab bar selects by focus on tvOS, so the password is never asked for here: the
+        // locked Settings page carries its own Sign in button.
+        #else
         if tab == .settings && !settingsGate.isUnlocked {
             settingsGate.onUnlockRequested?()
             return
         }
+        #endif
         leaving(currentTab)
         selectedIndex = tab.rawValue
     }
@@ -239,11 +244,29 @@ final class PanelTabBarController: UITabBarController, UITabBarControllerDelegat
 
     func tabBarController(_ tabBarController: UITabBarController,
                           shouldSelect viewController: UIViewController) -> Bool {
+        #if os(iOS)
         if viewController === settingsGate && !settingsGate.isUnlocked {
             settingsGate.onUnlockRequested?()
             return false
         }
+        #endif
         if viewController !== selectedViewController { leaving(currentTab) }
         return true
     }
+
+    #if os(tvOS)
+    private var tabBeforeSettings: Tab = .home
+
+    func tabBarController(_ tabBarController: UITabBarController,
+                          didSelect viewController: UIViewController) {
+        if currentTab != .settings { tabBeforeSettings = currentTab }
+    }
+
+    /// Cancelled sign-in: back to the tab the owner came from, Home when there was none.
+    func leaveSettingsGate() {
+        guard currentTab == .settings else { return }
+        selectedIndex = tabBeforeSettings.rawValue
+        setNeedsFocusUpdate()
+    }
+    #endif
 }

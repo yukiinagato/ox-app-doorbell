@@ -84,6 +84,9 @@
 		FB0000000000000000000059 /* CallRevisionLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000022 /* CallRevisionLifecycle.swift */; };
 		FB0000000000000000000049 /* TVAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000010 /* TVAppDelegate.swift */; };
 		FB000000000000000000004A /* TVMainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000011 /* TVMainViewController.swift */; };
+		FB00000000000000000000A1 /* TVAdminSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A1 /* TVAdminSignIn.swift */; };
+		FB00000000000000000000A3 /* TVQrViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A3 /* TVQrViews.swift */; };
+		FB00000000000000000000A2 /* TVHomeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A2 /* TVHomeViewController.swift */; };
 		FB000000000000000000004B /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
 		FB0000000000000000000050 /* outdoor_call_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000018 /* outdoor_call_alert.mp3 */; };
 		FB0000000000000000000051 /* button_click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000019 /* button_click.mp3 */; };
@@ -287,6 +290,9 @@
 		FA000000000000000000000F /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		FA00000000000000000000F0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FA0000000000000000000010 /* TVAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAppDelegate.swift; sourceTree = "<group>"; };
+		FA00000000000000000000A3 /* TVQrViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVQrViews.swift; sourceTree = "<group>"; };
+		FA00000000000000000000A2 /* TVHomeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVHomeViewController.swift; sourceTree = "<group>"; };
+		FA00000000000000000000A1 /* TVAdminSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAdminSignIn.swift; sourceTree = "<group>"; };
 		FA0000000000000000000011 /* TVMainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMainViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FA0000000000000000000013 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -481,6 +487,9 @@
 			children = (
 				FA0000000000000000000010 /* TVAppDelegate.swift */,
 				FA0000000000000000000011 /* TVMainViewController.swift */,
+				FA00000000000000000000A1 /* TVAdminSignIn.swift */,
+				FA00000000000000000000A2 /* TVHomeViewController.swift */,
+				FA00000000000000000000A3 /* TVQrViews.swift */,
 				FA0000000000000000000012 /* Info.plist */,
 			);
 			path = DoorbellTV;
@@ -952,6 +961,9 @@
 				FB0000000000000000000065 /* AddDeviceViewController.swift in Sources */,
 				FB0000000000000000000049 /* TVAppDelegate.swift in Sources */,
 				FB000000000000000000004A /* TVMainViewController.swift in Sources */,
+				FB00000000000000000000A1 /* TVAdminSignIn.swift in Sources */,
+				FB00000000000000000000A2 /* TVHomeViewController.swift in Sources */,
+				FB00000000000000000000A3 /* TVQrViews.swift in Sources */,
 				FB0000000000000000000048 /* IncomingViewController.swift in Sources */,
 				FB0000000000000000000059 /* CallRevisionLifecycle.swift in Sources */,
 				FB0000000000000000000047 /* AdminPinViewController.swift in Sources */,

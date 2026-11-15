@@ -18,6 +18,7 @@ struct SettingsContext {
     var sipBackend = "pjsip"
     var audioVolumes: [String: Any]?
     var previewRate = "1"
+    var showsSosOnHome = false
     var previewRates: [String] = ["0.5", "1", "2", "5"]
     var membershipSummary = ""
     var historySummary = ""
@@ -316,6 +317,18 @@ struct SettingsCatalog {
                 },
                 SettingItem("password_apply", t("settings.change_password"),
                             .action(destructive: false)) { _ in .local("password.apply") },
+            ]))
+        }
+        if ctx.isTV {
+            sections.append(SettingSection(t("settings.section_home"), footer: t("tv.sos_home_hint"), [
+                SettingItem("tv_sos_home", t("tv.sos_home"), .toggle(ctx.showsSosOnHome)) { _ in
+                    .local("tv.sos_home") },
+            ]))
+        }
+        if ctx.isTV && SavedAdminPassword.exists {
+            sections.append(SettingSection([
+                SettingItem("forget_admin_password", t("admin.forget_saved"),
+                            .action(destructive: true)) { _ in .local("admin.forget") },
             ]))
         }
         if isDoor && !ctx.isTV {

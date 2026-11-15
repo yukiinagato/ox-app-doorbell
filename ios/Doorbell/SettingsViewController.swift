@@ -215,6 +215,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         ctx.sipBackend = core.sipBackend
         ctx.audioVolumes = core.audioVolumes()
         ctx.previewRate = DashboardView.previewRateValue(DashboardView.savedPreviewFramesPerSecond)
+        ctx.showsSosOnHome = UserDefaults.standard.bool(forKey: "tv.show_sos_home")
         ctx.previewRates = DashboardView.previewRates.map(DashboardView.previewRateValue)
         let snapshot = PairingSnapshot.load(core)
         ctx.membershipSummary = snapshot.hasSnapshot
@@ -356,6 +357,16 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             return true
         case "cluster.rotate":
             confirmKeyRotation(from: from)
+            return true
+        case "tv.sos_home":
+            let key = "tv.show_sos_home"
+            UserDefaults.standard.set(value?.boolValue ?? !UserDefaults.standard.bool(forKey: key),
+                                      forKey: key)
+            refreshAll()
+            return true
+        case "admin.forget":
+            SavedAdminPassword.forget()
+            refreshAll()
             return true
         case "exit_kiosk":
             leave { [weak self] in self?.onExitKiosk?() }

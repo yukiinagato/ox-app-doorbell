@@ -17,8 +17,6 @@ final class TVMainViewController: UIViewController {
 
     /// Home, History and Settings: the same tab shell an indoor panel uses, focus-driven here.
     private var tabs: PanelTabBarController?
-    private var homeScreen: HomeViewController?
-    private var membershipTitle = ""
     private let replyBanner = UIView()
     private let replyCaption = UILabel()
     private let replyText = UILabel()
@@ -29,8 +27,8 @@ final class TVMainViewController: UIViewController {
 
     private let themeBg = ThemeBackgroundView()
     private lazy var sosSlider = SosTriggerButton(texts: texts)
-    private lazy var dashboard = DashboardView(core: core, boot: boot, texts: texts,
-                                               sosControl: sosSlider)
+    private lazy var homeScreen = TVHomeViewController(core: core, boot: boot, texts: texts,
+                                                       sos: sosSlider)
     private var palette = DoorbellPalette.dark
 
     private var clockTimer: Timer?
@@ -116,6 +114,7 @@ final class TVMainViewController: UIViewController {
         case "home": tabs?.show(.home)
         case "history": tabs?.show(.history)
         case "settings": tabs?.show(.settings)
+        case "qr": tabs?.show(.home); homeScreen.qrTapped()
         case "monitor": openMonitor()
         case "notice": openNotice(door: "")
         case "sos": sosSlider.sendActions(for: .primaryActionTriggered)
@@ -143,22 +142,16 @@ final class TVMainViewController: UIViewController {
             themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
-        // The living-room screen shows the same dashboard as an indoor panel under the system
-        // tab bar. tvOS has no bar button items to hold the home actions, so they are a row of
-        // focusable cards above the door tiles.
-        dashboard.onOpenHistory = { [weak self] in self?.openHistory() }
-        dashboard.onOpenDoor = { [weak self] _ in self?.openMonitor() }
-        dashboard.onOpenNotice = { [weak self] door in self?.openNotice(door: door) }
-        dashboard.onOpenOfflineDoors = { [weak self] in self?.openOfflineDoors() }
-        dashboard.onUnreadMissedChanged = { [weak self] count in self?.tabs?.setUnreadMissed(count) }
+        homeScreen.onOpenDoor = { [weak self] door in self?.openMonitor(door: door) }
+        homeScreen.onOpenNotice = { [weak self] in self?.openNotice(door: "") }
+        homeScreen.onOpenPairing = { [weak self] in self?.openPairing() }
+        homeScreen.onUnreadMissedChanged = { [weak self] count in self?.tabs?.setUnreadMissed(count) }
         sosSlider.onTriggered = { [weak self] in self?.core.emergency(true) }
 
-        let home = HomeViewController(dashboard: dashboard,
-                                      title: boot.name.isEmpty ? texts.t("nav.home") : boot.name)
-        homeScreen = home
+        let home = homeScreen
         let history = CallHistoryViewController(core: core, texts: texts, lang: texts.lang,
                                                 embedded: true)
-        history.onSeen = { [weak self] in self?.dashboard.refreshMissedBadge() }
+        history.onSeen = { [weak self] in self?.homeScreen.refreshMissedBadge() }
         let gate = SettingsGateViewController(texts: texts)
         gate.onUnlockRequested = { [weak self] in self?.onAdminEntry() }
         let controller = PanelTabBarController(home: home, history: history, settingsGate: gate,
@@ -243,7 +236,7 @@ final class TVMainViewController: UIViewController {
     /// hand-held shells.
     private func updateClock() {
         guard let reading = clockSource.reading() else { return }
-        dashboard.updateClock(reading)
+        homeScreen.updateClock(reading)
     }
 
     private func refreshClockBase() {
@@ -255,6 +248,7 @@ final class TVMainViewController: UIViewController {
         guard presentedViewController == nil else { return }
         let dialog = AdminPinViewController(texts: texts, core: core)
         dialog.onUnlocked = { [weak self] in self?.showSettings() }
+        dialog.onCancelled = { [weak self] in self?.tabs?.leaveSettingsGate() }
         present(dialog, animated: true)
     }
 
@@ -268,32 +262,6 @@ final class TVMainViewController: UIViewController {
     private func openHistory() {
         guard presentedViewController == nil else { return }
         tabs?.show(.history)
-    }
-
-    private func openOfflineDoors() {
-        homeScreen?.navigationController?.pushViewController(
-            OfflineDoorStationsViewController(core: core, config: core.config(), texts: texts),
-            animated: true)
-    }
-
-    /// The home actions, as the row of cards the dashboard shows above the door tiles.
-    private func refreshQuickActions() {
-        dashboard.quickActions = [
-            DashboardView.QuickAction(title: texts.t("monitor.open"), icon: .eye,
-                                      identifier: "home_monitor") { [weak self] in
-                self?.openMonitor()
-            },
-            DashboardView.QuickAction(title: texts.t("notice.global_button"), icon: .note,
-                                      identifier: "dashboard_notice_global") { [weak self] in
-                self?.openNotice(door: "")
-            },
-            DashboardView.QuickAction(title: membershipTitle.isEmpty
-                                          ? texts.t("pair.panel_title") : membershipTitle,
-                                      icon: .plus,
-                                      identifier: "membership_status") { [weak self] in
-                self?.openPairing()
-            },
-        ]
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -332,8 +300,7 @@ final class TVMainViewController: UIViewController {
         // theme background; light/dark then owns the cards the dashboard lays on top of it.
         let skin = themeBg.apply(display: display, config: cfg, nodeId: nodeId, palette: palette,
                                  httpPort: boot.httpPort, host: view)
-        dashboard.reload(config: cfg, skin: skin)
-        homeScreen?.apply(skin: skin)
+        homeScreen.reload(config: cfg)
         // An Apple TV has no battery of its own; the version line simply omits it.
         applyStrings()
         updateClock()
@@ -367,7 +334,7 @@ final class TVMainViewController: UIViewController {
         case "peers_changed", "config_changed", "notice_changed":
             refreshNodeInfo()
         case "call_log_changed":
-            dashboard.refreshHistory()
+            homeScreen.refreshMissedBadge()
         case "pairing_state", "paired", "device_joined", "pending_changed":
             refreshPairingStatus()
         default:
@@ -378,24 +345,9 @@ final class TVMainViewController: UIViewController {
     /// Renders the authoritative snapshot: membership when ready, the not-set-up prompt when not.
     private func refreshPairingStatus() {
         let snapshot = PairingSnapshot.load(core)
-        guard snapshot.hasSnapshot else {
-            membershipTitle = ""
-            refreshQuickActions()
-            return
-        }
+        guard snapshot.hasSnapshot else { return }
         pairingReady = snapshot.state == .ready
-        guard pairingReady else {
-            membershipTitle = texts.t("pair.not_set_up_banner")
-            refreshQuickActions()
-            return
-        }
-        var title = texts.t("pair.membership",
-                            "\(max(snapshot.memberCount, snapshot.paired ? 1 : 0))")
-        if snapshot.connectedCount > 0 {
-            title += " · " + texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
-        }
-        membershipTitle = title
-        refreshQuickActions()
+        homeScreen.setPairingReady(pairingReady)
     }
 
     @objc private func openPairing() {
@@ -413,9 +365,9 @@ final class TVMainViewController: UIViewController {
         present(dlg, animated: true)
     }
 
-    @objc private func openMonitor() {
+    private func openMonitor(door: String? = nil) {
         guard presentedViewController == nil else { return }
-        present(MonitorViewController(core: core, boot: boot), animated: true)
+        present(MonitorViewController(core: core, boot: boot, initialDoor: door), animated: true)
     }
 
 

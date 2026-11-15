@@ -899,14 +899,24 @@ final class DoorTileView: UIView {
         still.translatesAutoresizingMaskIntoConstraints = false
         addSubview(still)
 
+        #if os(tvOS)
+        nameLabel.font = SystemStyle.font(.headline, weight: .semibold)
+        stateLabel.font = SystemStyle.font(.callout)
+        #else
         nameLabel.font = SystemStyle.font(.headline)
         stateLabel.font = SystemStyle.font(.subheadline)
+        #endif
         SystemStyle.followContentSize(nameLabel)
         SystemStyle.followContentSize(stateLabel)
         nameLabel.textColor = .white
         stateLabel.textColor = .white
+        #if os(tvOS)
+        nameLabel.numberOfLines = 1
+        nameLabel.lineBreakMode = .byTruncatingTail
+        #else
         nameLabel.numberOfLines = 0
         nameLabel.lineBreakMode = .byCharWrapping
+        #endif
         nameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         nameLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 

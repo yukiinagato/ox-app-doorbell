@@ -263,9 +263,35 @@ Holo device theme: `ActionBar`-style title row, `ListView`, `Switch`,
 
 ### tvOS 15+
 
-Focus-driven UIKit: `UITabBarController` at the top, door tiles in a
-`UICollectionView` with the system focus effect, system buttons. No answer or
+Focus-driven UIKit for a 10-foot screen. It is designed as a TV app, not a port of the
+tablet layout. Text uses the tvOS text styles only: nothing under 25 pt and primary
+labels at least 31 pt. Every screen has a defined `preferredFocusEnvironments`, keeps
+the system focus effect, and Menu/Back always goes exactly one level up. No answer or
 microphone controls.
+
+- **Home** is ambient. Three zones inside the safe area: a header (clock and date at
+  top left, one plain-words status line at right with a warning glyph and count only
+  when something is offline), the door cameras as a hero shelf (large aspect-fill 16:9
+  cards in a `UICollectionView`; two doors share the width, one door fills it; offline
+  doors are dimmed cards, not a banner; Select opens that door's live view; first
+  focus is the first online door), and a compact action row (Notice, then SOS only if
+  "Show SOS on Home" is on, a device-local preference that defaults to off; SOS keeps
+  its confirm-and-countdown flow). The bottom-left corner holds the admin QR as a
+  focusable 96 pt thumbnail with a caption and the version line; Select opens a
+  full-screen QR sheet (dimmed backdrop, 560 pt white card, address host, Menu closes).
+  No row is reserved for a single small control. The wallpaper shows on Home only, under
+  a scrim that keeps labels above 4.5:1. Play/Pause opens the first online door.
+- **Live view**: video full-bleed on black; title, door list and Close are an overlay
+  that fades after 5 s and returns on any remote input. Play/Pause is ignored (no
+  microphone).
+- **History**: split view, list on the left third, detail on the right. The filter is
+  one button that opens a standard list (nothing is truncated). Rows show device names,
+  never node ids. The empty detail is centred.
+- **Settings**: the tab shows a locked page with one Sign in button; the password is
+  never asked for by focus alone. Sign in is a full-screen page (title, one secure
+  field, inline error, activity indicator, a "remember on this Apple TV" choice kept in
+  the Keychain, this-device-only); Cancel or Menu returns to the previous tab. A
+  rejected saved password is deleted. Settings > This device can forget it.
 
 ### iOS 5 kiosk (iPad 1; also iPad mini on iOS 9): stock UIKit 5.1 API
 

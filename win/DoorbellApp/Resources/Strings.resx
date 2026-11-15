@@ -122,6 +122,7 @@
   <data name="admin_channel_in_app" xml:space="preserve"><value>アプリ内</value></data>
   <data name="admin_channel_system_notification" xml:space="preserve"><value>システム通知</value></data>
   <data name="admin_channel_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="admin_checking" xml:space="preserve"><value>確認しています…</value></data>
   <data name="admin_choose_door_station" xml:space="preserve"><value>室外機…</value></data>
   <data name="admin_choose_indoor" xml:space="preserve"><value>室内機…</value></data>
   <data name="admin_choose_playback_pair" xml:space="preserve"><value>室内機と室外機を選択してください</value></data>
@@ -208,6 +209,7 @@
   <data name="admin_filter_type" xml:space="preserve"><value>種別で絞り込み</value></data>
   <data name="admin_first_frame_timeout" xml:space="preserve"><value>初回フレーム待機</value></data>
   <data name="admin_fleet" xml:space="preserve"><value>機器を管理</value></data>
+  <data name="admin_forget_saved" xml:space="preserve"><value>保存したパスワードを削除</value></data>
   <data name="admin_global" xml:space="preserve"><value>全体</value></data>
   <data name="admin_helper_auto" xml:space="preserve"><value>自動</value></data>
   <data name="admin_helper_mode" xml:space="preserve"><value>復帰ヘルパー</value></data>
@@ -361,6 +363,7 @@
   <data name="admin_raw_config" xml:space="preserve"><value>設定 (生 JSON・読取)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>準備完了</value></data>
   <data name="admin_refresh" xml:space="preserve"><value>更新</value></data>
+  <data name="admin_remember" xml:space="preserve"><value>このApple TVに管理パスワードを保存</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>機器を削除</value></data>
   <data name="admin_remove_device_confirm" xml:space="preserve"><value>{0} を削除しますか？オフラインの記録も削除され、再接続時にはクラスタから退出します。</value></data>
   <data name="admin_removed" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
@@ -386,6 +389,7 @@
   <data name="admin_save_pair_override" xml:space="preserve"><value>組合せ上書きを保存</value></data>
   <data name="admin_save_unknown" xml:space="preserve"><value>保存結果を確認できません。入力内容は保持されています。再試行前に現在の設定を確認してください。</value></data>
   <data name="admin_saved" xml:space="preserve"><value>保存しました</value></data>
+  <data name="admin_saved_rejected" xml:space="preserve"><value>保存したパスワードは使えませんでした。もう一度入力してください</value></data>
   <data name="admin_saving" xml:space="preserve"><value>保存しています…</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>スケジュール</value></data>
   <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>以前の secret {0} 件はまだ参照中か削除できないため、後で整理します</value></data>
@@ -393,6 +397,7 @@
   <data name="admin_secret_on_target_only" xml:space="preserve"><value>対象ノードで設定してください</value></data>
   <data name="admin_secret_unchanged" xml:space="preserve"><value>変更しない場合は空欄</value></data>
   <data name="admin_services" xml:space="preserve"><value>サービス</value></data>
+  <data name="admin_sign_in" xml:space="preserve"><value>サインイン</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP アカウント (デバイス毎)</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 内線 (カンマ区切り)</value></data>
   <data name="admin_sos_active" xml:space="preserve"><value>緊急 SOS 発報中</value></data>
@@ -2503,6 +2508,7 @@ ON</value></data>
   <data name="settings_section_device" xml:space="preserve"><value>この端末</value></data>
   <data name="settings_section_doors" xml:space="preserve"><value>門口</value></data>
   <data name="settings_section_history" xml:space="preserve"><value>呼出履歴</value></data>
+  <data name="settings_section_home" xml:space="preserve"><value>ホーム</value></data>
   <data name="settings_section_info" xml:space="preserve"><value>本機情報</value></data>
   <data name="settings_section_purposes" xml:space="preserve"><value>用件</value></data>
   <data name="settings_section_rules" xml:space="preserve"><value>通知とルール</value></data>
@@ -2873,6 +2879,15 @@ PIN: {1}</value></data>
   <data name="time_title" xml:space="preserve"><value>時刻</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>
+  <data name="tv_controls_hint" xml:space="preserve"><value>再生/一時停止で話す</value></data>
+  <data name="tv_door_live" xml:space="preserve"><value>ライブ</value></data>
+  <data name="tv_no_doors" xml:space="preserve"><value>表示できるカメラ付き門口機がありません</value></data>
+  <data name="tv_qr_hint" xml:space="preserve"><value>メニューボタンで閉じる</value></data>
+  <data name="tv_qr_title" xml:space="preserve"><value>スマートフォンで設定を開く</value></data>
+  <data name="tv_sos_home" xml:space="preserve"><value>ホームにSOSを表示</value></data>
+  <data name="tv_sos_home_hint" xml:space="preserve"><value>オフのとき、SOSはホームに表示されません</value></data>
+  <data name="tv_status_doors" xml:space="preserve"><value>門口機 {0}/{1}</value></data>
+  <data name="tv_status_indoor" xml:space="preserve"><value>室内機 {0}/{1}</value></data>
   <data name="ui_back" xml:space="preserve"><value>戻る</value></data>
   <data name="ui_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>設定されているときだけ表示</value></data>

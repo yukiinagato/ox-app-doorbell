@@ -90,6 +90,8 @@ final class MonitorViewController: UIViewController {
         core.removeHandler("active-monitor")
         hideTimer?.invalidate()
         hideTimer = nil
+        debugStatsTimer?.invalidate()
+        debugStatsTimer = nil
         videoPlayer?.stop()
         videoPlayer = nil
         monitorWanted = false
@@ -183,9 +185,12 @@ final class MonitorViewController: UIViewController {
         ])
         #if os(tvOS)
         NSLayoutConstraint.activate([
-            closeButton.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            closeButton.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 40),
             closeButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            doorList.widthAnchor.constraint(equalToConstant: 620),
         ])
+        doorList.backgroundColor = UIColor(white: 0, alpha: 0.6)
+        navBar.titleTextAttributes = [.foregroundColor: UIColor.white]
         #endif
         // Stacked, the door list keeps the height of its rows and the stage takes the rest.
         doorListHeight = doorList.heightAnchor.constraint(equalToConstant: 160)
@@ -203,6 +208,16 @@ final class MonitorViewController: UIViewController {
             doorList.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
             doorList.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         ]
+        #if os(tvOS)
+        // The picture owns the screen; the title, the door list and Close are an overlay on it.
+        sideConstraints = [
+            videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            doorList.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+        ]
+        stackedConstraints = sideConstraints
+        #endif
         immersiveConstraints = [
             videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
             videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -219,6 +234,7 @@ final class MonitorViewController: UIViewController {
     private var immersiveConstraints: [NSLayoutConstraint] = []
     private var controlsHidden = false
     private var hideTimer: Timer?
+    private var debugStatsTimer: Timer?
 
     /// Video beside the list on wide windows, above it on compact ones, or alone once the
     /// controls have hidden themselves.
@@ -236,6 +252,10 @@ final class MonitorViewController: UIViewController {
         doorList.alpha = controlsHidden ? 0 : 1
         navBar.isUserInteractionEnabled = !controlsHidden
         doorList.isUserInteractionEnabled = !controlsHidden
+        #if os(tvOS)
+        closeButton.alpha = controlsHidden ? 0 : 1
+        closeButton.isUserInteractionEnabled = !controlsHidden
+        #endif
     }
 
     override func viewWillTransition(to size: CGSize,
@@ -256,8 +276,34 @@ final class MonitorViewController: UIViewController {
             self.controlsHidden = true
             Motion.animate { self.applyArrangement(for: self.view.bounds.size); self.view.layoutIfNeeded() }
         }
+        #else
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+            guard let self = self, self.videoPlayer != nil,
+                  !UIAccessibility.isVoiceOverRunning else { return }
+            self.controlsHidden = true
+            Motion.animate { self.applyArrangement(for: self.view.bounds.size); self.view.layoutIfNeeded() }
+            self.setNeedsFocusUpdate()
+        }
         #endif
     }
+
+    #if os(tvOS)
+    /// Any remote input brings the overlay back and restarts its five seconds; Select on the bare
+    /// picture does the same. Play/Pause would talk, and an Apple TV has no microphone.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if controlsHidden {
+            showControls()
+            setNeedsFocusUpdate()
+            return
+        }
+        scheduleControlsHide()
+        super.pressesBegan(presses, with: event)
+    }
+
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        return controlsHidden ? [] : [doorList, closeButton]
+    }
+    #endif
 
     @objc private func showControls() {
         guard controlsHidden else {
@@ -269,12 +315,28 @@ final class MonitorViewController: UIViewController {
         scheduleControlsHide()
     }
 
+    /// With `debug_screenshots` the player's measured codec and frame rate go to a small file next
+    /// to the capture hook's files: a captured window cannot show a video layer, this can.
+    private func startDebugStats() {
+        debugStatsTimer?.invalidate()
+        guard boot.debugScreenshots else { return }
+        let path = (BootConfig.dataDir() as NSString).appendingPathComponent("monitor.stats.txt")
+        debugStatsTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) {
+            [weak self] _ in
+            guard let self = self, let stats = self.videoPlayer?.statsSnapshot() else { return }
+            let line = "peer=\(self.selectedPeerId) codec=\(stats.codec) fps=\(stats.fps) "
+                + "latency_ms=\(stats.latencyMs) dropped=\(stats.dropped)\n"
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+
     private func confirmedDoorPeers() -> [[String: Any]] {
         guard let peers = core.status()?["peers"] as? [[String: Any]] else { return [] }
         return peers.filter {
             ConfigUtil.evStr($0, "role") == "door_station" &&
                 ConfigUtil.evStr($0, "status") != "dead" &&
-                ConfigUtil.peerHost($0) != nil && ConfigUtil.str($0, "stream") != nil
+                ConfigUtil.peerHost($0) != nil && ConfigUtil.str($0, "stream") != nil &&
+                ((($0["caps"] as? [String: Any])?["camera"] as? Bool) ?? true)
         }.sorted { ConfigUtil.evStr($0, "name") < ConfigUtil.evStr($1, "name") }
     }
 
@@ -322,6 +384,7 @@ final class MonitorViewController: UIViewController {
             if size.width > 0, size.height > 0 { self?.videoZoom.pictureSize = size }
         }
         videoPlayer?.start(h264URLString: h264, mjpegURL: mjpeg, h264Enabled: !safeMode)
+        startDebugStats()
         if monitoringAudio { core.sipHangup() }
         monitoringAudio = false
         openMonitorDialog(peer: peer)

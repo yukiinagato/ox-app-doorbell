@@ -120,6 +120,7 @@
     <string name="admin_channel_in_app">アプリ内</string>
     <string name="admin_channel_system_notification">システム通知</string>
     <string name="admin_channel_web_push">Web Push</string>
+    <string name="admin_checking">確認しています…</string>
     <string name="admin_choose_door_station">室外機…</string>
     <string name="admin_choose_indoor">室内機…</string>
     <string name="admin_choose_playback_pair">室内機と室外機を選択してください</string>
@@ -206,6 +207,7 @@
     <string name="admin_filter_type">種別で絞り込み</string>
     <string name="admin_first_frame_timeout">初回フレーム待機</string>
     <string name="admin_fleet">機器を管理</string>
+    <string name="admin_forget_saved">保存したパスワードを削除</string>
     <string name="admin_global">全体</string>
     <string name="admin_helper_auto">自動</string>
     <string name="admin_helper_mode">復帰ヘルパー</string>
@@ -359,6 +361,7 @@
     <string name="admin_raw_config">設定 (生 JSON・読取)</string>
     <string name="admin_ready">準備完了</string>
     <string name="admin_refresh">更新</string>
+    <string name="admin_remember">このApple TVに管理パスワードを保存</string>
     <string name="admin_remove_device">機器を削除</string>
     <string name="admin_remove_device_confirm">%1$s を削除しますか？オフラインの記録も削除され、再接続時にはクラスタから退出します。</string>
     <string name="admin_removed">この端末はクラスタから削除されました</string>
@@ -384,6 +387,7 @@
     <string name="admin_save_pair_override">組合せ上書きを保存</string>
     <string name="admin_save_unknown">保存結果を確認できません。入力内容は保持されています。再試行前に現在の設定を確認してください。</string>
     <string name="admin_saved">保存しました</string>
+    <string name="admin_saved_rejected">保存したパスワードは使えませんでした。もう一度入力してください</string>
     <string name="admin_saving">保存しています…</string>
     <string name="admin_schedule">スケジュール</string>
     <string name="admin_secret_cleanup_deferred">以前の secret %1$s 件はまだ参照中か削除できないため、後で整理します</string>
@@ -391,6 +395,7 @@
     <string name="admin_secret_on_target_only">対象ノードで設定してください</string>
     <string name="admin_secret_unchanged">変更しない場合は空欄</string>
     <string name="admin_services">サービス</string>
+    <string name="admin_sign_in">サインイン</string>
     <string name="admin_sip_accounts">SIP アカウント (デバイス毎)</string>
     <string name="admin_sip_extensions">SIP 内線 (カンマ区切り)</string>
     <string name="admin_sos_active">緊急 SOS 発報中</string>
@@ -2501,6 +2506,7 @@ ON</string>
     <string name="settings_section_device">この端末</string>
     <string name="settings_section_doors">門口</string>
     <string name="settings_section_history">呼出履歴</string>
+    <string name="settings_section_home">ホーム</string>
     <string name="settings_section_info">本機情報</string>
     <string name="settings_section_purposes">用件</string>
     <string name="settings_section_rules">通知とルール</string>
@@ -2871,6 +2877,15 @@ PIN: %2$s</string>
     <string name="time_title">時刻</string>
     <string name="time_zone">タイムゾーン</string>
     <string name="time_zone_hint">この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</string>
+    <string name="tv_controls_hint">再生/一時停止で話す</string>
+    <string name="tv_door_live">ライブ</string>
+    <string name="tv_no_doors">表示できるカメラ付き門口機がありません</string>
+    <string name="tv_qr_hint">メニューボタンで閉じる</string>
+    <string name="tv_qr_title">スマートフォンで設定を開く</string>
+    <string name="tv_sos_home">ホームにSOSを表示</string>
+    <string name="tv_sos_home_hint">オフのとき、SOSはホームに表示されません</string>
+    <string name="tv_status_doors">門口機 %1$s/%2$s</string>
+    <string name="tv_status_indoor">室内機 %1$s/%2$s</string>
     <string name="ui_back">戻る</string>
     <string name="ui_close">閉じる</string>
     <string name="unlock_auto">設定されているときだけ表示</string>

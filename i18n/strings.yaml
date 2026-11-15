@@ -108,6 +108,21 @@ admin.addresses: { ja: "アドレス", en: "Addresses", zh: "地址" }
 admin.online: { ja: "オンライン", en: "Online", zh: "在线" }
 admin.offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 admin.clock_warn: { ja: "時刻未同期", en: "Clock not synced", zh: "时钟未同步" }
+admin.sign_in: { ja: "サインイン", en: "Sign in", zh: "登录" }
+admin.remember: { ja: "このApple TVに管理パスワードを保存", en: "Remember the administrator password on this Apple TV", zh: "在此 Apple TV 上记住管理密码" }
+admin.checking: { ja: "確認しています…", en: "Checking…", zh: "正在验证…" }
+admin.saved_rejected: { ja: "保存したパスワードは使えませんでした。もう一度入力してください", en: "The saved password was rejected. Enter it again", zh: "已保存的密码被拒绝，请重新输入" }
+settings.section_home: { ja: "ホーム", en: "Home", zh: "主页" }
+tv.qr_title: { ja: "スマートフォンで設定を開く", en: "Open settings on your phone", zh: "用手机打开设置" }
+tv.qr_hint: { ja: "メニューボタンで閉じる", en: "Press Menu to close", zh: "按菜单键关闭" }
+tv.sos_home: { ja: "ホームにSOSを表示", en: "Show SOS on Home", zh: "在主页显示 SOS" }
+tv.sos_home_hint: { ja: "オフのとき、SOSはホームに表示されません", en: "When off, SOS is not shown on Home", zh: "关闭时主页不显示 SOS" }
+tv.door_live: { ja: "ライブ", en: "Live", zh: "实时" }
+tv.status_doors: { ja: "門口機 {n}/{total}", en: "Door stations {n}/{total}", zh: "门口机 {n}/{total}" }
+tv.status_indoor: { ja: "室内機 {n}/{total}", en: "Indoor {n}/{total}", zh: "室内机 {n}/{total}" }
+tv.no_doors: { ja: "表示できるカメラ付き門口機がありません", en: "No door station with a camera to show", zh: "没有可显示的带摄像头门口机" }
+tv.controls_hint: { ja: "再生/一時停止で話す", en: "Play/Pause to talk", zh: "播放/暂停键通话" }
+admin.forget_saved: { ja: "保存したパスワードを削除", en: "Forget saved password", zh: "清除已保存的密码" }
 
 event.press: { ja: "{door} に来客です ({time})", en: "Visitor at {door} ({time})", zh: "{door} 有访客（{time}）" }
 event.motion: { ja: "{door} で動きを検知 ({time})", en: "Motion at {door} ({time})", zh: "{door} 检测到活动（{time}）" }

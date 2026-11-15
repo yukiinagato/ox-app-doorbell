@@ -120,6 +120,7 @@ Delete it?</string>
     <string name="admin_channel_in_app">In-app</string>
     <string name="admin_channel_system_notification">System notification</string>
     <string name="admin_channel_web_push">Web Push</string>
+    <string name="admin_checking">Checking…</string>
     <string name="admin_choose_door_station">Door station…</string>
     <string name="admin_choose_indoor">Indoor panel…</string>
     <string name="admin_choose_playback_pair">Choose an indoor panel and door station</string>
@@ -206,6 +207,7 @@ Delete it?</string>
     <string name="admin_filter_type">Filter by type</string>
     <string name="admin_first_frame_timeout">First-frame timeout</string>
     <string name="admin_fleet">Manage devices</string>
+    <string name="admin_forget_saved">Forget saved password</string>
     <string name="admin_global">Global</string>
     <string name="admin_helper_auto">Auto</string>
     <string name="admin_helper_mode">Recovery helper</string>
@@ -359,6 +361,7 @@ Delete it?</string>
     <string name="admin_raw_config">Config (raw JSON, read-only)</string>
     <string name="admin_ready">Ready</string>
     <string name="admin_refresh">Refresh</string>
+    <string name="admin_remember">Remember the administrator password on this Apple TV</string>
     <string name="admin_remove_device">Remove device</string>
     <string name="admin_remove_device_confirm">Remove %1$s? Its offline record will be removed, and it will leave the cluster if it reconnects.</string>
     <string name="admin_removed">This device was removed from the cluster</string>
@@ -384,6 +387,7 @@ Delete it?</string>
     <string name="admin_save_pair_override">Save pair override</string>
     <string name="admin_save_unknown">The save result is unknown. Your draft is preserved; check the current configuration before retrying.</string>
     <string name="admin_saved">Saved</string>
+    <string name="admin_saved_rejected">The saved password was rejected. Enter it again</string>
     <string name="admin_saving">Saving…</string>
     <string name="admin_schedule">Schedule</string>
     <string name="admin_secret_cleanup_deferred">Cleanup of %1$s previous secret(s) was deferred because they are still referenced or could not be removed</string>
@@ -391,6 +395,7 @@ Delete it?</string>
     <string name="admin_secret_on_target_only">Configure on the target node</string>
     <string name="admin_secret_unchanged">Leave blank to keep</string>
     <string name="admin_services">Services</string>
+    <string name="admin_sign_in">Sign in</string>
     <string name="admin_sip_accounts">SIP accounts (per device)</string>
     <string name="admin_sip_extensions">SIP extensions (comma separated)</string>
     <string name="admin_sos_active">Emergency SOS active</string>
@@ -2501,6 +2506,7 @@ On</string>
     <string name="settings_section_device">This device</string>
     <string name="settings_section_doors">Doors</string>
     <string name="settings_section_history">Call history</string>
+    <string name="settings_section_home">Home</string>
     <string name="settings_section_info">Device information</string>
     <string name="settings_section_purposes">Visit purposes</string>
     <string name="settings_section_rules">Notifications and rules</string>
@@ -2871,6 +2877,15 @@ Sends in %1$ss</string>
     <string name="time_title">Time</string>
     <string name="time_zone">Time zone</string>
     <string name="time_zone_hint">This sets the clock, call history, and rule schedules for the whole cluster</string>
+    <string name="tv_controls_hint">Play/Pause to talk</string>
+    <string name="tv_door_live">Live</string>
+    <string name="tv_no_doors">No door station with a camera to show</string>
+    <string name="tv_qr_hint">Press Menu to close</string>
+    <string name="tv_qr_title">Open settings on your phone</string>
+    <string name="tv_sos_home">Show SOS on Home</string>
+    <string name="tv_sos_home_hint">When off, SOS is not shown on Home</string>
+    <string name="tv_status_doors">Door stations %1$s/%2$s</string>
+    <string name="tv_status_indoor">Indoor %1$s/%2$s</string>
     <string name="ui_back">Back</string>
     <string name="ui_close">Close</string>
     <string name="unlock_auto">Show when configured</string>

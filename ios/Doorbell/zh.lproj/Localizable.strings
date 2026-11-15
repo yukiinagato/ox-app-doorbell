@@ -115,6 +115,7 @@
 "admin.channel_in_app" = "应用内";
 "admin.channel_system_notification" = "系统通知";
 "admin.channel_web_push" = "Web Push";
+"admin.checking" = "正在验证…";
 "admin.choose_door_station" = "门口机…";
 "admin.choose_indoor" = "室内机…";
 "admin.choose_playback_pair" = "请选择室内机和门口机";
@@ -201,6 +202,7 @@
 "admin.filter_type" = "按类型筛选";
 "admin.first_frame_timeout" = "首帧超时";
 "admin.fleet" = "管理设备";
+"admin.forget_saved" = "清除已保存的密码";
 "admin.global" = "全局";
 "admin.helper_auto" = "自动";
 "admin.helper_mode" = "恢复助手";
@@ -354,6 +356,7 @@
 "admin.raw_config" = "配置 (原始 JSON，只读)";
 "admin.ready" = "就绪";
 "admin.refresh" = "刷新";
+"admin.remember" = "在此 Apple TV 上记住管理密码";
 "admin.remove_device" = "移出设备";
 "admin.remove_device_confirm" = "移出 %@？离线记录也会删除，该设备重新连接时将退出集群。";
 "admin.removed" = "此设备已被移出集群";
@@ -379,6 +382,7 @@
 "admin.save_pair_override" = "保存配对覆盖";
 "admin.save_unknown" = "暂时无法确认保存结果。草稿已保留，请检查当前配置后再重试。";
 "admin.saved" = "已保存";
+"admin.saved_rejected" = "已保存的密码被拒绝，请重新输入";
 "admin.saving" = "正在保存…";
 "admin.schedule" = "时间表";
 "admin.secret_cleanup_deferred" = "有 %@ 个旧 secret 仍被引用或无法删除，清理已延后";
@@ -386,6 +390,7 @@
 "admin.secret_on_target_only" = "请在目标节点上配置";
 "admin.secret_unchanged" = "留空保持不变";
 "admin.services" = "服务";
+"admin.sign_in" = "登录";
 "admin.sip_accounts" = "SIP 账号（每台设备）";
 "admin.sip_extensions" = "SIP 分机 (逗号分隔)";
 "admin.sos_active" = "紧急 SOS 已触发";
@@ -2492,6 +2497,7 @@
 "settings.section_device" = "本设备";
 "settings.section_doors" = "门口";
 "settings.section_history" = "呼叫记录";
+"settings.section_home" = "主页";
 "settings.section_info" = "本机信息";
 "settings.section_purposes" = "来访目的";
 "settings.section_rules" = "通知与规则";
@@ -2857,6 +2863,15 @@
 "time.title" = "时间";
 "time.zone" = "时区";
 "time.zone_hint" = "此设置用于整个集群的时钟、呼叫记录与规则时段";
+"tv.controls_hint" = "播放/暂停键通话";
+"tv.door_live" = "实时";
+"tv.no_doors" = "没有可显示的带摄像头门口机";
+"tv.qr_hint" = "按菜单键关闭";
+"tv.qr_title" = "用手机打开设置";
+"tv.sos_home" = "在主页显示 SOS";
+"tv.sos_home_hint" = "关闭时主页不显示 SOS";
+"tv.status_doors" = "门口机 %@/%@";
+"tv.status_indoor" = "室内机 %@/%@";
 "ui.back" = "返回";
 "ui.close" = "关闭";
 "unlock.auto" = "已配置时显示";

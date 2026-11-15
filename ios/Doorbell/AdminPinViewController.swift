@@ -49,8 +49,56 @@ final class AdminPinViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if os(tvOS)
+        if !tvStarted {
+            tvStarted = true
+            startTV()
+        }
+        #else
         if alert == nil { presentPrompt() }
+        #endif
     }
+
+    #if os(tvOS)
+    private var tvStarted = false
+    private var tvRemember = false
+    private weak var tvSignIn: TVAdminSignInViewController?
+
+    /// A saved password is tried once, silently. Core refusing it deletes it, so a changed
+    /// password never leaves a stale secret behind or retries it on every visit.
+    private func startTV() {
+        guard !settingPassword, let saved = SavedAdminPassword.value else {
+            presentTV()
+            return
+        }
+        switch core?.verifyAdminPassword(saved) ?? .unavailable {
+        case .accepted:
+            AdminPinViewController.fails = 0
+            unlock()
+        case .wrong:
+            SavedAdminPassword.forget()
+            errorText = texts.t("admin.saved_rejected")
+            presentTV()
+        default:
+            presentTV()
+        }
+    }
+
+    private func presentTV() {
+        let page = TVAdminSignInViewController(
+            texts: texts,
+            title: texts.t(settingPassword ? "admin.password_set_prompt" : "admin.pin_prompt"),
+            error: errorText, offersRemember: !settingPassword)
+        page.onSubmit = { [weak self] password, remember in
+            self?.pin = password
+            self?.tvRemember = remember
+            self?.submit()
+        }
+        page.onCancel = { [weak self] in self?.onCancel() }
+        tvSignIn = page
+        present(page, animated: true)
+    }
+    #endif
 
     /// The system alert: the prompt as its title, the last error as its message, one secure
     /// field, Cancel and the confirming action.
@@ -97,14 +145,30 @@ final class AdminPinViewController: UIViewController {
 
     private func onCancel() {
         let callback = onCancelled
-        dismiss(animated: false) { callback?() }
+        closeHost { callback?() }
+    }
+
+    /// Takes this host down together with any page it presented on tvOS: dismissing from the
+    /// presenter removes everything above it in one step.
+    private func closeHost(_ completion: @escaping () -> Void) {
+        #if os(tvOS)
+        if let presenter = presentingViewController {
+            presenter.dismiss(animated: false, completion: completion)
+            return
+        }
+        #endif
+        dismiss(animated: false, completion: completion)
     }
 
     /// A refused entry puts the prompt back with the reason in it and an empty field.
     private func show(error: String) {
         errorText = error
         pin = ""
+        #if os(tvOS)
+        tvSignIn?.showError(error)
+        #else
         presentPrompt()
+        #endif
     }
 
     private func submit() {
@@ -182,7 +246,12 @@ final class AdminPinViewController: UIViewController {
 
     private func unlock() {
         let callback = onUnlocked
-        dismiss(animated: false) { callback?() }
+        #if os(tvOS)
+        if tvSignIn != nil {
+            if tvRemember { SavedAdminPassword.save(pin) }
+        }
+        #endif
+        closeHost { callback?() }
     }
 
     private static func legacyDigestPath() -> String {
