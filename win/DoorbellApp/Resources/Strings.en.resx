@@ -2537,6 +2537,7 @@ On</value></data>
   <data name="settings_when_emergency_on" xml:space="preserve"><value>SOS raised</value></data>
   <data name="settings_when_motion" xml:space="preserve"><value>Motion</value></data>
   <data name="settings_when_purpose_selected" xml:space="preserve"><value>Purpose chosen</value></data>
+  <data name="settings_when_visitor_message" xml:space="preserve"><value>Visitor message</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>Search time zones</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>Tap again to create a cluster (cancel to join an existing cluster)</value></data>
   <data name="setup_door" xml:space="preserve"><value>Door ID</value></data>

@@ -1096,6 +1096,7 @@ struct SettingsCatalog {
         case "emergency_on": return t("prefs.rule_sos_on")
         case "emergency_off": return t("prefs.rule_sos_off")
         case "call_missed", "missed_call": return t("prefs.rule_missed")
+        case "visitor_message": return t("settings.when_visitor_message")
         default: return id
         }
     }
@@ -1621,7 +1622,8 @@ extension SettingsCatalog {
             let rule = rules[id] as? [String: Any]
             let when = ConfigUtil.str(rule, "when.type") ?? ""
             return SettingsListRow(id: id, title: ConfigUtil.str(rule, "name") ?? ruleTitle(id, rule),
-                                   detail: t("editor.when_\(when)"),
+                                   detail: when == "visitor_message" ? t("settings.when_visitor_message")
+                                                                     : t("editor.when_\(when)"),
                                    enabled: ConfigUtil.bool(rule, "enabled", true),
                                    toggle: { on in .write([.set("trigger_rules.\(id).enabled", on)]) },
                                    edit: { self.rulePage(id) })

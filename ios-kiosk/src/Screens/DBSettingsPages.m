@@ -1005,7 +1005,10 @@ static UIImage *DBPanelLinkQr(NSString *link) {
 - (NSString *)ruleName:(NSString *)ruleId rule:(NSDictionary *)rule {
   NSString *name = [DBConfigUtil str:rule path:@"name"];
   if ([name length] > 0) return name;
-  NSString *key = [NSString stringWithFormat:@"prefs.rule_%@", ruleId];
+  NSString *when = [DBConfigUtil str:rule path:@"when.type"];
+  if ([when length] == 0) return ruleId;
+  NSString *key = [when isEqualToString:@"visitor_message"]
+      ? @"settings.when_visitor_message" : [@"editor.when_" stringByAppendingString:when];
   NSString *known = [self t:key];
   return [known isEqualToString:key] ? ruleId : known;
 }
@@ -1031,7 +1034,8 @@ static UIImage *DBPanelLinkQr(NSString *link) {
       BOOL enabled = [DBConfigUtil boolVal:rule path:@"enabled" def:YES];
       NSString *when = [DBConfigUtil str:rule path:@"when.type"] ?: @"";
       NSString *detail = [NSString stringWithFormat:@"%@ · %@",
-          [pages t:[@"editor.when_" stringByAppendingString:when]],
+          [pages t:([when isEqualToString:@"visitor_message"] ? @"settings.when_visitor_message"
+                                                              : [@"editor.when_" stringByAppendingString:when])],
           [pages t:(enabled ? @"editor.on" : @"editor.off")]];
       [fields addObject:[pages page:[pages ruleName:ruleId rule:rule] detail:detail
                               build:^DBEditPage *{ return [weakSelf rulePage:ruleId]; }]];

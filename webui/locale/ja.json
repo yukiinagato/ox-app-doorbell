@@ -2526,6 +2526,7 @@
  "settings.when_emergency_on": "SOS 発報",
  "settings.when_motion": "動体検知",
  "settings.when_purpose_selected": "用件の選択",
+ "settings.when_visitor_message": "来訪者のメッセージ",
  "settings.zone_search": "タイムゾーンを検索",
  "setup.confirm_new_cluster": "もう一度タップして新規作成（既存クラスタへ参加する場合はキャンセル）",
  "setup.door": "ドア ID",

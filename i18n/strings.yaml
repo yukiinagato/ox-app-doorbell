@@ -2248,6 +2248,7 @@ settings.when_device_offline: { ja: "端末がオフライン", en: "Device offl
 settings.when_device_online: { ja: "端末がオンライン", en: "Device back online", zh: "设备恢复在线" }
 settings.when_emergency_on: { ja: "SOS 発報", en: "SOS raised", zh: "SOS 触发" }
 settings.when_emergency_off: { ja: "SOS 解除", en: "SOS cleared", zh: "SOS 解除" }
+settings.when_visitor_message: { ja: "来訪者のメッセージ", en: "Visitor message", zh: "访客留言" }
 settings.act_device_alert: { ja: "端末への警報", en: "Device alert", zh: "设备警报" }
 settings.act_sip_call: { ja: "内線発信", en: "Call an extension", zh: "呼叫分机" }
 settings.act_telegram: { ja: "Telegram 通知", en: "Telegram message", zh: "Telegram 通知" }

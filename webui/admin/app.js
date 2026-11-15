@@ -6198,6 +6198,11 @@ if (typeof document !== "undefined") (function () {
     if (type === "device_offline") return t("admin.when_offline");
     if (type === "emergency_on") return t("admin.when_emergency_on");
     if (type === "emergency_off") return t("admin.when_emergency_off");
+    if (type === "call_missed") return t("settings.when_call_missed");
+    if (type === "visitor_message") return t("settings.when_visitor_message");
+    if (type === "device_online") return t("settings.when_device_online");
+    if (type === "purpose_selected") return t("settings.when_purpose_selected");
+    if (type && type !== "button") return t("admin.unknown_trigger") + ": " + type;
     return t("admin.when_button");
   }
   function actionLabel(a) {
@@ -6736,7 +6741,7 @@ if (typeof document !== "undefined") (function () {
       }
     }
 
-    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm, done) {
+    var m = openModal(t("admin.rules") + " — " + (isNew || /^r_.*_default$/.test(rid) ? whenLabel(st.whenType) : rid), bodyHtml(), function (mm, done) {
       collectState(mm);
       for (var ai = 0; ai < st.actions.length; ai++) {
         if (!st.actions[ai] || st.actions[ai].type !== "device_alert") continue;
@@ -6808,8 +6813,8 @@ if (typeof document !== "undefined") (function () {
       }
       var acts = (r.actions || []).map(actionLabel);
       h += "<div class='card rule" + (r.enabled === false ? " offline" : "") + "'>" +
-           "<div class='chead'><h2>" + esc(whenLabel(when.type)) + ": " + esc(target) +
-           " <span class='dim'>(" + esc(id) + ")</span></h2>" +
+           "<div class='chead'><h2>" + esc(r.name || whenLabel(when.type)) + ": " + esc(target) +
+           (/^r_.*_default$/.test(id) ? "" : " <span class='dim'>(" + esc(id) + ")</span>") + "</h2>" +
            "<label class='mc'><input type='checkbox' data-act='toggle' data-id='" + esc(id) +
            "'" + (r.enabled !== false ? " checked" : "") + "> " +
            esc(t("admin.enabled")) + "</label></div>" +

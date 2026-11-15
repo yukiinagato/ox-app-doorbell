@@ -2535,6 +2535,7 @@
     <string name="settings_when_emergency_on">SOS 触发</string>
     <string name="settings_when_motion">移动侦测</string>
     <string name="settings_when_purpose_selected">选择来访目的</string>
+    <string name="settings_when_visitor_message">访客留言</string>
     <string name="settings_zone_search">搜索时区</string>
     <string name="setup_confirm_new_cluster">再次点击以新建集群（如需加入现有集群请取消）</string>
     <string name="setup_door">门口 ID</string>

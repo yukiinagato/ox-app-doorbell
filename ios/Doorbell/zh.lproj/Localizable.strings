@@ -2526,6 +2526,7 @@
 "settings.when_emergency_on" = "SOS 触发";
 "settings.when_motion" = "移动侦测";
 "settings.when_purpose_selected" = "选择来访目的";
+"settings.when_visitor_message" = "访客留言";
 "settings.zone_search" = "搜索时区";
 "setup.confirm_new_cluster" = "再次点击以新建集群（如需加入现有集群请取消）";
 "setup.door" = "门口 ID";

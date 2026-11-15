@@ -2535,6 +2535,7 @@ On</string>
     <string name="settings_when_emergency_on">SOS raised</string>
     <string name="settings_when_motion">Motion</string>
     <string name="settings_when_purpose_selected">Purpose chosen</string>
+    <string name="settings_when_visitor_message">Visitor message</string>
     <string name="settings_zone_search">Search time zones</string>
     <string name="setup_confirm_new_cluster">Tap again to create a cluster (cancel to join an existing cluster)</string>
     <string name="setup_door">Door ID</string>

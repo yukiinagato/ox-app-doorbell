@@ -2526,6 +2526,7 @@
 "settings.when_emergency_on" = "SOS raised";
 "settings.when_motion" = "Motion";
 "settings.when_purpose_selected" = "Purpose chosen";
+"settings.when_visitor_message" = "Visitor message";
 "settings.zone_search" = "Search time zones";
 "setup.confirm_new_cluster" = "Tap again to create a cluster (cancel to join an existing cluster)";
 "setup.door" = "Door ID";

@@ -965,7 +965,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         for (id in ConfigIds.keysOf(map).sorted()) {
             val rule = map?.optJSONObject(id) ?: continue
             val draft = RuleEditorModel.normalize(rule)
-            val title = rule.optString("name").ifEmpty { "${whenLabel(draft.whenType)} · $id" }
+            val title = rule.optString("name").ifEmpty { whenLabel(draft.whenType) }
             add(card, item(title, ruleSummary(draft),
                            if (draft.enabled) "" else L("nset.rule_disabled")) { editRule(id, rule) })
         }
@@ -979,6 +979,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         "emergency_on" -> L("admin.when_emergency_on")
         "emergency_off" -> L("admin.when_emergency_off")
         "call_missed" -> L("nset.when_call_missed")
+        "visitor_message" -> L("settings.when_visitor_message")
         else -> type
     }
 

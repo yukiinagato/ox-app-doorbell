@@ -2535,6 +2535,7 @@ ON</string>
     <string name="settings_when_emergency_on">SOS 発報</string>
     <string name="settings_when_motion">動体検知</string>
     <string name="settings_when_purpose_selected">用件の選択</string>
+    <string name="settings_when_visitor_message">来訪者のメッセージ</string>
     <string name="settings_zone_search">タイムゾーンを検索</string>
     <string name="setup_confirm_new_cluster">もう一度タップして新規作成（既存クラスタへ参加する場合はキャンセル）</string>
     <string name="setup_door">ドア ID</string>
