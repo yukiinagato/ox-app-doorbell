@@ -124,4 +124,70 @@ const stored = L.flowDraftFromConfig({ visitor_flow: { start: "s", steps: good()
 assert.strictEqual(stored.enabled, true);
 assert.strictEqual(stored.idle_s, 45);
 assert.deepStrictEqual(stored.door_starts, { d1: "s" });
+
+// The editor lists steps in Core's `step_order` (the conformance fixture is the shared oracle).
+{
+  let checked = 0, withOrder = 0;
+  for (const c of suite.resolve) {
+    const flow = (c.config || {}).visitor_flow;
+    if (!flow || !flow.steps || !c.expect.step_order || c.expect.step_order.some((id) => id.indexOf("__") === 0)) continue;
+    if (c.expect.start !== flow.start) continue;
+    const draft = L.flowDraftFromConfig(c.config);
+    assert.deepStrictEqual(L.flowStepOrder(draft, c.config), c.expect.step_order, c.name + ": step_order");
+    checked++;
+    if (Object.keys(flow.steps).some((id) => flow.steps[id].order !== undefined)) withOrder++;
+  }
+  assert(checked >= 6 && withOrder >= 3, "step_order compared on " + checked + " cases, " + withOrder + " with explicit order");
+}
+
+// Reordering: consecutive orders in the new sequence, only changed steps differ, whole-step writes.
+{
+  const steps = () => ({ a: { kind: "page", options: [{ id: "o", to: "b" }, { id: "p", to: "c" }] },
+                         b: { kind: "call" }, c: { kind: "end", return_s: 8 } });
+  const draft = L.flowDraftFromConfig({ visitor_flow: { start: "a", steps: steps() } });
+  assert.deepStrictEqual(L.flowStepOrder(draft), ["a", "b", "c"]);
+  // No step had an order: moving c up numbers the whole list in the new sequence.
+  assert.deepStrictEqual(L.flowMoveStep(draft, "c", -1), ["a", "c", "b"]);
+  assert.deepStrictEqual(L.flowStepOrder(draft), ["a", "c", "b"]);
+  assert.deepStrictEqual(["a", "c", "b"].map((id) => draft.steps[id].order), [0, 1, 2]);
+  // Moving past either edge does nothing.
+  assert.deepStrictEqual(L.flowMoveStep(draft, "a", -1), []);
+  assert.deepStrictEqual(L.flowMoveStep(draft, "b", 1), []);
+  // With every step numbered, a swap rewrites exactly the two moved steps, each as the whole step.
+  const settled = { visitor_flow: { start: "a", steps: JSON.parse(JSON.stringify(draft.steps)) } };
+  const again = L.flowDraftFromConfig(settled);
+  assert.deepStrictEqual(L.flowMoveStep(again, "b", -1).sort(), ["b", "c"]);
+  assert.deepStrictEqual(L.flowStepOrder(again), ["a", "b", "c"]);
+  const plan = L.flowEntries(settled, again);
+  assert.deepStrictEqual(plan.dels, []);
+  assert.deepStrictEqual(plan.entries.map((e) => e.key).sort(), ["visitor_flow.steps.b", "visitor_flow.steps.c"]);
+  assert.deepStrictEqual(plan.entries.map((e) => e.value).sort((x, y) => x.order - y.order), [again.steps.b, again.steps.c]);
+  assert.strictEqual(again.steps.b.order, 1);
+  assert.strictEqual(again.steps.c.order, 2);
+  assert.deepStrictEqual(L.flowBatchOps(plan).map((o) => o.op), ["set", "set"]);
+  // Drag to a position: the moved step lands there.
+  const third = L.flowDraftFromConfig({ visitor_flow: { start: "a", steps: steps() } });
+  L.flowMoveStepTo(third, "a", 2);
+  assert.deepStrictEqual(L.flowStepOrder(third), ["b", "c", "a"]);
+  assert.deepStrictEqual(L.flowMoveStepTo(third, "a", 99), [], "already last");
+}
+
+// A new step takes the next order (numbering the list first when some steps have none); a copy
+// goes right after the original.
+{
+  const numbered = L.flowDraftFromConfig({ visitor_flow: { start: "a", steps: {
+    a: { kind: "page", order: 0, options: [{ id: "o", to: "b" }] }, b: { kind: "call", order: 1 }, e: { kind: "end", order: 2 } } } });
+  L.flowAddStep(numbered, "n_1", { kind: "notify", message: {}, to: "e" });
+  assert.strictEqual(numbered.steps.n_1.order, 3);
+  assert.deepStrictEqual(L.flowStepOrder(numbered), ["a", "b", "e", "n_1"]);
+  L.flowDuplicateStep(numbered, "b", "c_2");
+  assert.deepStrictEqual(L.flowStepOrder(numbered), ["a", "b", "c_2", "e", "n_1"]);
+  assert.deepStrictEqual(["a", "b", "c_2", "e", "n_1"].map((id) => numbered.steps[id].order), [0, 1, 2, 3, 4]);
+  const legacy = L.flowDraftFromConfig({ visitor_flow: { start: "a", steps: { a: { kind: "page", options: [{ id: "o", to: "b" }] }, b: { kind: "call" } } } });
+  L.flowAddStep(legacy, "c_2", { kind: "call" });
+  assert.deepStrictEqual(L.flowStepOrder(legacy), ["a", "b", "c_2"], "an unnumbered list is numbered first so the new step does not jump to the front");
+  assert.deepStrictEqual(["a", "b", "c_2"].map((id) => legacy.steps[id].order), [0, 1, 2]);
+  assert.strictEqual(L.flowOrderOf({ order: 10000 }), -1);
+  assert.strictEqual(L.flowOrderOf({ order: 1.5 }), -1);
+}
 console.log("admin visitor flow: PASS");

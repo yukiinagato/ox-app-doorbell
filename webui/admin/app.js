@@ -3258,21 +3258,83 @@ var AdminLogic = (function () {
              require_call: flow.require_call !== false, steps: steps, door_starts: starts };
   }
 
-  // Steps in reading order: the start page, then everything reached from it, then the rest.
-  function flowStepOrder(draft) {
-    var steps = draft.steps || {}, out = [], seen = {};
-    function visit(id) {
-      if (typeof id !== "string" || seen[id] || !own(steps, id)) return;
-      seen[id] = true; out.push(id);
-      var s = steps[id];
-      if (s.kind === "page") (s.options instanceof Array ? s.options : []).forEach(function (o) { visit(o && o.to); });
-      if (s.kind === "call") visit(s.on_unanswered);
-      if (s.kind === "notify") visit(s.to);
+  // Core's `step_order` (docs/en/visitor-flow-contract.md section 4): steps with a usable `order`
+  // first by ascending value, ties and the rest in reading order. Reading order is the start page,
+  // then breadth-first through enabled option targets, notify `to` and `on_unanswered`, then each
+  // unreachable step by id.
+  var FLOW_MAX_ORDER = 9999;
+  function flowOrderOf(step) {
+    var o = step && step.order;
+    return typeof o === "number" && isFinite(o) && o === Math.floor(o) && o >= 0 && o <= FLOW_MAX_ORDER ? o : -1;
+  }
+  // With the configuration, edges follow what a visitor can reach (hidden options leave no edge),
+  // which is what Core's resolved document lists.
+  function flowReadingOrder(draft, cfg) {
+    var steps = cfg ? flowResolve(draft, cfg).steps : draft.steps || {}, known = draft.steps || {}, out = [], seen = {};
+    function visit(from) {
+      var queue = [from], head, id, s;
+      for (head = 0; head < queue.length; head++) {
+        id = queue[head];
+        if (typeof id !== "string" || id === "" || seen[id] || !own(known, id) || !own(steps, id)) continue;
+        seen[id] = true; out.push(id);
+        s = steps[id];
+        if (isObj(s) && s.options instanceof Array) s.options.forEach(function (o) { if (isObj(o) && o.enabled !== false) queue.push(o.to); });
+        if (isObj(s)) { queue.push(s.to); queue.push(s.on_unanswered); }
+      }
     }
     visit(draft.start);
-    flowKeys(draft.door_starts || {}).forEach(function (d) { visit(draft.door_starts[d]); });
-    flowKeys(steps).forEach(visit);
+    flowKeys(known).sort().forEach(visit);
     return out;
+  }
+  function flowStepOrder(draft, cfg) {
+    var steps = draft.steps || {}, rank = {}, reading = flowReadingOrder(draft, cfg);
+    reading.forEach(function (id, i) { rank[id] = i; });
+    return reading.slice().sort(function (a, b) {
+      var oa = flowOrderOf(steps[a]), ob = flowOrderOf(steps[b]);
+      oa = oa < 0 ? FLOW_MAX_ORDER + 1 : oa; ob = ob < 0 ? FLOW_MAX_ORDER + 1 : ob;
+      return oa !== ob ? oa - ob : rank[a] - rank[b];
+    });
+  }
+  // Writes consecutive `order` values 0, 1, 2, ... for the sequence and returns the ids whose
+  // value changed; a save then rewrites exactly those steps, whole (see flowEntries).
+  function flowAssignOrder(draft, sequence) {
+    var changed = [];
+    sequence.forEach(function (id, i) {
+      var s = draft.steps[id];
+      if (isObj(s) && s.order !== i) { s.order = i; changed.push(id); }
+    });
+    return changed;
+  }
+  // Moves a step to a position of the displayed list (a drag) or by one place (the buttons).
+  function flowMoveStepTo(draft, id, index, cfg) {
+    var seq = flowStepOrder(draft, cfg), at = seq.indexOf(id);
+    if (at < 0) return [];
+    index = Math.max(0, Math.min(seq.length - 1, index));
+    if (index === at) return [];
+    seq.splice(at, 1); seq.splice(index, 0, id);
+    return flowAssignOrder(draft, seq);
+  }
+  function flowMoveStep(draft, id, delta, cfg) {
+    return flowMoveStepTo(draft, id, flowStepOrder(draft, cfg).indexOf(id) + delta, cfg);
+  }
+  // A new step takes the next order. Steps without an order would sort after it, so when any
+  // exists the whole list is numbered first.
+  function flowAddStep(draft, id, step, cfg) {
+    var seq = flowStepOrder(draft, cfg), steps = draft.steps, top = -1;
+    var numbered = seq.every(function (sid) { return flowOrderOf(steps[sid]) >= 0; });
+    if (numbered) seq.forEach(function (sid) { top = Math.max(top, flowOrderOf(steps[sid])); });
+    else flowAssignOrder(draft, seq);
+    delete step.order;
+    steps[id] = step;
+    step.order = numbered ? top + 1 : seq.length;
+  }
+  // The copy goes right after the original.
+  function flowDuplicateStep(draft, id, copyId, cfg) {
+    var seq = flowStepOrder(draft, cfg), copy = cloneJson(draft.steps[id]);
+    delete copy.order;
+    draft.steps[copyId] = copy;
+    seq.splice(seq.indexOf(id) + 1, 0, copyId);
+    flowAssignOrder(draft, seq);
   }
 
   // Steps whose options, notify target or unanswered branch lead to id.
@@ -3478,6 +3540,17 @@ var AdminLogic = (function () {
              steps: steps, issues: [] };
   }
 
+  // A plain batch carries no revision, so a draft is stale when the flow (or a per-door start) in a
+  // fresh snapshot differs from the one the editor opened with; the save is then not sent.
+  function flowDraftStale(baseline, cfg) { return flowSignature(cfg) !== baseline; }
+  // The message key for a refusal that is not a flow error: the conflict journal holds the flow
+  // (the editor must show it, never retry), or the configuration moved under the draft.
+  function flowSaveFailureKey(err) {
+    if (err === "unresolved_config_conflict") return "flow_editor.conflict_blocked";
+    if (err === "config_conflict" || err === "stale_config_resolution") return "admin.partition_changed";
+    return "";
+  }
+
   // Everything an editor save can touch, for a stale-draft check before a plain batch (which has
   // no revision of its own).
   function flowSignature(cfg) {
@@ -3628,6 +3701,9 @@ var AdminLogic = (function () {
     airSensorName: airSensorName, airSensorId: airSensorId,
     FLOW: FLOW, flowIdValid: flowIdValid, flowTextIn: flowTextIn, flowDraftFromConfig: flowDraftFromConfig,
     flowDraftFromTemplate: flowDraftFromTemplate, flowStepOrder: flowStepOrder,
+    flowDraftStale: flowDraftStale, flowSaveFailureKey: flowSaveFailureKey,
+    flowAddStep: flowAddStep, flowAssignOrder: flowAssignOrder, flowDuplicateStep: flowDuplicateStep,
+    flowMoveStep: flowMoveStep, flowMoveStepTo: flowMoveStepTo, flowOrderOf: flowOrderOf,
     flowReferrers: flowReferrers, flowCameras: flowCameras, flowValidate: flowValidate,
     flowParseError: flowParseError, flowResolve: flowResolve, flowEntries: flowEntries,
     flowSignature: flowSignature, flowBatchOps: flowBatchOps,
@@ -7210,7 +7286,7 @@ if (typeof document !== "undefined") (function () {
     } else node[key] = value;
   }
   function fdSteps() { return FLOWUI.draft.steps; }
-  function fdPages() { return L.flowStepOrder(FLOWUI.draft).filter(function (id) { return fdSteps()[id].kind === "page"; }); }
+  function fdPages() { return L.flowStepOrder(FLOWUI.draft, S.cfg || {}).filter(function (id) { return fdSteps()[id].kind === "page"; }); }
   function fdNewId(prefix) {
     var i = 1; while (fdSteps()[prefix + i] !== undefined) i++;
     return prefix + i;
@@ -7219,14 +7295,14 @@ if (typeof document !== "undefined") (function () {
     var ids = Object.keys(fdSteps());
     for (var i = 0; i < ids.length; i++) if (fdSteps()[ids[i]].kind === "call" && !fdSteps()[ids[i]].purpose) return ids[i];
     var id = fdSteps().c_any === undefined ? "c_any" : fdNewId("c_");
-    fdSteps()[id] = { kind: "call" };
+    L.flowAddStep(FLOWUI.draft, id, { kind: "call" }, S.cfg || {});
     return id;
   }
   function fdEnsureEnd() {
     var ids = Object.keys(fdSteps());
     for (var i = 0; i < ids.length; i++) if (fdSteps()[ids[i]].kind === "end") return ids[i];
     var id = fdSteps().e_thanks === undefined ? "e_thanks" : fdNewId("e_");
-    fdSteps()[id] = { kind: "end", return_s: L.FLOW.return_default };
+    L.flowAddStep(FLOWUI.draft, id, { kind: "end", return_s: L.FLOW.return_default }, S.cfg || {});
     return id;
   }
   function fdNewStep(kind) {
@@ -7235,7 +7311,7 @@ if (typeof document !== "undefined") (function () {
     else if (kind === "call") step = { kind: "call" };
     else if (kind === "notify") step = { kind: "notify", message: {}, to: fdEnsureEnd() };
     else step = { kind: "end", return_s: L.FLOW.return_default };
-    fdSteps()[id] = step;
+    L.flowAddStep(FLOWUI.draft, id, step, S.cfg || {});
     return id;
   }
   function fdOptionId(page) {
@@ -7253,6 +7329,7 @@ if (typeof document !== "undefined") (function () {
     if (kind === "end") next.return_s = L.FLOW.return_default;
     if (kind === "notify") { next.message = {}; next.to = fdEnsureEnd(); }
     if ((kind === "call" || kind === "notify") && old.purpose) next.purpose = old.purpose;
+    if (old.order !== undefined) next.order = old.order;
     fdSteps()[id] = next;
   }
 
@@ -7283,7 +7360,7 @@ if (typeof document !== "undefined") (function () {
   }
   function flTargetOptions(wantKind, current) {
     var d = FLOWUI.draft, o = [{ v: "", label: t("flow_editor.target_choose") }];
-    L.flowStepOrder(d).forEach(function (id) {
+    L.flowStepOrder(d, S.cfg || {}).forEach(function (id) {
       if (!wantKind || d.steps[id].kind === wantKind) o.push({ v: id, label: flowStepLabel(d, id) });
     });
     if (current && !d.steps[current]) o.push({ v: current, label: current });
@@ -7317,6 +7394,36 @@ if (typeof document !== "undefined") (function () {
     return h + "</fieldset>";
   }
 
+  // The stored value stays a glyph the native shells also map (purpose data uses these); every
+  // shell draws its own vendored icon for it and never the glyph.
+  var FLOW_ICON_CHOICES = [
+    { glyph: "", name: "", key: "flow_editor.icon_auto" },
+    { glyph: "\uD83C\uDFE0", name: "home", key: "flow_editor.icon_home" },
+    { glyph: "\uD83D\uDCE6", name: "package", key: "flow_editor.icon_package" },
+    { glyph: "\u2709\uFE0F", name: "mail", key: "flow_editor.icon_mail" },
+    { glyph: "\uD83D\uDCBC", name: "briefcase", key: "flow_editor.icon_briefcase" },
+    { glyph: "\uD83D\uDD27", name: "tool", key: "flow_editor.icon_tool" },
+    { glyph: "\u2753", name: "dots", key: "flow_editor.icon_dots" },
+    { glyph: "\u270D\uFE0F", name: "pencil", key: "flow_editor.icon_pencil" },
+    { glyph: "\uD83D\uDC64", name: "user", key: "flow_editor.icon_user" }
+  ];
+  function flIconPicker(id, i, option) {
+    var VF = window.DoorbellVisitorFlow, current = typeof option.icon === "string" ? option.icon : "", known = false;
+    var h = "<div class='fl-icons' role='group' aria-labelledby='fic-" + esc(id + "." + option.id) + "'>";
+    function button(glyph, name, label, on) {
+      return "<button type='button' class='btn2 fl-ic" + (on ? " on" : "") + "' data-fa='pickicon' data-id='" + esc(id) + "' data-i='" + i +
+        "' data-glyph='" + esc(glyph) + "' aria-pressed='" + (on ? "true" : "false") + "' title='" + esc(label) + "'>" +
+        (name ? icon(name) : "<span class='fl-ic-auto'>A</span>") + "<span class='fl-ic-label'>" + esc(label) + "</span></button>";
+    }
+    FLOW_ICON_CHOICES.forEach(function (c) {
+      var on = c.glyph === current || (c.glyph !== "" && c.glyph.replace(/\uFE0F/g, "") === current.replace(/\uFE0F/g, "") && current !== "");
+      if (on) known = true;
+      h += button(c.glyph, c.name, t(c.key), on);
+    });
+    if (current && !known) h += button(current, VF ? VF.iconFor(option.purpose, current) : "user", t("flow_editor.icon_current"), true);
+    return h + "</div>";
+  }
+
   function flPageHtml(id, step) {
     var h = "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_title")) + "</label>" + flTextInputs(["steps", id, "title"], step.title, L.FLOW.title) +
             flSlot("field:" + id + ".title") + "</div>" +
@@ -7334,8 +7441,7 @@ if (typeof document !== "undefined") (function () {
         "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_purpose")) + "</label>" +
         flSelect(base.concat(["purpose"]), o.purpose || "", flPurposeOptions("flow_editor.option_purpose_none")) + "</div>" +
         "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_label")) + "</label>" + flTextInputs(base.concat(["label"]), o.label, L.FLOW.label) + "</div>" +
-        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_icon")) + "</label><input type='text' maxlength='8' data-fp='" + esc(base.concat(["icon"]).join(".")) +
-        "' data-ft='text' value='" + esc(o.icon || "") + "'></div>" +
+        "<div class='frow'><span class='flab' id='fic-" + esc(key) + "'>" + esc(t("flow_editor.option_icon")) + "</span>" + flIconPicker(id, i, o) + "</div>" +
         "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_target")) + "</label>" + flSelect(base.concat(["to"]), o.to || "", flTargetOptions("", o.to), "data-fr='1' data-fa-change='target' data-id='" + esc(id) + "'") + "</div>" +
         "<div class='fl-checks'><label class='mc'><input type='checkbox' data-fp='" + esc(base.concat(["style"]).join(".")) + "' data-ft='primary' data-fr='1'" +
         (o.style === "primary" ? " checked" : "") + "> " + esc(t("flow_editor.option_primary")) + "</label> " +
@@ -7382,18 +7488,20 @@ if (typeof document !== "undefined") (function () {
   }
 
   function flStepsPaneHtml() {
-    var d = FLOWUI.draft, order = L.flowStepOrder(d), sel = FLOWUI.sel;
+    var d = FLOWUI.draft, order = L.flowStepOrder(d, S.cfg || {}), sel = FLOWUI.sel;
     if (!d.steps[sel]) sel = FLOWUI.sel = order[0] || "";
     var issues = FLOWUI.issues, h = "<div class='fl-split" + (FLOWUI.mobileEdit ? " edit" : "") + "'><div class='fl-list'><ul class='fl-steps'>";
     order.forEach(function (id) {
       var s = d.steps[id], bad = issues.errors.concat(FLOWUI.core ? [FLOWUI.core] : []).filter(function (e) { return e.step === id; }).length;
-      h += "<li><button type='button' class='fl-step" + (id === sel ? " sel" : "") + "' data-fa='sel' data-id='" + esc(id) + "'" + (id === sel ? " aria-current='true'" : "") + ">" +
+      h += "<li class='fl-row' draggable='true' data-row='" + esc(id) + "'><button type='button' class='fl-step" + (id === sel ? " sel" : "") + "' data-fa='sel' data-id='" + esc(id) + "'" + (id === sel ? " aria-current='true'" : "") + ">" +
         "<span class='tag'>" + esc(t(FLOW_KIND_KEYS[s.kind] || "flow_editor.kind_page")) + "</span>" +
         (id === d.start ? "<span class='tag ok'>" + esc(t("flow_editor.start")) + "</span>" : "") +
         (bad ? "<span class='tag err' aria-label='" + esc(t("flow_editor.issues")) + "'>!</span>" : "") +
-        "<span class='fl-stepname'>" + esc(flowStepName(d, id) || t("flow_editor.step_untitled")) + "</span><span class='dim fl-stepid'>" + esc(id) + "</span></button></li>";
+        "<span class='fl-stepname'>" + esc(flowStepName(d, id) || t("flow_editor.step_untitled")) + "</span><span class='dim fl-stepid'>" + esc(id) + "</span></button>" +
+        "<span class='ops fl-move'>" + reorderButtonHtml("data-fa='stepup' data-id='" + esc(id) + "'" + (id === order[0] ? " disabled" : ""), true) +
+        reorderButtonHtml("data-fa='stepdown' data-id='" + esc(id) + "'" + (id === order[order.length - 1] ? " disabled" : ""), false) + "</span></li>";
     });
-    h += "</ul><div class='fl-actions'><select id='flAddKind' aria-label='" + esc(t("flow_editor.add_step")) + "'>";
+    h += "</ul><div class='dim fhint'>" + esc(t("flow_editor.order_hint")) + "</div><div class='fl-actions'><select id='flAddKind' aria-label='" + esc(t("flow_editor.add_step")) + "'>";
     FLOW_KINDS_ORDER.forEach(function (k) { h += "<option value='" + k + "'>" + esc(t(FLOW_KIND_KEYS[k])) + "</option>"; });
     h += "</select> <button type='button' class='btn2' data-fa='addstep'>" + icon("plus") + " " + esc(t("flow_editor.add_step")) + "</button></div>" + flSlot("global") + "</div>";
     h += "<div class='fl-edit'>";
@@ -7478,7 +7586,7 @@ if (typeof document !== "undefined") (function () {
         h += "<div class='fl-simopts'>";
         w.options().forEach(function (o) {
           h += "<button type='button' class='" + (o.semantic_id === "call.primary" ? "btn" : "btn2") + "' data-fa='simtap' data-id='" + esc(o.id) + "'>" +
-            (o.icon ? esc(o.icon) + " " : "") + esc(VF.textIn(o.label, lang) || "") + "</button>";
+            icon(VF.iconFor(o.purpose, o.icon)) + " " + esc(VF.textIn(o.label, lang) || "") + "</button>";
         });
         h += "</div>";
       }
@@ -7551,6 +7659,46 @@ if (typeof document !== "undefined") (function () {
     else if (pane === "try") { simStart(); host.innerHTML = simHtml(); }
     else host.innerHTML = flStepsPaneHtml();
     flRenderIssues();
+    if (FLOWUI.focusMove) {
+      var want = FLOWUI.focusMove.split(":"), btn = host.querySelector("[data-fa='" + want[1] + "'][data-id='" + want[0] + "']:not([disabled])") ||
+        host.querySelector("[data-fa='" + (want[1] === "stepup" ? "stepdown" : "stepup") + "'][data-id='" + want[0] + "']:not([disabled])");
+      FLOWUI.focusMove = "";
+      if (btn && btn.focus) btn.focus();
+    }
+  }
+
+  // Dragging a step row (where the browser supports it) is the same move as the buttons.
+  function flDragRow(event) {
+    var row = flFind(event.target, "data-row");
+    return row && row.parentNode && $("#flRoot") && $("#flRoot").contains(row) ? row : null;
+  }
+  function flDragStart(event) {
+    var row = flDragRow(event);
+    if (!FLOWUI || !row) return;
+    FLOWUI.drag = row.getAttribute("data-row");
+    row.classList.add("dragging");
+    if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; try { event.dataTransfer.setData("text/plain", FLOWUI.drag); } catch (e) {} }
+  }
+  function flDragOver(event) {
+    var row = flDragRow(event);
+    if (!FLOWUI || !FLOWUI.drag || !row) return;
+    event.preventDefault();
+    $all(".fl-row.over", $("#flRoot")).forEach(function (r) { r.classList.remove("over"); });
+    if (row.getAttribute("data-row") !== FLOWUI.drag) row.classList.add("over");
+  }
+  function flDrop(event) {
+    var row = flDragRow(event), id = FLOWUI && FLOWUI.drag;
+    if (!id || !row) return;
+    event.preventDefault();
+    FLOWUI.drag = "";
+    var to = L.flowStepOrder(FLOWUI.draft, S.cfg || {}).indexOf(row.getAttribute("data-row"));
+    if (to >= 0) L.flowMoveStepTo(FLOWUI.draft, id, to, S.cfg || {});
+    flPaint();
+  }
+  function flDragEnd() {
+    if (!FLOWUI) return;
+    FLOWUI.drag = "";
+    $all(".fl-row.dragging, .fl-row.over", $("#flRoot") || document).forEach(function (r) { r.classList.remove("dragging"); r.classList.remove("over"); });
   }
 
   // ---- Template and upload helpers ----
@@ -7589,7 +7737,7 @@ if (typeof document !== "undefined") (function () {
     var baseline = FLOWUI.baseline;
     api("GET", "/api/config/snapshot", null, function (st, snapshot) {
       if (!(st === 200 && validConfigSnapshot(snapshot))) { cb(false, { unavailable: true }); return; }
-      if (L.flowSignature(snapshot.config) !== baseline) { cb(false, { err: "config_conflict" }); return; }
+      if (L.flowDraftStale(baseline, snapshot.config)) { cb(false, { err: "config_conflict" }); return; }
       api("POST", "/api/config/batch", { ops: L.flowBatchOps(plan) }, function (status, j) {
         if (status === 200 && j && j.ok === true) { cb(true, j); return; }
         cb(false, { status: status, unknown: status === 0 || status === 202 || status >= 500 || status === 200,
@@ -7604,7 +7752,7 @@ if (typeof document !== "undefined") (function () {
     var existing = seedDraft || flowStored();
     function start(draft) {
       FLOWUI = { draft: draft, baseline: L.flowSignature(S.cfg), pane: pane || "steps", sel: "", mobileEdit: false, issues: { errors: [], warnings: [] }, core: null, sim: null, simLang: "" };
-      FLOWUI.sel = L.flowStepOrder(draft)[0] || "";
+      FLOWUI.sel = L.flowStepOrder(draft, S.cfg || {})[0] || "";
       var html = "<div id='flRoot'><div class='fl-tabs' role='tablist'>" +
         ["overview", "steps", "try"].map(function (p) {
           return "<button type='button' role='tab' class='fl-tab' data-flpane='" + p + "'>" + esc(t(p === "overview" ? "flow_editor.tab_overview" : p === "steps" ? "flow_editor.steps" : "flow_editor.preview")) + "</button>";
@@ -7628,7 +7776,7 @@ if (typeof document !== "undefined") (function () {
               FLOWUI.core = issue;
               text += ": " + flowIssueText(issue, FLOWUI.draft);
               if (issue.step && FLOWUI.draft.steps[issue.step]) { FLOWUI.sel = issue.step; FLOWUI.pane = "steps"; }
-            } else if (result.err === "unresolved_config_conflict") { text += ": " + t("flow_editor.conflict_blocked"); refreshConfig(); }
+            } else if (L.flowSaveFailureKey(result.err) === "flow_editor.conflict_blocked") { text += ": " + t("flow_editor.conflict_blocked"); refreshConfig(); }
             else text += ": " + configConflictError(result.err);
             flPaint();
           }
@@ -7639,6 +7787,7 @@ if (typeof document !== "undefined") (function () {
       });
       m.classList.add("fl-modal");
       m.onclick = flHandle; m.onchange = flChange; m.oninput = flInput;
+      m.ondragstart = flDragStart; m.ondragover = flDragOver; m.ondrop = flDrop; m.ondragend = flDragEnd;
       flPaint();
     }
     if (existing) start(existing);
@@ -7665,14 +7814,17 @@ if (typeof document !== "undefined") (function () {
       case "addstep": { var kind = $("#flAddKind").value; FLOWUI.sel = fdNewStep(kind); FLOWUI.mobileEdit = true; break; }
       case "dupstep": {
         var copy = fdNewId(({ page: "s_", call: "c_", notify: "n_", end: "e_" })[step.kind]);
-        steps[copy] = JSON.parse(JSON.stringify(step)); FLOWUI.sel = copy; break;
+        L.flowDuplicateStep(d, id, copy, S.cfg || {}); FLOWUI.sel = copy; break;
       }
       case "delstep": {
         var refs = L.flowReferrers(d, id);
         if (refs.length) { msg(fmt(t("flow_editor.step_in_use"), { steps: refs.map(function (r) { return r === "start" ? t("flow_editor.start") : (steps[r] ? flowStepLabel(d, r) : doorLabel(r)); }).join(", ") })); return; }
-        delete steps[id]; FLOWUI.sel = L.flowStepOrder(d)[0] || ""; FLOWUI.mobileEdit = false; break;
+        delete steps[id]; FLOWUI.sel = L.flowStepOrder(d, S.cfg || {})[0] || ""; FLOWUI.mobileEdit = false; break;
       }
       case "setstart": d.start = id; break;
+      case "pickicon": fdSet(["steps", id, "options", String(i), "icon"], el.getAttribute("data-glyph")); break;
+      case "stepup": L.flowMoveStep(d, id, -1, S.cfg || {}); FLOWUI.focusMove = id + ":stepup"; break;
+      case "stepdown": L.flowMoveStep(d, id, 1, S.cfg || {}); FLOWUI.focusMove = id + ":stepdown"; break;
       case "addoption": step.options.push({ id: fdOptionId(step), label: {}, to: fdEnsureCall() }); break;
       case "rmoption": step.options.splice(i, 1); break;
       case "optup": if (i > 0) { var up = step.options.splice(i, 1)[0]; step.options.splice(i - 1, 0, up); } break;
@@ -7682,7 +7834,7 @@ if (typeof document !== "undefined") (function () {
       case "template":
         if (!window.confirm(t("flow_editor.template_confirm"))) return;
         flowFetchTemplate(el.getAttribute("data-name"), function (flow) {
-          FLOWUI.draft = L.flowDraftFromTemplate(flow, S.cfg); FLOWUI.sel = L.flowStepOrder(FLOWUI.draft)[0] || "";
+          FLOWUI.draft = L.flowDraftFromTemplate(flow, S.cfg); FLOWUI.sel = L.flowStepOrder(FLOWUI.draft, S.cfg || {})[0] || "";
           FLOWUI.core = null; msg(t("flow_editor.template_loaded")); flPaint();
         });
         return;

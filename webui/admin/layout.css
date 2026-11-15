@@ -402,6 +402,17 @@ tr.offline td:not(.ops) { color:var(--dim); }
            text-align:left; font:inherit; color:var(--fg); background:var(--card2); border:1px solid var(--line);
            border-radius:var(--radius-s); cursor:pointer; }
 .fl-step.sel { border-color:var(--acc); background:var(--sel); }
+.fl-row { display:flex; align-items:stretch; gap:6px; border-radius:var(--radius-s); }
+.fl-row .fl-step { flex:1 1 auto; width:auto; min-width:0; }
+.fl-row .fl-move { display:flex; flex:none; gap:4px; align-items:center; }
+.fl-row[draggable="true"] .fl-step { cursor:grab; }
+.fl-row.dragging { opacity:.45; }
+.fl-row.over { box-shadow:0 -3px 0 0 var(--acc); }
+.fl-icons { display:flex; flex-wrap:wrap; gap:6px; }
+.fl-ic { display:inline-flex; align-items:center; gap:6px; padding:0 10px; }
+.fl-ic.on { border-color:var(--acc); background:var(--sel); }
+.fl-ic-auto { display:inline-flex; align-items:center; justify-content:center; width:1.25em; height:1.25em; font-weight:700; }
+@media (max-width:700px) { .fl-ic-label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); } .fl-ic { padding:0; width:var(--tap); justify-content:center; } }
 .fl-stepname { flex:1 1 8rem; min-width:0; overflow-wrap:anywhere; font-weight:600; }
 .fl-stepid { font-size:.75rem; }
 .fl-edit .frow { max-width:none; }

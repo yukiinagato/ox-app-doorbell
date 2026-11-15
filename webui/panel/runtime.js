@@ -544,9 +544,12 @@
     return group;
   }
 
-  function panelStateUrl() {
-    var group = webGroup();
-    return "/api/panel/state" + (group === "all" ? "" : "?group=" + encodeURIComponent(group));
+  // `door` asks Core for the visitor flow of one door (several doors share a panel).
+  function panelStateUrl(door) {
+    var group = webGroup(), query = [];
+    if (group !== "all") query.push("group=" + encodeURIComponent(group));
+    if (door) query.push("door=" + encodeURIComponent(door));
+    return "/api/panel/state" + (query.length ? "?" + query.join("&") : "");
   }
 
   function pushTargetsGroup(payload, group) {

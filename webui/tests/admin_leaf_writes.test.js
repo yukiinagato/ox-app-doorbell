@@ -272,6 +272,28 @@ assert.deepStrictEqual(ops({}, [{ key: "households.h_new", value: { label: { en:
   assert.notStrictEqual(L.flowSignature(cfg), L.flowSignature(changed));
 }
 
+// Stale-draft protection: the editor opened with one signature; a snapshot that differs in the flow
+// or a per-door start is refused before anything is sent, an unrelated change is not.
+{
+  const opened = { visitor_flow: { start: "s", steps: { s: { kind: "page", options: [{ id: "o", to: "c" }] }, c: { kind: "call" } } },
+    doors: { d: { visitor_flow: { start: "s" } } }, ui: { languages: ["en"] } };
+  const baseline = L.flowSignature(opened);
+  assert.strictEqual(L.flowDraftStale(baseline, JSON.parse(JSON.stringify(opened))), false);
+  const unrelated = JSON.parse(JSON.stringify(opened)); unrelated.ui.languages = ["en", "ja"];
+  assert.strictEqual(L.flowDraftStale(baseline, unrelated), false, "a change outside the flow does not block a save");
+  for (const edit of [(c) => { c.visitor_flow.idle_s = 61; }, (c) => { c.visitor_flow.steps.c.order = 1; },
+      (c) => { delete c.visitor_flow.steps.c; }, (c) => { c.doors.d.visitor_flow.start = "x"; }, (c) => { delete c.visitor_flow; }]) {
+    const moved = JSON.parse(JSON.stringify(opened)); edit(moved);
+    assert.strictEqual(L.flowDraftStale(baseline, moved), true);
+  }
+  // Refusals that are not flow errors: the conflict journal and a moved configuration.
+  assert.strictEqual(L.flowSaveFailureKey("unresolved_config_conflict"), "flow_editor.conflict_blocked");
+  assert.strictEqual(L.flowSaveFailureKey("config_conflict"), "admin.partition_changed");
+  assert.strictEqual(L.flowSaveFailureKey("stale_config_resolution"), "admin.partition_changed");
+  assert.strictEqual(L.flowSaveFailureKey("visitor_flow.bad_text: s.title"), "");
+  assert.strictEqual(L.flowParseError("unresolved_config_conflict"), null, "a conflict is not shown as a flow error");
+}
+
 // Core's refusal names the step and option; the editor shows it next to that field.
 assert.deepStrictEqual(L.flowParseError("visitor_flow.unknown_target: s_x.o"),
   { code: "unknown_target", key: "visitor_flow.unknown_target", step: "s_x", option: "o", field: "" });

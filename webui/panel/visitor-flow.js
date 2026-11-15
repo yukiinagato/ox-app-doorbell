@@ -33,6 +33,23 @@
     return out;
   }
 
+  // Option icons: the purpose id, then a known emoji from the purpose data, name a vendored Tabler
+  // icon (webui/icons). Emoji are never rendered; anything unknown is the person icon.
+  var ICON_BY_PURPOSE = { visit: "home", visitor: "home", delivery: "package", parcel: "package",
+    mail: "mail", post: "mail", sales: "briefcase", collection: "briefcase", work: "tool",
+    utility: "tool", repair: "tool", construction: "tool", other: "dots" };
+  var ICON_BY_GLYPH = { "\uD83C\uDFE0": "home", "\uD83C\uDFE1": "home", "\uD83D\uDCE6": "package",
+    "\u2709": "mail", "\uD83D\uDCE7": "mail", "\uD83D\uDCEE": "mail", "\uD83D\uDCBC": "briefcase",
+    "\uD83D\uDECD": "briefcase", "\uD83D\uDD27": "tool", "\uD83D\uDD28": "tool", "\uD83D\uDEE0": "tool",
+    "\u2753": "dots", "\u2754": "dots", "\u270D": "pencil", "\uD83D\uDC64": "user" };
+  function iconFor(purposeId, glyph) {
+    var g = typeof glyph === "string" ? glyph.replace(/\uFE0F/g, "") : "";
+    if (g !== "" && Object.prototype.hasOwnProperty.call(ICON_BY_GLYPH, g)) return ICON_BY_GLYPH[g];
+    var p = typeof purposeId === "string" ? purposeId.toLowerCase().replace(/^p_/, "") : "";
+    if (p !== "" && Object.prototype.hasOwnProperty.call(ICON_BY_PURPOSE, p)) return ICON_BY_PURPOSE[p];
+    return "user";
+  }
+
   function FlowWalker(flow, lang) {
     this.lang = lang || "ja";
     this.flow = {};
@@ -216,6 +233,6 @@
   };
 
   return { create: function (flow, lang) { return new FlowWalker(flow, lang); },
-           textIn: textIn, paragraphs: paragraphs,
+           textIn: textIn, paragraphs: paragraphs, iconFor: iconFor,
            NO_ANSWER_NOTICE: NO_ANSWER_NOTICE, PRESS_FAILED_NOTICE: PRESS_FAILED_NOTICE };
 });

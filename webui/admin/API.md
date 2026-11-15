@@ -532,6 +532,19 @@ Resolved document, notify and the shape of an editor write are specified in
   Images are downscaled in the browser to at most 1280 px and about 400 KB before upload. The simulator
   walks the unsaved draft with `/panel/visitor-flow.js`. While explicit steps are enabled the
   `ui.call_flow` selector is disabled.
+- The step list follows Core's `step_order` (explicit `order` first, then reading order); the editor
+  computes the same sequence for the unsaved draft. A step moves with its up/down buttons or by
+  dragging its row. A move numbers the whole sequence `0, 1, 2, ...` and the save rewrites exactly the
+  steps whose `order` changed, each as the whole step object, in the same batch. A step rewritten for
+  another reason keeps its `order`; a new step gets the next one (the list is numbered first when some
+  steps have none, so it does not jump to the front); a duplicate goes right after the original.
+- Option icons are chosen from a picker. The stored `icon` stays a glyph that every shell maps to its
+  own vendored icon (house, parcel, envelope, briefcase, wrench, ellipsis, pen, person); the door page
+  and the simulator draw the Tabler icon and never the glyph. Without an icon the purpose id decides,
+  then the person icon.
+- The door page asks `GET /api/panel/state?door=<id>` once a visitor opens a door's row on a
+  multi-door panel: the answer's `visitor_flow` is that door's document (`doc.door` names it). Back
+  from the start page, the idle timeout and Done return to the rows.
 - The conflict journal treats `visitor_flow` as one entity. After two partitioned nodes edit it,
   further ordinary edits return `unresolved_config_conflict` until the conflict is resolved in the
   conflicts view; the editor must show it, not retry.

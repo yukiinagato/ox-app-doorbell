@@ -1415,7 +1415,18 @@ flow_editor.image_below: { ja: "本文の下", en: "Below the text", zh: "正文
 flow_editor.field_options: { ja: "選択肢", en: "Options", zh: "选项" }
 flow_editor.add_option: { ja: "選択肢を追加", en: "Add option", zh: "添加选项" }
 flow_editor.option_label: { ja: "ラベル", en: "Label", zh: "标签" }
-flow_editor.option_icon: { ja: "アイコン（絵文字）", en: "Icon (emoji)", zh: "图标（表情符号）" }
+flow_editor.option_icon: { ja: "アイコン", en: "Icon", zh: "图标" }
+flow_editor.icon_auto: { ja: "自動（用件から）", en: "Automatic (from the purpose)", zh: "自动（按目的）" }
+flow_editor.icon_home: { ja: "家", en: "House", zh: "房屋" }
+flow_editor.icon_package: { ja: "荷物", en: "Parcel", zh: "包裹" }
+flow_editor.icon_mail: { ja: "郵便", en: "Envelope", zh: "信封" }
+flow_editor.icon_briefcase: { ja: "ビジネス", en: "Briefcase", zh: "公文包" }
+flow_editor.icon_tool: { ja: "工具", en: "Wrench", zh: "扳手" }
+flow_editor.icon_dots: { ja: "その他", en: "More", zh: "更多" }
+flow_editor.icon_pencil: { ja: "ペン", en: "Pen", zh: "笔" }
+flow_editor.icon_user: { ja: "人", en: "Person", zh: "人物" }
+flow_editor.icon_current: { ja: "現在の設定", en: "Current value", zh: "当前设置" }
+flow_editor.order_hint: { ja: "ステップは、ここで決めた順に一覧表示されます。ドラッグするか矢印ボタンで並べ替えられます。来訪者の操作の流れには影響しません。", en: "Steps are listed in this order. Drag a step or use the arrows to move it. The order does not change what visitors see.", zh: "步骤按此顺序列出。可拖动步骤或使用箭头移动；顺序不影响访客看到的流程。" }
 flow_editor.option_purpose: { ja: "用件のラベルとアイコンを使う", en: "Use a visit purpose's label and icon", zh: "使用来访目的的标签和图标" }
 flow_editor.option_purpose_none: { ja: "使わない（独自のラベル）", en: "None (own label)", zh: "不使用（自定义标签）" }
 flow_editor.option_primary: { ja: "大きな主ボタンにする", en: "Show as the large main button", zh: "显示为主按钮" }

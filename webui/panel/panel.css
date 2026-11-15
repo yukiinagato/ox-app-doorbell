@@ -233,7 +233,7 @@ body.replyActive #replyBanner { display:-webkit-box !important; -webkit-box-orie
 .purposeBtn { display:inline-block; vertical-align:top; width:47%; margin:6px 1%; min-height:96px; padding:14px 12px;
               border-radius:14px; background:#1a2027; background:var(--surface-2); font-size:22px; font-size:1.375rem;
               line-height:1.3; }
-.purposeBtn .pIcon { display:block; font-size:1.8em; line-height:1.2; }
+.purposeBtn .ic { width:32px; height:32px; }
 .purposeBtn .pLabel { display:block; overflow-wrap:anywhere; }
 .purposeBtn.skip { display:block; width:98%; min-height:72px; min-height:var(--tap-visitor); background:transparent;
                    color:#9aa7b5; color:var(--muted); }
@@ -264,13 +264,12 @@ body.flowOn #doorList, body.flowOn #hint { display:none !important; }
 .flowAlt { color:#9aa7b5; color:var(--muted); font-size:18px; font-size:1.125rem; padding:12px; border:1px dashed #343f4b;
            border:1px dashed var(--line); border-radius:12px; }
 #flowNotice { min-height:0; font-size:20px; font-size:1.25rem; padding:4px 0; color:#ff8e8e; color:var(--negative-text); }
-#flowOptions { padding:8px 16px 4px; overflow:auto; -webkit-overflow-scrolling:touch; text-align:center;
-               background:#101418; background:var(--surface); border-top:1px solid #343f4b; border-top:1px solid var(--line); }
-#flowOptions.scrollable { -webkit-box-shadow:inset 0 -14px 10px -10px rgba(0,0,0,.45); box-shadow:inset 0 -14px 10px -10px rgba(0,0,0,.45); }
+#flowOptions { padding:8px 0 4px; text-align:center; }
 #flowOptions .doorBtn { display:block; width:100%; max-width:none; margin:6px 0; min-height:96px; }
-#flowOptions .doorBtn .pIcon { display:inline-block; font-size:1em; margin-right:.4em; }
 #flowOptions .doorBtn .pLabel { display:inline; }
 #flowOptions .purposeBtn { width:48%; margin:6px 1%; min-height:96px; color:#e8edf2; color:var(--on-surface); }
+/* Nothing of the classic screen shows until Core's first answer says which screen this is. */
+body.doorPage:not(.ready) #hint, body.doorPage:not(.ready) #note, body.doorPage:not(.ready) #doorList { visibility:hidden; }
 .flowNav { display:none; -webkit-box-flex:1; min-width:0; min-height:80px; padding:14px 10px; border-radius:16px;
            background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
            border:1px solid #343f4b; border:1px solid var(--line); font-size:26px; font-size:1.625rem; font-weight:bold; line-height:1.2; }
@@ -303,6 +302,7 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
   #purposeGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
   .purposeBtn { display:block; width:auto; margin:0; min-height:112px; font-size:clamp(1.25rem, 1rem + .8vw, 1.625rem); }
   .purposeBtn.skip { grid-column:1 / -1; width:auto; }
+  .purposeBtn .ic { display:block; margin:0 auto 6px; }
   #visitorActions { display:flex; align-items:stretch; gap:12px; flex:none;
                     padding:12px calc(16px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
   #visitorActions #doorList, #cancelCall { flex:1 1 auto; }
@@ -312,21 +312,33 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
   }
   #flowTitle { font-size:clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem); }
   #flowBody { font-size:clamp(1.125rem, 1rem + .7vw, 1.5rem); }
-  #flowOptions { display:grid; grid-template-columns:minmax(0, 1fr); gap:12px; flex:none; align-content:start;
-                 padding:12px calc(16px + env(safe-area-inset-right)) 4px calc(16px + env(safe-area-inset-left)); }
+  /* One centred column: title, body and images, then the options as equal cards. */
+  #main > #flowView, #main > #flowOptions { max-width:760px; }
+  #flowOptions { display:grid; grid-template-columns:minmax(0, 1fr); gap:12px; align-content:start; padding:12px 0 4px; }
   #flowOptions .doorBtn { margin:0; grid-column:1 / -1; font-size:clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem);
                           min-height:clamp(96px, 12vh, 128px); }
-  #flowOptions .purposeBtn { display:block; width:auto; margin:0; min-height:clamp(80px, 10vh, 112px); }
-  #flowBack, #flowDone { flex:1 1 auto; }
+  #flowOptions .purposeBtn { display:flex; flex-direction:column; align-items:center; justify-content:center;
+                             width:auto; margin:0; min-height:clamp(96px, 14vh, 136px); }
+  #flowOptions .purposeBtn .ic { display:block; width:36px; height:36px; margin:0 0 8px; color:#6db3ff; color:var(--accent-text); }
+  #flowOptions .doorBtn .ic { width:1em; height:1em; margin-right:.35em; vertical-align:-.1em; }
+  #flowOptions .doorBtn .ic:last-child, #flowOptions .purposeBtn .ic:last-child { margin-right:0; }
+  #flowBack, #flowDone { flex:1 1 auto; max-width:420px; }
   @media (min-width: 600px) {
     #flowOptions { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    #main > #flowOptions.n1 { grid-template-columns:minmax(0, 1fr); max-width:420px; }
+    #flowOptions.odd .purposeBtn:last-child { grid-column:1 / -1; }
   }
   @media (min-width: 900px) {
-    #flowOptions { padding-left:max(24px, calc(50vw - 480px)); padding-right:max(24px, calc(50vw - 480px)); }
+    #main > #flowOptions { max-width:960px; grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    #main > #flowOptions.n1 { grid-template-columns:minmax(0, 1fr); max-width:420px; }
+    #main > #flowOptions.n2, #main > #flowOptions.n4 { grid-template-columns:repeat(2, minmax(0, 1fr)); max-width:760px; }
+    #flowOptions.odd .purposeBtn:last-child { grid-column:auto; }
   }
   @media (max-height: 500px) {
     #flowTitle { font-size:1.5rem; padding:0 0 6px; }
     #flowOptions .doorBtn, #flowOptions .purposeBtn { min-height:var(--tap-visitor); font-size:1.25rem; }
+    #flowOptions .purposeBtn { flex-direction:row; gap:8px; }
+    #flowOptions .purposeBtn .ic { width:28px; height:28px; margin:0; }
   }
   @media (min-width: 900px) {
     #purposeGrid { grid-template-columns:repeat(3, minmax(0, 1fr)); }

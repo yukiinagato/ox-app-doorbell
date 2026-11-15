@@ -76,7 +76,7 @@ F7_POINTS = 28.0
 SPRITE_BEGIN = "<!-- BEGIN generated icon sprite (tools/gen_icons.py); do not edit by hand -->"
 SPRITE_END = "<!-- END generated icon sprite -->"
 
-_PATH_D = re.compile(r'<path[^>]*\sd="([^"]+)"', re.S)
+_PATH_D = re.compile(r'<path(?![^>]*\sstroke="none")[^>]*\sd="([^"]+)"', re.S)
 
 
 def icon_names():
