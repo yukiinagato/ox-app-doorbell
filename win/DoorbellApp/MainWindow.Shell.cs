@@ -124,7 +124,7 @@ namespace DoorbellApp
 
         private bool _inkPassQueued;
 
-        /// <summary>A chip's content: a Tabler outline icon followed by its label.</summary>
+        /// <summary>A chip's content: a Fluent icon followed by its label.</summary>
         internal UIElement IconLabel(string iconKey, string text, double iconSize = 18,
                                      Brush ink = null)
         {
@@ -166,14 +166,12 @@ namespace DoorbellApp
         {
             var path = new System.Windows.Shapes.Path
             {
+                Width = 24,
+                Height = 24,
                 Data = (Geometry)FindResource(iconKey),
-                StrokeThickness = 2,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
-                Stroke = ink,
+                Fill = ink,
             };
-            if (ink == null) path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Fg");
+            if (ink == null) path.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Fg");
             return new Viewbox
             {
                 Width = size,

@@ -150,11 +150,13 @@ class GenIconsTest(unittest.TestCase):
 
     def test_outputs_carry_the_generated_banner(self):
         for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
-                     "win/DoorbellApp/Resources/Icons.xaml",
                      "webui/icons/tabler-sprite.svg",
                      "webui/panel/icons/tabler-sprite.svg"):
             with open(os.path.join(ROOT, path), "r", encoding="utf-8") as handle:
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
+        with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
+                  "r", encoding="utf-8") as handle:
+            self.assertIn(gen_icons.WINDOWS_BANNER, handle.read())
 
     def test_the_panel_sprite_is_the_generated_sprite(self):
         # Core serves webui/panel only, so the panel pages reference their own copy. It is
@@ -167,18 +169,33 @@ class GenIconsTest(unittest.TestCase):
     def test_geometry_is_passed_through_unchanged(self):
         """Every output but Android carries the vendored path data byte for byte.
 
-        These three consume SVG path syntax directly -- the XAML mini-language, the sprite, and
-        the flattener that writes the PDFs -- so any difference from the file on disk would be a
-        re-rendering, and a re-rendering is how a glyph starts drifting from its source.
+        The sprite and the flattener that writes the PDFs consume SVG path syntax directly, so
+        any difference from the file on disk would be a re-rendering, and a re-rendering is how
+        a glyph starts drifting from its source.
         """
         for name in self.names:
             data = gen_icons.path_data(gen_icons.read_source(name))
-            with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
-                      "r", encoding="utf-8") as handle:
-                self.assertIn(">" + data + "<", handle.read(), name)
             with open(os.path.join(ROOT, "webui/icons/tabler-sprite.svg"),
                       "r", encoding="utf-8") as handle:
                 self.assertIn('d="' + data + '"', handle.read(), name)
+
+    def test_windows_icons_are_the_vendored_fluent_geometry(self):
+        """Icons.xaml carries each mapped Fluent path byte for byte, behind an explicit fill rule."""
+        self.assertTrue(os.path.exists(os.path.join(gen_icons.FLUENT_DIR, "LICENSE")))
+        with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
+                  "r", encoding="utf-8") as handle:
+            xaml = handle.read()
+        for name, fluent in gen_icons.WINDOWS_ICONS.items():
+            with open(os.path.join(gen_icons.FLUENT_DIR, fluent + ".svg"),
+                      "r", encoding="utf-8") as handle:
+                svg = handle.read()
+            data = " ".join(re.search(r'\bd="([^"]+)"', svg).group(1).split())
+            self.assertIn('<Geometry x:Key="Icon' + gen_icons.camel(name) + '">F1 M', xaml, name)
+            self.assertIn(data, xaml, name)
+
+    def test_fluent_geometry_states_the_fill_rule(self):
+        # An SVG path without fill-rule is non-zero; the XAML mini-language defaults to even-odd.
+        self.assertTrue(gen_icons.fluent_geometry("home").startswith("F1 M"))
 
     def test_android_geometry_is_numerically_equivalent(self):
         """Android is the exception, and it has to be an exact one.

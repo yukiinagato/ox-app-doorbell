@@ -56,7 +56,7 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// One purpose badge: the Tabler icon for a seeded purpose, or an administrator's own
+        /// One purpose badge: the Fluent icon for a seeded purpose, or an administrator's own
         /// icon text when there is nothing to map, then the label.
         /// </summary>
         private void FillPurposeBadge(System.Windows.Controls.Panel into,
@@ -65,7 +65,7 @@ namespace DoorbellApp
             if (into == null) return;
             into.Children.Clear();
             var stroke = ThemeContrast.Brush(Color.FromRgb(0xF2, 0xF5, 0xF8));
-            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 18, stroke);
+            FrameworkElement glyph = FluentIcon(PurposeIconKey(id), 18, stroke);
             if (glyph != null)
             {
                 into.Children.Add(glyph);

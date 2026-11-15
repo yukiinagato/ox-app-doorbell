@@ -221,9 +221,7 @@
                                             <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
                                                         VerticalAlignment="Center">
                                                 <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
-                                                          StrokeThickness="2" StrokeStartLineCap="Round"
-                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                    <Path Width="24" Height="24" Data="{StaticResource IconTopologyStar3}" Fill="{DynamicResource Dim}"/>
                                                 </Viewbox>
                                                 <TextBlock x:Name="ClusterCountText" FontSize="15"
                                                            Margin="6,0,0,0" VerticalAlignment="Center"
@@ -236,9 +234,7 @@
                                             <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
                                                         VerticalAlignment="Center">
                                                 <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
-                                                          StrokeThickness="2" StrokeStartLineCap="Round"
-                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                    <Path Width="24" Height="24" Data="{StaticResource IconDoor}" Fill="{DynamicResource Dim}"/>
                                                 </Viewbox>
                                                 <TextBlock x:Name="DoorCounterLabel" FontSize="15"
                                                            Margin="6,0,0,0" VerticalAlignment="Center"
@@ -251,9 +247,7 @@
                                             <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
                                                         VerticalAlignment="Center">
                                                 <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
-                                                          StrokeThickness="2" StrokeStartLineCap="Round"
-                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                    <Path Width="24" Height="24" Data="{StaticResource IconDeviceTablet}" Fill="{DynamicResource Dim}"/>
                                                 </Viewbox>
                                                 <TextBlock x:Name="PanelCounterLabel" FontSize="15"
                                                            Margin="6,0,0,0" VerticalAlignment="Center"
@@ -266,10 +260,8 @@
                                                         VerticalAlignment="Center" Visibility="Collapsed">
                                                 <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
                                                 <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                                    <Path x:Name="BatteryIcon" Data="{StaticResource IconBattery}"
-                                                          Stroke="{DynamicResource Dim}" StrokeThickness="2"
-                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                          StrokeLineJoin="Round"/>
+                                                    <Path Width="24" Height="24" x:Name="BatteryIcon" Data="{StaticResource IconBattery}"
+                                                          Fill="{DynamicResource Dim}"/>
                                                 </Viewbox>
                                                 <TextBlock x:Name="BatteryText" FontSize="15"
                                                            Margin="6,0,0,0" VerticalAlignment="Center"
@@ -297,10 +289,8 @@
                                             VerticalAlignment="Center" Click="OnOpenHistoryClick"/>
                                     <Viewbox DockPanel.Dock="Left" Width="20" Height="20"
                                              VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <Path Data="{StaticResource IconAlertTriangle}"
-                                              Stroke="{DynamicResource Warning}" StrokeThickness="2"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"/>
+                                        <Path Width="24" Height="24" Data="{StaticResource IconAlertTriangle}"
+                                              Fill="{DynamicResource Warning}"/>
                                     </Viewbox>
                                     <TextBlock x:Name="MissedBadgeText" FontSize="15"
                                                TextWrapping="Wrap" VerticalAlignment="Center"
@@ -547,10 +537,8 @@
                                     Margin="10,0,0,0">
                                 <StackPanel Orientation="Horizontal">
                                     <Viewbox Width="18" Height="18" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconWorld}"
-                                              Stroke="{DynamicResource Fg}" StrokeThickness="2"
-                                              StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                        <Path Width="24" Height="24" Data="{StaticResource IconWorld}"
+                                              Fill="{DynamicResource Fg}"/>
                                     </Viewbox>
                                     <TextBlock x:Name="LangBadgeText" FontSize="17"
                                                Margin="8,0,0,0" VerticalAlignment="Center"
@@ -714,9 +702,7 @@
                     BorderThickness="1" MouseLeftButtonDown="OnNoticeChipClick">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox Width="17" Height="17" VerticalAlignment="Center" Margin="0,0,8,0">
-                        <Path Data="{StaticResource IconBell}" Stroke="{DynamicResource Fg}"
-                              StrokeThickness="2" StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                        <Path Width="24" Height="24" Data="{StaticResource IconBell}" Fill="{DynamicResource Fg}"/>
                     </Viewbox>
                     <Ellipse x:Name="NoticeChipDot" Width="9" Height="9" Margin="0,0,8,0"
                              VerticalAlignment="Center" Fill="{DynamicResource Warn}"

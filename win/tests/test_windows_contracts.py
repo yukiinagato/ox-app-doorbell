@@ -2037,7 +2037,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', button)
         self.assertIn("return LocalAccent(background);", button)
 
-    def test_icons_are_tabler_geometries_never_hand_drawn(self):
+    def test_icons_are_fluent_geometries_never_hand_drawn(self):
         icons = read("win/DoorbellApp/Resources/Icons.xaml")
         window = read("win/DoorbellApp/MainWindow.xaml")
         app = read("win/DoorbellApp/App.xaml")
@@ -2055,7 +2055,8 @@ class WindowsContracts(unittest.TestCase):
         # Every key this shell asks for, from XAML and from code, resolves in that dictionary.
         referenced = set()
         for name in ("MainWindow.xaml", "App.xaml", "AdminDialog.xaml", "NoticeDialog.xaml",
-                     "WebAdminWindow.xaml", "MainWindow.xaml.cs"):
+                     "WebAdminWindow.xaml", "MainWindow.xaml.cs", "Pairing/PairingKeypad.xaml",
+                     "Settings/SettingsCatalog.cs", "Settings/SettingsWindow.Rows.cs"):
             text = read("win/DoorbellApp/" + name)
             referenced |= set(re.findall(r"\{StaticResource (Icon[A-Za-z0-9]+)\}", text))
             referenced |= set(re.findall(r'"(Icon[A-Za-z0-9]+)"', text))
@@ -2065,10 +2066,12 @@ class WindowsContracts(unittest.TestCase):
                 self.assertIn(key, keys, "%s is not in the generated dictionary" % key)
         # The cluster icon is the one the other shells draw.
         self.assertIn("IconTopologyStar3", referenced)
-        # Tabler's bounding-box rectangle would draw as a stroked square.
+        # Fluent geometry is filled, and XAML defaults to even-odd while SVG defaults to
+        # non-zero, so every geometry states its fill rule up front.
         for geometry in re.findall(r"<Geometry [^>]*>([^<]*)</Geometry>", icons):
             with self.subTest(geometry=geometry[:30]):
-                self.assertNotIn("M0 0h24v24H0z", geometry)
+                self.assertRegex(geometry, r"^F[01] M")
+        self.assertIn("assets/icons/fluent", icons)
 
         # No icon geometry is authored inline any more, anywhere in the shell.
         for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
@@ -2083,17 +2086,17 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("<Path Data=\"M", window)
         self.assertNotIn("<Path Data=\"F", window)
 
-        # Tabler is stroke-based, so every icon is stroked and never filled, two units thick with
-        # round caps and joins, inside a Viewbox so the stroke scales with the icon.
+        # Fluent icons are filled outlines on a 24 unit grid: every icon Path fills with its
+        # foreground, never strokes, and sits in a Viewbox so it scales with the icon.
         for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
-                           ("AdminDialog.xaml", admin)):
+                           ("AdminDialog.xaml", admin),
+                           ("PairingKeypad.xaml", read("win/DoorbellApp/Pairing/PairingKeypad.xaml"))):
             for block in re.findall(r"<Path\b[^>]*/>", text):
                 with self.subTest(name=name):
-                    self.assertIn("Stroke=", block)
-                    self.assertNotIn("Fill=", block)
-                    self.assertIn('StrokeThickness="2"', block)
-                    self.assertIn('StrokeStartLineCap="Round"', block)
-                    self.assertIn('StrokeLineJoin="Round"', block)
+                    self.assertRegex(block, r'Fill="(?:\{DynamicResource \w+\}|#[0-9A-Fa-f]{6})"')
+                    self.assertNotIn("Stroke", block)
+                    self.assertIn('Width="24" Height="24"', block)
+                    self.assertRegex(block, r'Data="\{StaticResource Icon[A-Za-z0-9]+\}"')
             self.assertEqual(text.count("<Path "), text.count("<Viewbox "))
 
         # The glyphs that used to stand in for icons are gone.
@@ -2102,15 +2105,23 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("🌐", code)
 
         # Icons built in code take the same shape, and a seeded purpose gets a real icon.
-        builder = code[code.index("private FrameworkElement TablerIcon("):
+        builder = code[code.index("private FrameworkElement FluentIcon("):
                        code.index("private Button MakePurposeButton(")]
-        self.assertIn("StrokeThickness = 2,", builder)
-        self.assertIn("PenLineCap.Round", builder)
-        self.assertIn("PenLineJoin.Round", builder)
+        self.assertIn("Shape.FillProperty", builder)
+        self.assertNotIn("Stroke", builder)
+        self.assertIn("Width = 24,", builder)
         self.assertIn("new Viewbox", builder)
-        self.assertNotIn("Fill =", builder)
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        glyph = shell[shell.index("internal FrameworkElement IconGlyph("):
+                      shell.index("/// <summary>Re-renders the frosted material")]
+        self.assertIn("Shape.FillProperty", glyph)
+        self.assertNotIn("Stroke", glyph)
+        self.assertIn("new Viewbox", glyph)
+        for rel in ("win/DoorbellApp/MainWindow.Dashboard.cs", "win/DoorbellApp/Ui/Fluent.cs"):
+            self.assertNotIn("StrokeThickness", read(rel), rel)
+        self.assertNotIn("GetWidenedPathGeometry", read("win/DoorbellApp/Ui/Fluent.cs"))
         mapped = code[code.index("private static string PurposeIconKey("):
-                      code.index("private FrameworkElement TablerIcon(")]
+                      code.index("private FrameworkElement FluentIcon(")]
         for purpose, key in (("p_visit", "IconHome"), ("p_delivery", "IconPackage"),
                              ("p_mail", "IconMail")):
             self.assertIn('case "%s": return "%s";' % (purpose, key), mapped)

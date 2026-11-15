@@ -108,7 +108,7 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// The Tabler icon for a purpose core seeds. An administrator's own purpose keeps whatever
+        /// The Fluent icon for a purpose core seeds. An administrator's own purpose keeps whatever
         /// icon they typed, because there is nothing to map it to.
         /// </summary>
         private static string PurposeIconKey(string id)
@@ -123,28 +123,25 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// A Tabler geometry drawn the way the whole fleet draws them: stroked, never filled,
-        /// two units thick with round caps and joins, inside a Viewbox so the stroke scales with
+        /// A Fluent geometry drawn filled on its 24 unit grid inside a Viewbox, so it scales with
         /// the icon. Returns null when the key is not in the generated dictionary.
         /// </summary>
-        private FrameworkElement TablerIcon(string key, double size, Brush stroke)
+        private FrameworkElement FluentIcon(string key, double size, Brush fill)
         {
             if (string.IsNullOrEmpty(key)) return null;
             object geometry = TryFindResource(key);
             if (!(geometry is Geometry)) return null;
             var path = new System.Windows.Shapes.Path
             {
+                Width = 24,
+                Height = 24,
                 Data = (Geometry)geometry,
-                StrokeThickness = 2,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
             };
             // Without a colour of its own the icon is drawn in the text colour it inherits, so
             // it follows the button it sits in through appearance changes and overrides.
-            if (stroke != null) path.Stroke = stroke;
+            if (fill != null) path.Fill = fill;
             else
-                path.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+                path.SetBinding(System.Windows.Shapes.Shape.FillProperty,
                     new System.Windows.Data.Binding
                     {
                         Path = new PropertyPath(System.Windows.Documents.TextElement.ForegroundProperty),
@@ -167,7 +164,7 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 34, null);
+            FrameworkElement glyph = FluentIcon(PurposeIconKey(id), 34, null);
             if (glyph != null) panel.Children.Add(glyph);
             else if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(new TextBlock

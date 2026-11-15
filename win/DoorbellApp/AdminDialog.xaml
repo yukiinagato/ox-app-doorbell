@@ -42,10 +42,8 @@
             <Button Content="9" Tag="9" Click="OnPad"/>
             <Button Tag="back" Click="OnPad">
                 <Viewbox Width="26" Height="26">
-                    <Path Data="{StaticResource IconBackspace}"
-                          Stroke="{DynamicResource Fg}" StrokeThickness="2"
-                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                          StrokeLineJoin="Round"/>
+                    <Path Width="24" Height="24" Data="{StaticResource IconBackspace}"
+                          Fill="{DynamicResource Fg}"/>
                 </Viewbox>
             </Button>
             <Button Content="0" Tag="0" Click="OnPad"/>

@@ -232,13 +232,11 @@ namespace DoorbellApp
 
             var placeholderIcon = new System.Windows.Shapes.Path
             {
+                Width = 24,
+                Height = 24,
                 Data = (Geometry)FindResource("IconPhoto"),
-                StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
             };
-            placeholderIcon.SetResourceReference(Shape.StrokeProperty, "Dim");
+            placeholderIcon.SetResourceReference(Shape.FillProperty, "Dim");
             var placeholderText = new TextBlock
             {
                 Text = Texts.T("dash.tile_no_still"),

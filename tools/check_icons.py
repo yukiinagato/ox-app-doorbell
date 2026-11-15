@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Refuse hand-drawn icons in shell UI code.
 
-Owner rule (2026-09-03): UI icons are never hand-drawn. Every shell takes them from one
-open-source library -- Tabler Icons (MIT), vendored under assets/icons/tabler/ -- through
-tools/gen_icons.py. A glyph typed out as a bezier in a view controller drifts from the other
+Owner rule (2026-09-03): UI icons are never hand-drawn. Every shell takes them from an
+open-source library -- Tabler Icons (MIT) under assets/icons/tabler/, Framework7 Icons under
+assets/icons/framework7/, and on Windows Fluent UI System Icons (MIT) under assets/icons/fluent/
+-- through tools/gen_icons.py. A glyph typed out as a bezier in a view controller drifts from the other
 three shells the moment anyone touches it, and nobody notices until the icons no longer match.
 
 What this refuses:
@@ -34,7 +35,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Paths that legitimately draw a shape that is not an icon. Each entry is (path, reason).
 ALLOWED = [
-    ("win/DoorbellApp/Resources/Icons.xaml", "the generated Tabler geometry dictionary"),
+    ("win/DoorbellApp/Resources/Icons.xaml", "the generated Fluent geometry dictionary"),
     ("webui/icons/tabler-sprite.svg", "the generated Tabler sprite"),
     ("webui/admin/index.html", "carries the generated sprite between its markers"),
     ("ios-kiosk/src/Screens/DBSettingsScreen.m",

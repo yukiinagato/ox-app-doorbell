@@ -156,25 +156,14 @@ namespace DoorbellApp.Ui
         }
 
         /// <summary>
-        /// A Tabler outline as a Fluent icon element. PathIcon fills its geometry, and Tabler
-        /// icons are strokes, so the stroke is widened into the outline it would draw.
+        /// A generated Fluent geometry as a PathIcon, which fills it with the foreground.
         /// </summary>
         public static IconElement Icon(string key)
         {
             var geometry = Application.Current == null
                 ? null : Application.Current.TryFindResource(key) as Geometry;
             if (geometry == null) return null;
-            var pen = new Pen(Brushes.Black, 2)
-            {
-                StartLineCap = PenLineCap.Round,
-                EndLineCap = PenLineCap.Round,
-                LineJoin = PenLineJoin.Round,
-            };
-            PathGeometry outline = geometry.GetWidenedPathGeometry(pen);
-            // Round caps and joins overlap the segments they close; nonzero fills them solid.
-            outline.FillRule = FillRule.Nonzero;
-            outline.Freeze();
-            return new PathIcon { Data = outline };
+            return new PathIcon { Data = geometry };
         }
     }
 }
