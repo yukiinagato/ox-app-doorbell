@@ -537,6 +537,7 @@ namespace DoorbellApp
             CallingPurposeSkip.Content = Texts.T("purpose.skip");
             OfflineAction.Content = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "idle.call" : "calling.cancel");
             ReplyCaption.Text = Texts.T("reply.banner");
+            System.Windows.Automation.AutomationProperties.SetName(ReplyBanner, Texts.T("ui.close"));
             OfflineTitle.Text = Texts.T("offline.title");
             OfflineBody.Text = Texts.T("offline.body");
             ApplySosLabel();

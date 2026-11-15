@@ -16,6 +16,7 @@ using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Kiosk;
 using DoorbellApp.Pairing;
+using DoorbellApp.Ui;
 using DoorbellApp.Util;
 
 
@@ -118,8 +119,60 @@ namespace DoorbellApp
                     ? Texts.T("visitor.restoring") : Texts.T("calling.title");
         }
 
+        private void HideReply()
+        {
+            _replyTimeout.Stop();
+            ReplyBanner.Visibility = Visibility.Collapsed;
+        }
+
+        private void OnReplyBannerClick(object sender, MouseButtonEventArgs e)
+        {
+            HideReply();
+            e.Handled = true;
+        }
+
+        private void OnReplyBannerTouchUp(object sender, TouchEventArgs e)
+        {
+            HideReply();
+            e.Handled = true;
+        }
+
+        private void OnReplyBannerSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            FitReply();
+        }
+
+        // The text box is the whole window minus a 16 (24 on wide windows) device-independent pixel margin.
+        private void FitReply()
+        {
+            double margin = ReplyBanner.ActualWidth >= 720 ? 24 : 16;
+            ReplyBanner.Padding = new Thickness(margin);
+            double width = ReplyBanner.ActualWidth - 2 * margin;
+            double height = ReplyBanner.ActualHeight - 2 * margin;
+            string text = ReplyText.Text;
+            if (width <= 0 || height <= 0 || string.IsNullOrEmpty(text)) return;
+            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var typeface = new Typeface(ReplyText.FontFamily, FontStyles.Normal, FontWeights.Bold,
+                                        FontStretches.Normal);
+            var culture = System.Globalization.CultureInfo.CurrentUICulture;
+            bool fits;
+            double size = ReplyFit.Fit(width, height, 28, height, s =>
+            {
+                var f = new FormattedText(text, culture, FlowDirection, typeface, s, Brushes.Black, dpi)
+                {
+                    MaxTextWidth = width,
+                    LineHeight = s * 1.15
+                };
+                return new ReplyExtent(f.Width, f.Height);
+            }, out fits);
+            ReplyText.FontSize = size;
+            ReplyText.LineHeight = size * 1.15;
+            ReplyText.Width = width;
+        }
+
         private void ShowCalling(string title = null)
         {
+            HideReply();
             StopSosCountdown();
             ExitScreensaver();
             if (title != null) _callTitleOverride = title;
@@ -305,6 +358,7 @@ namespace DoorbellApp
                     }
                     ReplyText.Text = ev.Str("text");
                     ReplyBanner.Visibility = Visibility.Visible;
+                    FitReply();
                     double ttl = 30;
                     double.TryParse(ev.Str("ttl_s"), out ttl);
                     _replyTimeout.Interval = TimeSpan.FromSeconds(ttl <= 0 ? 30 : ttl);
@@ -571,6 +625,7 @@ namespace DoorbellApp
         /// <summary>Targeted chime (or an explicit local monitor action) opens the incoming view.</summary>
         private void ShowIncoming(UiEvent ev, bool monitorOnly = false)
         {
+            HideReply();
             if (AdmitIncomingVisit(ev, monitorOnly)) return;
             if (_emergencyActive || _inCall) return;
             string door = ev.Str("door");

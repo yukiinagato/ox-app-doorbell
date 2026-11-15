@@ -314,30 +314,33 @@
     </LinearLayout>
     <LinearLayout
         android:id="@+id/reply_banner"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:gravity="center_horizontal"
-        android:maxWidth="640dp"
         android:orientation="vertical"
-        android:padding="40dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:importantForAccessibility="yes"
+        android:elevation="24dp"
         android:visibility="gone">
-        <TextView
-            android:id="@+id/reply_caption"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/reply_banner"
-            android:textColor="?android:attr/textColorSecondary"
-            android:textSize="20sp" />
-        <TextView
-            android:id="@+id/reply_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="40sp"
-            android:textStyle="bold" />
+        <ScrollView
+            android:id="@+id/reply_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbars="none">
+            <TextView
+                android:id="@+id/reply_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:lineSpacingMultiplier="1.15"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="40sp"
+                android:textStyle="bold" />
+        </ScrollView>
     </LinearLayout>
     <View
         android:id="@+id/secret_corner"

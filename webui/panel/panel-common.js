@@ -707,7 +707,25 @@
     return groups;
   }
 
-  return { esc: esc, qs: qs, normalizeLang: normalizeLang, format: format,
+  /* Largest integer font size in [floor, ceiling] at which measure(size) fits width x height.
+   * measure(size) returns {width, height} of the wrapped text. If even the floor overflows the
+   * floor is kept and fits is false: the caller lets the text scroll instead of truncating. */
+  function fitFontSize(width, height, measure, floor, ceiling) {
+    var lo = Math.floor(floor || 28), hi = Math.floor(ceiling || height), mid, m;
+    if (hi < lo) hi = lo;
+    function fits(size) {
+      var r = measure(size);
+      return r.width <= width + 0.5 && r.height <= height + 0.5;
+    }
+    if (!fits(lo)) return { size: lo, fits: false };
+    while (lo < hi) {
+      mid = Math.ceil((lo + hi) / 2);
+      if (fits(mid)) lo = mid; else hi = mid - 1;
+    }
+    return { size: lo, fits: true };
+  }
+
+  return { fitFontSize: fitFontSize, esc: esc, qs: qs, normalizeLang: normalizeLang, format: format,
            createCatalog: createCatalog, setText: setText,
            applyEmergencyText: applyEmergencyText, newestHlc: newestHlc,
            sizeClass: sizeClass, colorRoles: colorRoles, applyColorRoles: applyColorRoles,

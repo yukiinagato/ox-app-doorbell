@@ -12,10 +12,6 @@
 <body class="doorPage">
 <div id="layout">
   <div id="offlineBand" class="band" data-semantic-id="status.offline" role="status" style="display:none"></div>
-  <div id="replyBanner" role="status" style="display:none">
-    <div class="cap" id="replyCaption"></div>
-    <div class="txt" id="replyText"></div>
-  </div>
   <header class="visitorHeading">
     <h1 id="title"></h1>
     <div id="visitorLanguage" class="langSwitch" role="group">
@@ -24,6 +20,10 @@
       <button type="button" data-lang="zh" lang="zh" aria-pressed="false"></button>
     </div>
   </header>
+  <div id="replyBanner" role="button" tabindex="0" style="display:none">
+    <div id="replyBox"><div class="txt" id="replyText"></div></div>
+    <div class="txt" id="replyMeasure" aria-hidden="true"></div>
+  </div>
   <main id="main">
     <div id="hint"></div>
     <div id="doorList"></div>
@@ -108,7 +108,7 @@
     $("visitorLanguage").setAttribute("aria-label", t("idle.language"));
     $("note").innerHTML = esc(t("panel.no_audio_note"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
-    $("replyCaption").innerHTML = esc(t("reply.banner"));
+    $("replyBanner").setAttribute("aria-label", t("ui.close"));
     if (!currentCall) {
       $("callingMsg").innerHTML = esc(t("panel.calling"));
       $("cancelCall").innerHTML = esc(t("calling.cancel"));
@@ -472,16 +472,43 @@
 
   var lastReplyTs = -1;
   var replyTimer = null;
+  var REPLY_FLOOR = 28;
+  function showingReply() { return $("replyBanner").style.display !== "none"; }
+  function fitReply() {
+    if (!showingReply()) return;
+    var box = $("replyBox"), txt = $("replyText"), meas = $("replyMeasure");
+    var w = box.clientWidth, h = box.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    meas.innerHTML = txt.innerHTML;
+    meas.style.width = w + "px";
+    var r = DoorbellPanelCommon.fitFontSize(w, h, function (size) {
+      meas.style.fontSize = size + "px";
+      return { width: meas.scrollWidth, height: meas.offsetHeight };
+    }, REPLY_FLOOR, h);
+    txt.style.fontSize = r.size + "px";
+    box.className = r.fits ? "" : "overflowing";
+  }
+  function hideReply() {
+    $("replyBanner").style.display = "none";
+    document.body.className = document.body.className.replace(/ ?replyActive/, "");
+  }
+  $("replyBanner").onclick = hideReply;
+  $("replyBanner").onkeydown = function (e) {
+    var key = e.keyCode;
+    if (key === 13 || key === 32 || key === 27) hideReply();
+  };
+  window.addEventListener("resize", fitReply, false);
+  window.addEventListener("orientationchange", fitReply, false);
   function renderReply(reply) {
     if (lastReplyTs === -1) { lastReplyTs = (reply && reply.ts) || 0; return; }
     if (!reply || !reply.ts || reply.ts <= lastReplyTs) return;
     lastReplyTs = reply.ts;
     $("replyText").innerHTML = esc(reply.text);
     $("replyBanner").style.display = "block";
+    if (document.body.className.indexOf("replyActive") < 0) document.body.className += " replyActive";
+    fitReply();
     if (replyTimer) clearTimeout(replyTimer);
-    replyTimer = setTimeout(function () {
-      $("replyBanner").style.display = "none";
-    }, REPLY_MS);
+    replyTimer = setTimeout(hideReply, REPLY_MS);
   }
 
 
@@ -498,6 +525,12 @@
     lastPurposes = state.purposes || [];
     renderDoors(state.doors || []);
     renderReply(state.reply);
+    if (showingReply()) {
+      var rd = state.doors || [], k;
+      if (state.emergency && state.emergency.active) hideReply();
+      for (k = 0; k < rd.length; k++)
+        if (rd[k].call_state === "answered" || rd[k].call_state === "in_call") hideReply();
+    }
     var match = null, i;
     if (currentCall) {
       for (i = 0; i < (state.doors || []).length; i++)

@@ -481,18 +481,6 @@
                     Margin="20,12,20,18" Click="OnCancelClick"/>
         </Grid>
 
-        <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
-                HorizontalAlignment="Center" Style="{StaticResource CardBorder}"
-                CornerRadius="8" Padding="60,40" MaxWidth="900">
-            <StackPanel>
-                <TextBlock x:Name="ReplyCaption" FontSize="22" Foreground="{DynamicResource Dim}"
-                           HorizontalAlignment="Center"/>
-                <TextBlock x:Name="ReplyText" FontSize="46" FontWeight="Bold" TextWrapping="Wrap"
-                           Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"
-                           Margin="0,14,0,0" TextAlignment="Center"/>
-            </StackPanel>
-        </Border>
-
         <Grid x:Name="OfflineView" Visibility="Collapsed" Background="{DynamicResource Bg}">
             <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
             <ScrollViewer Grid.Row="0" Margin="20,18,20,0" VerticalScrollBarVisibility="Auto"
@@ -860,6 +848,21 @@
         <!-- Active SOS (ui-guidelines 4, SOS): full-screen negative overlay above every other
              layer (ZIndex), source and time, and one Clear action that needs a deliberate long
              press; keyboard users get a confirmation instead. Colors come from the Core event. -->
+        <Border x:Name="ReplyBanner" Visibility="Collapsed" Background="{DynamicResource Bg}"
+                Padding="24" Cursor="Hand" MouseLeftButtonUp="OnReplyBannerClick"
+                TouchUp="OnReplyBannerTouchUp" SizeChanged="OnReplyBannerSizeChanged">
+            <Grid>
+                <TextBlock x:Name="ReplyCaption" Visibility="Collapsed"/>
+                <ScrollViewer x:Name="ReplyScroll" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <TextBlock x:Name="ReplyText" FontSize="46" FontWeight="Bold" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" TextAlignment="Center"
+                               LineStackingStrategy="BlockLineHeight"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
         <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="{DynamicResource Negative}"
               Panel.ZIndex="1000">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"

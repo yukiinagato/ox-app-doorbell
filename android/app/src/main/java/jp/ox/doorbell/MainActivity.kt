@@ -7,6 +7,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -66,8 +69,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private lateinit var cancelButton: Button
     private lateinit var pulse: View
     private lateinit var replyBanner: View
-    private lateinit var replyCaption: TextView
     private lateinit var replyText: TextView
+    private lateinit var replyScroll: View
     private lateinit var offlineView: View
     private lateinit var offlineTitle: TextView
     private lateinit var offlineBody: TextView
@@ -171,6 +174,31 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         }
     }
     private val replyTimeout = Runnable { replyBanner.visibility = View.GONE }
+
+    private fun dismissReply() {
+        ui.removeCallbacks(replyTimeout)
+        replyBanner.visibility = View.GONE
+    }
+
+    private fun fitReply() {
+        val box = replyScroll
+        val text = replyText.text
+        val width = box.width
+        val height = box.height
+        if (width <= 0 || height <= 0 || text.isEmpty()) return
+        val paint = TextPaint(replyText.paint)
+        val floor = (28 * resources.displayMetrics.density).toInt()
+        val spacing = 1.15f
+        val result = ReplyFit.fit(width, height, floor, maxOf(floor, height)) { size ->
+            paint.textSize = size.toFloat()
+            @Suppress("DEPRECATION")
+            val layout = StaticLayout(text, paint, width, Layout.Alignment.ALIGN_CENTER, spacing, 0f, false)
+            var widest = 0f
+            for (i in 0 until layout.lineCount) widest = maxOf(widest, layout.getLineWidth(i))
+            ReplyFit.Extent(Math.ceil(widest.toDouble()).toInt(), layout.height)
+        }
+        replyText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, result.sizePx.toFloat())
+    }
     private var setupLaunchRequested = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -531,8 +559,15 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         cancelButton = findViewById(R.id.cancel_button)
         pulse = findViewById(R.id.pulse)
         replyBanner = findViewById(R.id.reply_banner)
-        replyCaption = findViewById(R.id.reply_caption)
         replyText = findViewById(R.id.reply_text)
+        replyScroll = findViewById(R.id.reply_scroll)
+        val replyPad = ((if (resources.configuration.smallestScreenWidthDp >= 600) 24 else 16) *
+            resources.displayMetrics.density).toInt()
+        replyBanner.setPadding(replyPad, replyPad, replyPad, replyPad)
+        replyBanner.setOnClickListener { dismissReply() }
+        replyScroll.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or2, ob ->
+            if (r - l != or2 - ol || b - t != ob - ot) fitReply()
+        }
         offlineView = findViewById(R.id.offline_view)
         offlineTitle = findViewById(R.id.offline_title)
         offlineBody = findViewById(R.id.offline_body)
@@ -768,8 +803,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             this, statusSnapshot, cfg, clusterClock.now().minuteOfDay(),
         )
         if (dashboard != null) return
-        replyBanner.background = ShellUi.rounded(this, palette.surfaceAlt, UiTokens.RADIUS_SHEET)
-        replyCaption.setTextColor(ShellUi.opaque(palette.muted))
+        replyBanner.setBackgroundColor(ShellUi.opaque(palette.surface))
         replyText.setTextColor(ShellUi.opaque(palette.ink))
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
@@ -982,7 +1016,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         purposeCancelButton.text = texts.t("purpose.cancel_call", R.string.purpose_cancel_call)
         updateCallingTitle()
         updateCallActionLabel()
-        replyCaption.text = texts.t("reply.banner", R.string.reply_banner)
+        replyBanner.contentDescription = texts.t("ui.close", R.string.ui_close)
         offlineTitle.text = if (uiCallId.isNotEmpty())
             texts.t("visitor.restoring", R.string.visitor_restoring)
         else texts.t("offline.title", R.string.offline_title)
@@ -1174,6 +1208,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     private fun showPurposeChooser() {
+        dismissReply()
         if (showsDashboard) return
         choosingPurpose = true
         visitorStatus.visibility = View.GONE
@@ -1201,6 +1236,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     /** Show ringing while preserving an explicit purpose confirmation title. */
     private fun showCalling(title: String? = null) {
+        dismissReply()
         if (showsDashboard) return
         choosingPurpose = false
         visitorStatus.visibility = View.GONE
@@ -1226,6 +1262,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     private fun showEstablished() {
+        dismissReply()
         if (showsDashboard) return
         choosingPurpose = false
         visitorStatus.visibility = View.GONE
@@ -1317,6 +1354,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     private fun showOffline() {
+        dismissReply()
         visitorStatus.visibility = View.GONE
         if (showsDashboard) {
             visitorShell.visibility = View.VISIBLE
@@ -1429,17 +1467,18 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                     val spokenLang = ev.optString("lang")
                     audio.playFile(path) { speakNow(spoken, spokenLang) }
                 }
-                replyText.text = ev.optString("text")
-                replyBanner.visibility = View.VISIBLE
-                var ttl = ev.optDouble("ttl_s", 30.0)
-                if (ttl <= 0) ttl = 30.0
-                ui.removeCallbacks(replyTimeout)
-                ui.postDelayed(replyTimeout, (ttl * 1000).toLong())
                 val replyDoor = ev.optString("door")
                 if (replyDoor.isEmpty() || replyDoor == app.boot.door) {
                     clearCallProjection()
                     showIdle()
                 }
+                replyText.text = ev.optString("text")
+                replyBanner.visibility = View.VISIBLE
+                replyScroll.post { fitReply() }
+                var ttl = ev.optDouble("ttl_s", 30.0)
+                if (ttl <= 0) ttl = 30.0
+                ui.removeCallbacks(replyTimeout)
+                ui.postDelayed(replyTimeout, (ttl * 1000).toLong())
             }
             // Replicated visitor-language update.
             "visitor_lang" -> {
