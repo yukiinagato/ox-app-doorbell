@@ -1,10 +1,14 @@
-# Native UI redesign: handoff (state after the second 2026-11-15 integration)
+# Native UI redesign: handoff (state after the third integration)
 
 This file describes `main` after the air-quality work, the Core/CI fixes, the
-per-platform fixes and the kiosk settings audit were brought together, plus the second
-integration: the Core visitor-flow completion, the full-screen quick-reply overlay on
-every shell, and the language-switch and settings responsiveness work. Verification is
-stated per deliverable; anything under "Not verified" is untested, not passing.
+per-platform fixes and the kiosk settings audit were brought together, the second
+integration (the Core visitor-flow completion, the full-screen quick-reply overlay on
+every shell, the language-switch and settings responsiveness work), and the third
+integration: the visitor flow implemented on Core, the web door page, Admin, the kiosk,
+iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
+0.3.1.32), Android 0.6.0 (54), iOS 0.7.0 (80), tvOS 0.6.0 (30), iOS 5 kiosk 0.9.0 (101)
+with the iOS 9 profile 0.8.0 (424). Verification is stated per deliverable; anything
+under "Not verified" is untested, not passing.
 
 Related documents:
 
@@ -65,9 +69,17 @@ and `tools/check_icons.py` rejects hand-drawn icons.
 
 ## State per deliverable
 
-### Windows (0.2.1, file version 0.2.1.30)
+### Windows (0.3.1, file version 0.3.1.32)
 
-Done: Fluent redesign, NavigationView home, settings parity list emptied, SOS flow,
+Visitor flow (0.3.0): the door-station start page and wizard renderer (model, start-page
+renderer) and the full flow editor, with a UI suite and a debug sample document. The sample
+and `win/scripts/ui_smoke.ps1` follow the purposes-only default start page (no `o_call`).
+Verified: `win/scripts/test_visitor_flow.sh` (19 documents, 21 walks), the other
+`win/scripts/test_*.sh`, `win/tests/test_windows_contracts.py` and `typecheck_host.py`.
+Not verified: the Windows app was never compiled or run, so the flow renderer, the editor
+and the UI suite have not been seen. No preview in the editor.
+
+Earlier work: Fluent redesign, NavigationView home, settings parity list emptied, SOS flow,
 zoom host, conversation fixes, Fluent icons, stepper chevrons sized, a read-only
 air-quality indicator (`MainWindow.AirQuality.cs`, no Bluetooth hosting). Quick-reply
 overlay (`ReplyFit.cs`, `ReplyDismissGuard.cs`). Settings responsiveness: writes go
@@ -95,9 +107,17 @@ permanent firewall rule (`DoorbellTest SSH (LAN)`), OpenSSH Server, the task
 `DoorbellTest-RunJob` and `C:\DoorbellTest`; `setup_test_host.ps1 -Uninstall` reverts
 them. The session there is Remote Desktop: UI tests need it connected.
 
-### Android (0.5.6, build 53)
+### Android (0.6.0, build 54)
 
-Done: Material 3 (modern) and framework widgets (legacy19) through per-flavor
+Visitor flow (0.6.0): the flow wizard on the door station and a native flow editor
+(`VisitorFlowEditor.kt`, `VisitorFlowEditModel.kt`). Verified: run on an emulator including
+notify, call and `on_unanswered`; modern and legacy19 `assemble` and unit tests on this
+integration. Known gaps: option icons are emoji taken from the purpose data, the version
+caption sits mid-screen, and the editor has no preview. Step reordering is not
+implemented. Parity scan in `tools/tests/test_android_settings_parity.py` now includes the
+editor sources.
+
+Earlier work: Material 3 (modern) and framework widgets (legacy19) through per-flavor
 `PlatformUi`/`ShellActivity`; home without history; SOS flow; zoom (recentred offset
 fixed: a clamped `-0f` no longer differs from `ZoomState()`); role change; quiet-hours,
 playback and secure-store bridge-order fixes; camera close race fix; null-safe household
@@ -122,9 +142,20 @@ speech, playback policy, logs, capability override, other devices' local setting
 delete confirmations) until `KNOWN_GAPS` and `DYNAMIC_GAPS` in
 `tools/tests/test_android_settings_parity.py` are empty.
 
-### iOS and tvOS (iOS 0.6.6, build 79; tvOS 0.5.7, build 29)
+### iOS and tvOS (iOS 0.7.0, build 80; tvOS 0.6.0, build 30)
 
-Done: tab bar home, collection view tiles, table-based history and editors, alert admin
+Visitor flow: the wizard on the door-station home (`VisitorFlowView.swift`,
+`VisitorFlowPages.swift`) and a full flow editor in Settings (`VisitorFlowEditor.swift`);
+the UI manifest is published again when Core starts after the supervisor so a fresh node
+gets the wizard. Verified on this integration: the Doorbell scheme builds for the iOS
+simulator (arm64, deployment target 14.0), DoorbellTests pass (271 tests) on an iPhone
+simulator, DoorbellIOS9 builds (device, unsigned) and DoorbellTV builds (tvOS simulator).
+Simulator screenshots were taken through debug hooks only: no taps were made, no images
+were rendered, and editor saves were never run against a live Core.
+`ios-compat/tests/modern_settings_parity_test.py` now scans the flow editor sources and
+ignores message ids; it is still not wired into `test_host.sh`.
+
+Earlier work: tab bar home, collection view tiles, table-based history and editors, alert admin
 prompt, call action zone, SOS flow, zoom, role change (`RoleChangeController.swift`), a
 first group of settings, UI gesture tests target, SF Symbols with Framework7 fallbacks.
 Fixed since 0.5.1: tvOS Home header and nav title, SOS overlap, `sos_active` hook,
@@ -138,24 +169,26 @@ into one off-main snapshot read with row-level updates and off-main config write
 (`SettingsPerf.swift`). Measured in the simulator: 10 change events went from 170-200 ms
 to 0.017 ms. No device measurement.
 
-Verified: host-side checks only (string generation, icon checks, English-source check,
-`ios-compat` host tests, conformance). `xcodebuild` was not run on this integration: the
-air-quality and rule-label Swift edits are covered only by review.
-
-Not verified: no iOS or tvOS build of the merged tree; the role change was never exercised
+Not verified: the role change was never exercised
 live; the SOS overlap with a door tile and the accessibility-size layouts were never seen
-(no door in the simulator cluster, no tvOS gesture); the DoorbellIOS9 target was not built
-after the icon change.
+(no door in the simulator cluster, no tvOS gesture).
 
-Next: run the five-target build and checks, then the remaining parity (rules extras,
+Next: tap through the flow and the editor against a live Core, then the remaining parity (rules extras,
 quiet-hours suppress lists, unlock binding, colour picker, SIP TLS, cluster volume
 defaults, other devices' roles, speech, playback policy, raw config, logs, capability and
-UI-element overrides, tvOS search). `ios-compat/tests/modern_settings_parity_test.py`
-exists but is not wired into `test_host.sh`.
+UI-element overrides, tvOS search).
 
-### iOS 5 kiosk (0.8.6, build 100; iOS 9 profile 0.7.6, build 423)
+### iOS 5 kiosk (0.9.0, build 101; iOS 9 profile 0.8.0, build 424)
 
-Done and seen on devices: stock UIKit redesign, home without history, SOS panel, role
+Visitor flow (0.9.0): the wizard on the door screen (`DBVisitorFlowModel`, `DBDoorScreen`),
+a flow model with a host test that reads the conformance fixture, and a full flow editor
+in settings (`DBFlowEditorPages`). The app links the visitor-flow Core exports. Seen on the
+iPad mini and the iPad 1 through static debug screenshots only: no taps were made.
+Verified: `ios-compat/scripts/test_host.sh`; `ios-kiosk/scripts/build_app.sh` builds the
+merged tree (armv7, iOS 5.1 target, zero unresolved symbols) and the binary contains the
+visitor-flow Core code and strings. Settings parity scans include the flow editor sources.
+
+Done and seen on devices (0.8.6 and earlier): stock UIKit redesign, home without history, SOS panel, role
 change, full settings parity, admin retry on writes, video stage rule, Framework7 icons
 throughout, door-station home recomposed, Settings category tiles and QR section, indoor
 home spacing, microphone request and TCC entitlements, talk toggle in live view, call
@@ -170,13 +203,12 @@ refresh and asynchronous optimistic control writes (0.8.6). Measured on the iPad
 language switch went from about 480 ms to about 70 ms, the settings rebuild from 200 ms to
 9 ms, and the first control write from 506 ms to under 1 ms.
 
-Verified: `ios-kiosk/scripts/build_app.sh` builds the merged tree (armv7, iOS 5.1 target,
-zero unresolved symbols); `ios-compat` host tests pass. Earlier versions were installed on
+Earlier verification: `ios-compat` host tests pass. Earlier versions were installed on
 the iPad 1 (0.7.1) and the three iPad mini 1 devices (0.7.2, `"mic":true`; the previous app
 and boot.json are at `/var/tmp/Doorbell.app.pre-redesign` and
 `/var/tmp/boot.json.pre-redesign` on each).
 
-Not verified: 0.8.6 was not installed anywhere; portrait and iPad 1 screenshots, the
+Not verified: 0.9.0 and 0.8.6 were not installed anywhere as built here; portrait and iPad 1 screenshots, the
 calling/connected/reply states on a device, a sweep of every settings sub-page, gestures
 (pinch, pan, SOS slide), rotated door stations, H.264 under zoom and the role change
 restart. The microphone fix has not been confirmed in a real call. The iOS 9 armv7 lane
@@ -186,7 +218,7 @@ Known defects: the door-station home has been seen on the indoor mini in landsca
 phone landscapes under 500 pt still use the old two-column layout; the clock text is hard
 to read over a bright wallpaper; the bottom caption can clip.
 
-Next: install 0.8.6 on the iPad 1 and one mini, review portrait and the remaining states,
+Next: install 0.9.0 on the iPad 1 and one mini, tap through the wizard and the editor, review portrait and the remaining states,
 fix the defects above.
 
 ### Web panel and Admin (ship inside Core)
@@ -200,19 +232,27 @@ air-quality admin section; the rules list shows a localized trigger label (or th
 name) instead of the raw id for seeded `r_*_default` rules, and the unknown-trigger label
 instead of "Button press" for triggers it does not list.
 
-Verified: `webui/tests/*.test.js` pass. Not verified: iOS 5 Safari, a real H.264 stream,
+Visitor flow: the shared walker (`webui/panel/visitor-flow.js`), the wizard on the door
+page and the Admin flow editor (with simulator). Verified against a real local Core node
+with screenshots; `webui/tests/*.test.js` pass. Known gaps: multi-door web panels use the
+classic screen; Admin saves the flow through the batch route with a snapshot comparison
+instead of the revision-checked commit.
+
+Not verified: iOS 5 Safari, a real H.264 stream,
 rotation against a real rotated station, SOS send on a single preview node reported
 "preparation could not be confirmed" (cause not investigated).
 
 ### Core
 
-Visitor flow: in the tree and partly implemented. `core/src/node/visitor_flow.{h,cpp}`,
+Visitor flow: implemented. `core/src/node/visitor_flow.{h,cpp}`,
 `visitor_flow_service.inc`, node hooks and routes, the `visitor_message` event with
 Telegram, HA and device_alert mappings, three additive exports
 (`db_core_visitor_flow_json`, `db_core_visitor_flow_template_json`,
 `db_core_visitor_notify_json`), a seeded `r_visitor_message_default` rule, conformance
-fixture and reference walker, `core/tests/test_visitor_flow.cpp`. Native shells stay on the
-classic visitor screen until they advertise `visitor_flow_v1`.
+fixture and reference walker, `core/tests/test_visitor_flow.cpp`. The default wizard lists
+the enabled purposes only (a generic Call option exists only when no purpose is enabled),
+steps carry an optional `order`, and the resolved document has a `step_order` list.
+Shells that do not advertise `visitor_flow_v1` stay on the classic visitor screen.
 
 Air quality: `core/src/sensors/mops_vida.{h,cpp}`, `core/src/node/air_quality_service.inc`
 and `core/tests/test_air_quality.cpp`, with the `air_quality_changed` event and the
@@ -236,9 +276,19 @@ panels and Web Push do not present visitor messages.
 
 ### Visitor flow status
 
-Core is complete (above). Remaining: the Admin flow editor and simulator, the web
-`door.html` renderer, and the renderer and editor on each native shell; no shell
-advertises `visitor_flow_v1`. Remaining work packages are design section 3, WP2 to WP8.
+Implemented on Core, the web door page, Admin, the kiosk, iOS and tvOS, Android and
+Windows (see each deliverable for what was verified). Known gaps: step reordering in the
+editors is not implemented although Core now has `order` and `step_order`; option icons on
+Android are emoji from the purpose data; the version caption sits mid-screen on Android;
+the Windows and Android editors have no preview; multi-door web panels use the classic
+screen; Admin saves the flow through the batch route with a snapshot comparison instead of
+the revision-checked commit. Verification gaps: Windows was never compiled or run; the
+kiosk and iOS were seen only through static debug screenshots; the iOS editor saves were not
+run against a live Core.
+
+String keys shared by several shells (`flow_editor.conflict`, `flow_editor.image_upload`,
+`flow_editor.call_flow_superseded`) keep one wording each in `i18n/strings.yaml`; Android's
+image placement label with a value is `flow_editor.image_place_current`.
 
 ### PM2.5 air-quality sensors (unverified WIP)
 

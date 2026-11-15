@@ -86,12 +86,15 @@ switch live on rotation or window resize.
   (flag-free text labels: 日本語 / English / 中文) and the clock and date at
   its right.
 - Notice banner below the top row when an announcement exists.
-- Hero "Call" pill: the primary action, the largest and most central control,
-  with its icon.
-- Below it, the purpose cards in a grid (2 columns compact, 3-4 expanded),
-  large icon plus label; disabled purposes are hidden. In purpose-first mode
-  the grid is the primary choice and the Call pill reads "Call without
-  choosing".
+- The visitor flow start page is the home. Its options are the enabled
+  purposes, as large cards in a grid (2 columns compact, 3-4 expanded) with
+  icon plus label; disabled purposes are hidden. When purposes exist there is
+  no separate Call button: choosing a purpose leads to its page or starts the
+  call. Only when no purpose is enabled does the start page offer a single
+  generic Call option. Later pages show Back (not on the start page), and end
+  pages show Done and return to the start page after their timeout.
+- Shells that do not advertise `visitor_flow_v1` keep the classic home with a
+  hero Call pill above the purpose grid.
 - Caption line at the very bottom: one quiet line with the app version and the
   diagnostics summary. It stays visible on purpose.
 - States reuse the same frame: calling (pulsing status + Cancel), connected
