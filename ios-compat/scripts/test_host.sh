@@ -176,6 +176,13 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/config_batch_fallback_policy_test.swift" \
   -o "$OUT/config_batch_fallback_policy_test"
 
+# The visitor-flow walker is Foundation-only; this replays every walk case of the shared
+# conformance fixture against the production file.
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/VisitorFlow.swift" \
+  "$REPO_ROOT/ios-compat/tests/visitor_flow_test.swift" \
+  -o "$OUT/visitor_flow_test"
+
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Net" \
   "$REPO_ROOT/ios-kiosk/src/Net/DBHTTPMediaSupport.m" \
@@ -259,6 +266,7 @@ bash "$SCRIPT_DIR/test_semantic_style_host.sh"
 "$OUT/fmp4_demuxer_test"
 "$OUT/core_event_dispatch_gate_test"
 "$OUT/config_batch_fallback_policy_test"
+"$OUT/visitor_flow_test"
 "$OUT/http_media_test"
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"

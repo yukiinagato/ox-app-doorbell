@@ -25,10 +25,11 @@ final class ConfigWriter {
         /// The write committed. `contrasts` carries the ratios Core measured, which are never a
         /// refusal: §5.2 is explicit that a colour an administrator typed is saved and only
         /// commented on.
-        case ok(contrasts: [Double])
+        /// `notes` are message keys of non-contrast warnings (`visitor_flow.no_call`, ...).
+        case ok(contrasts: [Double], notes: [String])
         case failed(String)
 
-        static var ok: Result { return .ok(contrasts: []) }
+        static var ok: Result { return .ok(contrasts: [], notes: []) }
 
         var isOk: Bool { if case .ok = self { return true }; return false }
     }
@@ -104,13 +105,14 @@ final class ConfigWriter {
                     return
                 }
                 let contrasts = ConfigWriter.contrasts(outcome.warnings)
+                let notes = ConfigWriter.notes(outcome.warnings)
                 DispatchQueue.main.async {
                     guard outcome.ok else {
                         completion(.failed(outcome.error.isEmpty ? "config_persistence_failed"
                             : outcome.error))
                         return
                     }
-                    completion(.ok(contrasts: contrasts))
+                    completion(.ok(contrasts: contrasts, notes: notes))
                 }
             }
             return
@@ -138,8 +140,9 @@ final class ConfigWriter {
             let error = ConfigUtil.str(payload, "err")
                 ?? (status == 404 || status == 401 ? "batch_unavailable" : "request_failed")
             let contrasts = ConfigWriter.contrasts(warnings)
+            let notes = ConfigWriter.notes(warnings)
             DispatchQueue.main.async {
-                completion(ok ? .ok(contrasts: contrasts) : .failed(error))
+                completion(ok ? .ok(contrasts: contrasts, notes: notes) : .failed(error))
             }
         }.resume()
     }
@@ -150,6 +153,15 @@ final class ConfigWriter {
         return warnings.compactMap { warning in
             let ratio = ConfigUtil.double(warning, "contrast", 0)
             return ratio > 0 ? ratio : nil
+        }
+    }
+
+    /// Message keys of the visitor-flow warnings that rode along with a successful write.
+    private static func notes(_ warnings: [[String: Any]]) -> [String] {
+        return warnings.compactMap { warning in
+            guard let key = warning["message_key"] as? String, key.hasPrefix("visitor_flow.")
+            else { return nil }
+            return key
         }
     }
 
@@ -175,16 +187,21 @@ final class ConfigWriter {
     /// endpoint, because that failure means the node is too old for atomic writes.
     static func message(_ texts: Texts, _ result: Result) -> String {
         switch result {
-        case .ok(let contrasts):
+        case .ok(let contrasts, let notes):
             // The write went through: the warning is shown next to the confirmation, never
             // instead of it.
-            guard !contrasts.isEmpty else { return texts.t("settings.saved") }
-            let advice = contrasts
-                .map { texts.t("theme.contrast_warning", String(format: "%.1f", $0)) }
-                .joined(separator: " · ")
-            return texts.t("settings.saved") + " · " + advice
+            let advice = contrasts.map { texts.t("theme.contrast_warning", String(format: "%.1f", $0)) }
+                + notes.map { texts.t($0) }
+            guard !advice.isEmpty else { return texts.t("settings.saved") }
+            return texts.t("settings.saved") + " · " + advice.joined(separator: " · ")
         case .failed(let code):
             if code == "batch_unavailable" { return texts.t("admin.atomic_batch_unavailable") }
+            if code.hasPrefix("unresolved_config_conflict") { return texts.t("flow_editor.conflict") }
+            if let flow = VisitorFlowEditor.errorKey(code) {
+                let known = texts.t(flow.key)
+                let text = known == flow.key ? texts.t("visitor_flow.invalid", flow.key) : known
+                return flow.detail.isEmpty ? text : text + " (" + flow.detail + ")"
+            }
             return texts.t("settings.save_failed")
         }
     }

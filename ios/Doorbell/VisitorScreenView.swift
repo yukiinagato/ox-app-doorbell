@@ -28,6 +28,11 @@ final class VisitorScreenView: UIView {
 
     private let root = UIStackView()
     private let scroll = UIScrollView()
+    /// The visitor flow's page renderer; it replaces the call button and the purpose grid while a
+    /// flow is active. Without a flow the classic composition below is unchanged.
+    let flowView: VisitorFlowView
+    private let flowStack = UIStackView()
+    private(set) var flowActive = false
     private let footer = UIStackView()
     private let noticeColumn = UIStackView()
     private let actionColumn = UIStackView()
@@ -61,6 +66,7 @@ final class VisitorScreenView: UIView {
     private var sosVisible = true
     private var columnWidth: NSLayoutConstraint?
     private var callWidth: NSLayoutConstraint?
+    private var langWidth: NSLayoutConstraint?
     /// The call button may not hug its label: the verb is two characters in Japanese, and a
     /// button barely wider than a finger is not what a visitor should have to hunt for.
     private static let callButtonMinimumColumnShare: CGFloat = 0.8
@@ -73,6 +79,7 @@ final class VisitorScreenView: UIView {
         self.langBar = langBar
         self.purposeSection = purposeSection
         self.sosControl = sosControl
+        self.flowView = VisitorFlowView(texts: texts)
         super.init(frame: .zero)
         build()
     }
@@ -151,6 +158,12 @@ final class VisitorScreenView: UIView {
         scroll.showsVerticalScrollIndicator = true
         scroll.addSubview(root)
         addSubview(scroll)
+        flowStack.axis = .vertical
+        flowStack.spacing = 12
+        flowStack.alignment = .fill
+        flowStack.translatesAutoresizingMaskIntoConstraints = false
+        flowStack.isHidden = true
+        addSubview(flowStack)
         // The action zone's last line: the compact SOS trigger at the leading edge, where the role
         // offers one, and the identity line beside it.
         footer.axis = .horizontal
@@ -165,6 +178,10 @@ final class VisitorScreenView: UIView {
             scroll.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -16),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            flowStack.topAnchor.constraint(equalTo: topAnchor),
+            flowStack.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -12),
+            flowStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            flowStack.trailingAnchor.constraint(equalTo: trailingAnchor),
             footer.bottomAnchor.constraint(equalTo: bottomAnchor),
             footer.leadingAnchor.constraint(equalTo: leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -186,6 +203,8 @@ final class VisitorScreenView: UIView {
         isLandscape = landscape
         columnWidth?.isActive = false
         callWidth?.isActive = false
+        langWidth?.isActive = false
+        langWidth = nil
 
         for view in root.arrangedSubviews.reversed() {
             root.removeArrangedSubview(view)
@@ -201,8 +220,21 @@ final class VisitorScreenView: UIView {
             footer.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
+        for view in flowStack.arrangedSubviews {
+            flowStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
         if sosVisible { footer.addArrangedSubview(sosControl) }
         footer.addArrangedSubview(footerLabel)
+        scroll.isHidden = flowActive
+        flowStack.isHidden = !flowActive
+        clockLabel.textAlignment = .center
+        dateLabel.textAlignment = .center
+        flowView.viewportHeight = size.height
+        if flowActive {
+            layoutFlow(wide: wide, compact: compact)
+            return
+        }
 
         let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel, airQuality])
         clockColumn.axis = .vertical
@@ -290,6 +322,49 @@ final class VisitorScreenView: UIView {
         actionColumn.addArrangedSubview(langBar)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
+    }
+
+    /// Flow mode: language switch and clock in a header, then the notice, then the page.
+    private func layoutFlow(wide: Bool, compact: Bool) {
+        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel, airQuality])
+        clockColumn.axis = .vertical
+        clockColumn.spacing = 4
+        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: wide ? 56 : 40, weight: .light)
+        dateLabel.font = IOSAvailability.visitorFont(size: wide ? 20 : 15, weight: .medium,
+                                                     traits: traitCollection)
+        airQuality.font = IOSAvailability.visitorFont(size: wide ? 18 : 14, weight: .medium,
+                                                      traits: traitCollection)
+        noticeLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 18, traits: traitCollection)
+        noticeColumn.isHidden = noticeText.isEmpty && cameraWarning.isHidden
+        noticeColumn.arrangedSubviews.first?.isHidden = noticeText.isEmpty
+        let header: UIStackView
+        if wide {
+            clockLabel.textAlignment = .right
+            dateLabel.textAlignment = .right
+            clockColumn.alignment = .trailing
+            let cap = langBar.widthAnchor.constraint(lessThanOrEqualToConstant: 360)
+            cap.priority = UILayoutPriority(999)
+            cap.isActive = true
+            langWidth = cap
+            header = UIStackView(arrangedSubviews: [langBar, UIView(), clockColumn])
+            header.alignment = .center
+        } else {
+            clockColumn.alignment = .fill
+            header = UIStackView(arrangedSubviews: [clockColumn, langBar])
+            header.axis = .vertical
+            header.spacing = 8
+        }
+        header.spacing = wide ? 16 : 8
+        flowStack.addArrangedSubview(header)
+        flowStack.addArrangedSubview(noticeColumn)
+        flowStack.addArrangedSubview(flowView)
+    }
+
+    func setFlowActive(_ active: Bool) {
+        guard active != flowActive else { return }
+        flowActive = active
+        if bounds.width > 0 && bounds.height > 0 { applyLayout(for: bounds.size) }
+        else { applyLayout(for: lastLayoutSize) }
     }
 
     /// The call button, centred in a full-width row and never narrower than its share of it.
@@ -415,6 +490,7 @@ final class VisitorScreenView: UIView {
         noticeExpand.tintColor = noticeLabel.textColor
         airQuality.apply(skin: skin)
         applyCameraWarningSkin()
+        flowView.apply(skin: skin)
 
         let colors = DoorbellTheme.callButtonColors(display: skin.display,
                                                     background: skin.background)

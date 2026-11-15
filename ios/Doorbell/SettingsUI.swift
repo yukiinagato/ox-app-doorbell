@@ -18,6 +18,8 @@ protocol SettingsHosting: AnyObject {
     func openWeb(title: String, reason: String, from: UIViewController)
     func register(_ screen: SettingsRefreshable)
     var pendingItemIds: Set<String> { get }
+    /// What Core said about the last refused write, in the user's language; empty after a success.
+    var lastFailureMessage: String { get }
     func show(_ controller: UIViewController, from: UIViewController)
 }
 
@@ -436,7 +438,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         case .time(let value):
             cell.detailTextLabel?.text = value
             cell.accessoryType = .disclosureIndicator
-        case .text(let value, _, _):
+        case .text(let value, _, _), .longText(let value, _):
             cell.detailTextLabel?.text = item.detail.isEmpty ? value : item.detail
             cell.accessoryType = .disclosureIndicator
         case .secret:
@@ -528,6 +530,10 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         case .text(let value, let placeholder, let numeric):
             push(SettingsTextController(host: host, item: item, value: value,
                                         placeholder: placeholder, numeric: numeric, secure: false))
+        case .longText(let value, let placeholder):
+            push(SettingsTextController(host: host, item: item, value: value,
+                                        placeholder: placeholder, numeric: false, secure: false,
+                                        multiline: true))
         case .secret:
             guard SettingsStyle.isTV else { return }
             push(SettingsTextController(host: host, item: item, value: "", placeholder: "",
@@ -935,13 +941,16 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
     private let placeholder: String
     private let numeric: Bool
     private let secure: Bool
+    private let multiline: Bool
+    private let textView = UITextView()
     private var message = ""
     /// For list "Add" prompts, which commit through a closure rather than an item.
     var onSubmit: ((String) -> SettingEffect)?
 
     init(host: SettingsHosting, item: SettingItem?, value: String, placeholder: String,
-         numeric: Bool, secure: Bool, title: String = "") {
+         numeric: Bool, secure: Bool, title: String = "", multiline: Bool = false) {
         self.host = host
+        self.multiline = multiline
         self.item = item
         self.initial = value
         self.placeholder = placeholder
@@ -967,6 +976,12 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
         field.returnKeyType = .done
         field.delegate = self
         field.accessibilityIdentifier = (item?.id ?? "settings_add") + "_field"
+        textView.text = initial
+        textView.textColor = SystemStyle.label
+        textView.font = SystemStyle.font(.body)
+        textView.backgroundColor = .clear
+        textView.autocorrectionType = .no
+        textView.accessibilityIdentifier = (item?.id ?? "settings_add") + "_field"
         #if os(iOS)
         field.clearButtonMode = .whileEditing
         if numeric { field.keyboardType = .numbersAndPunctuation }
@@ -978,7 +993,7 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        field.becomeFirstResponder()
+        if multiline { textView.becomeFirstResponder() } else { field.becomeFirstResponder() }
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { return 1 }
@@ -992,6 +1007,19 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         if let palette = host?.palette { SettingsStyle.apply(palette, to: cell) }
         cell.selectionStyle = .none
+        if multiline {
+            textView.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(textView)
+            let margins = cell.contentView.layoutMarginsGuide
+            NSLayoutConstraint.activate([
+                textView.topAnchor.constraint(equalTo: margins.topAnchor),
+                textView.bottomAnchor.constraint(equalTo: margins.bottomAnchor),
+                textView.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+                textView.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
+                textView.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            ])
+            return cell
+        }
         field.translatesAutoresizingMaskIntoConstraints = false
         cell.contentView.addSubview(field)
         let margins = cell.contentView.layoutMarginsGuide
@@ -1012,7 +1040,7 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
 
     @objc private func save() {
         guard let host = host else { return }
-        let text = field.text ?? ""
+        let text = multiline ? textView.text ?? "" : field.text ?? ""
         let effect: SettingEffect
         if let item = item, let commit = item.commit {
             effect = commit(.string(text))
@@ -1027,12 +1055,14 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
             return
         }
         field.resignFirstResponder()
+        textView.resignFirstResponder()
         host.perform(effect, item: item, value: .string(text), from: self) { [weak self] ok in
             guard let self = self else { return }
             if ok {
                 self.navigationController?.popViewController(animated: true)
             } else {
-                self.message = host.texts.t("settings.save_failed")
+                let reason = host.lastFailureMessage
+                self.message = reason.isEmpty ? host.texts.t("settings.save_failed") : reason
                 self.tableView.reloadData()
             }
         }

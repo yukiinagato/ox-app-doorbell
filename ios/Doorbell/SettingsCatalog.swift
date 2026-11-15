@@ -648,13 +648,24 @@ struct SettingsCatalog {
     private func callsPage() -> SettingsPage {
         let offered = (ConfigUtil.dig(cfg, "ui.languages") as? [Any])?.compactMap { $0 as? String }
             ?? ["ja", "en", "zh"]
-        return SettingsPage(id: "calls", title: t("prefs.calls"), sections: [
-            SettingSection(t("prefs.call_flow"), footer: t("prefs.call_flow_footer"), [
-                SettingItem("call_flow", t("prefs.call_flow"),
-                            .segmented(value: str("ui.call_flow", "purpose_first"), options: [
-                                SettingOption(value: "purpose_first", title: t("prefs.flow_purpose_first")),
-                                SettingOption(value: "ring_then_purpose", title: t("prefs.flow_ring_then_purpose"))]),
-                            commit: set("ui.call_flow")),
+        let flowPages = VisitorFlowPages(ctx, texts: texts)
+        let stepsSupersede = !flowPages.editor.isBuiltIn
+        let callFlowItem = stepsSupersede
+            ? SettingItem("call_flow", t("prefs.call_flow"), .info(callFlowTitle()))
+            : SettingItem("call_flow", t("prefs.call_flow"),
+                          .segmented(value: str("ui.call_flow", "purpose_first"), options: [
+                              SettingOption(value: "purpose_first", title: t("prefs.flow_purpose_first")),
+                              SettingOption(value: "ring_then_purpose", title: t("prefs.flow_ring_then_purpose"))]),
+                          commit: set("ui.call_flow"))
+        var wizardSection: [SettingSection] = []
+        wizardSection.append(SettingSection(footer: t("flow_editor.enabled_hint"), [
+            SettingItem("visitor_flow", t("flow_editor.title"), detail: flowPages.summary(),
+                        .page({ VisitorFlowPages(self.ctx, texts: self.texts).page() })),
+        ]))
+        return SettingsPage(id: "calls", title: t("prefs.calls"), sections: wizardSection + [
+            SettingSection(t("prefs.call_flow"),
+                           footer: stepsSupersede ? t("flow_editor.call_flow_superseded") : t("prefs.call_flow_footer"), [
+                callFlowItem,
                 SettingItem("call_ttl", t("prefs.call_ttl"),
                             .stepper(value: int("ui.call_ttl_s", 60), minimum: 10, maximum: 300,
                                      step: 5, unit: t("prefs.unit_seconds")),

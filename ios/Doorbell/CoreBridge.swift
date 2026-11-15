@@ -376,6 +376,23 @@ final class CoreBridge {
         } ?? nil
     }
 
+    /// The resolved visitor-flow document for a door (empty selects this shell's door). Core runs
+    /// the call on its own loop, so callers keep it off the main thread.
+    func visitorFlow(door: String = "") -> [String: Any]? {
+        return withCore { c in takeJson(db_core_visitor_flow_json(c, door)) } ?? nil
+    }
+
+    /// `{"ok":true,"flow":{...}}` in configuration shape for a settings editor; `name` is
+    /// `default`, `purposes` or `delivery`.
+    func visitorFlowTemplate(_ name: String) -> [String: Any]? {
+        return withCore { c in takeJson(db_core_visitor_flow_template_json(c, name)) } ?? nil
+    }
+
+    /// Sends the resident-facing message of one notify step; the step id is the only input.
+    func visitorNotify(door: String, step: String) -> [String: Any]? {
+        return withCore { c in takeJson(db_core_visitor_notify_json(c, door, step)) } ?? nil
+    }
+
     func selectPurpose(door: String, callId: String, purpose: String) -> Bool {
         return withCore { c -> Bool in
             guard !callId.isEmpty else { return false }

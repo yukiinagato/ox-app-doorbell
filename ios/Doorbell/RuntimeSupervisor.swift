@@ -485,6 +485,13 @@ final class RuntimeSupervisor {
                     #endif
                 }(),
                 "ui_manifest_v1": supportsUiManifest,
+                "visitor_flow_v1": {
+                    #if os(iOS)
+                    return supportsUiManifest
+                    #else
+                    return false
+                    #endif
+                }(),
                 "runtime_recovery_v1": true,
                 "helper_policy_v1": {
                     #if os(iOS)
@@ -505,7 +512,8 @@ final class RuntimeSupervisor {
         #else
         let ids = ["call.primary", "cancel.call", "call.end", "purpose.button",
                    "sos.trigger", "sos.cancel", "ring.title", "ring.action",
-                   "reply.button", "monitor.close", "status.offline"]
+                   "reply.button", "monitor.close", "status.offline",
+                   "flow.back", "flow.text", "flow.done"]
         let minimumTouch = 44
         #endif
         let safety = Set(["cancel.call", "call.end", "sos.trigger", "sos.cancel"])

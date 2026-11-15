@@ -156,13 +156,15 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         ])
     }
 
+    private(set) var lastFailureMessage = ""
+
     func setStatus(_ message: String) {
         guard !message.isEmpty else { return }
         toast.text = "  " + message + "  "
         view.bringSubviewToFront(toast)
         UIView.animate(withDuration: 0.2) { self.toast.alpha = 1 }
         toastTimer?.invalidate()
-        toastTimer = IOSAvailability.scheduledTimer(withTimeInterval: 2.5, repeats: false) {
+        toastTimer = IOSAvailability.scheduledTimer(withTimeInterval: message.count > 40 ? 6 : 2.5, repeats: false) {
             [weak self] _ in UIView.animate(withDuration: 0.3) { self?.toast.alpha = 0 }
         }
     }
@@ -283,7 +285,9 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             writer.apply(operations) { [weak self] result in
                 guard let self = self else { return }
                 if let id = pendingId { self.pendingWrites.finish(id) }
-                self.setStatus(ConfigWriter.message(self.texts, result))
+                let message = ConfigWriter.message(self.texts, result)
+                self.lastFailureMessage = result.isOk ? "" : message
+                self.setStatus(message)
                 self.refreshAll(force: !result.isOk)
                 completion?(result.isOk)
             }
@@ -582,6 +586,13 @@ final class SettingsEditorActions: NSObject {
             guard parts.count == 2 else { return false }
             removeAsset(parts[1])
             return true
+        case "flow.template":
+            guard parts.count == 2 else { return false }
+            applyFlowTemplate(parts[1], from: from)
+            return true
+        case "flow.reset":
+            write(VisitorFlowEditor.resetOperations, from: from)
+            return true
         case "device.remove":
             guard parts.count == 2 else { return false }
             removeDevice(parts[1], from: from)
@@ -592,6 +603,10 @@ final class SettingsEditorActions: NSObject {
         #if os(iOS)
         case "asset.image":
             pickImage(key: parts.count == 2 ? parts[1] : "", from: from)
+            return true
+        case "flow.image":
+            guard parts.count == 2 else { return false }
+            addFlowImage(step: parts[1], from: from)
             return true
         case "asset.record":
             recordSound(from: from)
@@ -659,6 +674,9 @@ final class SettingsEditorActions: NSObject {
             if key.isEmpty {
                 status("settings.saved")
                 host?.refreshAll()
+            } else if key.hasPrefix(SettingsEditorActions.flowImageKey) {
+                appendFlowImage(step: String(key.dropFirst(SettingsEditorActions.flowImageKey.count)),
+                                hash: hash, from: from)
             } else {
                 write([.set(key, hash)], from: from)
             }
@@ -672,6 +690,70 @@ final class SettingsEditorActions: NSObject {
         }
         host?.setStatus(t("settings.save_failed") + " " + (ConfigUtil.str(result, "err") ?? ""))
     }
+
+    // MARK: Visitor flow
+
+    static let flowImageKey = "flow:"
+
+    /// The template is read from Core off the main thread, then written as one batch that also
+    /// deletes the steps the template does not have.
+    private func applyFlowTemplate(_ name: String, from: UIViewController) {
+        guard let core = core else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = core.visitorFlowTemplate(name)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard ConfigUtil.bool(result, "ok", false), let flow = result?["flow"] as? [String: Any] else {
+                    self.status("settings.save_failed")
+                    return
+                }
+                let editor = VisitorFlowEditor(config: core.config(), languages: [])
+                self.write(editor.templateOperations(flow), from: from)
+            }
+        }
+    }
+
+    fileprivate func appendFlowImage(step: String, hash: String, from: UIViewController) {
+        guard let core = core else { return }
+        let editor = VisitorFlowEditor(config: core.config(), languages: [])
+        let operations = editor.update(step) { step in
+            var list = step["images"] as? [[String: Any]] ?? []
+            guard list.count < VisitorFlowEditor.maxImages else { return }
+            list.append(["asset": hash, "place": "above"])
+            step["images"] = list
+        }
+        write(operations, from: from)
+    }
+
+    #if os(iOS)
+    /// Existing image assets first, then a photo from the library, which is downscaled and
+    /// uploaded to Assets before the step names it.
+    fileprivate func addFlowImage(step: String, from: UIViewController) {
+        let sheet = UIAlertController(title: t("flow_editor.add_image"), message: nil,
+                                      preferredStyle: .actionSheet)
+        let assets = ConfigUtil.dig(core?.config(), "assets") as? [String: Any] ?? [:]
+        for hash in assets.keys.sorted().prefix(12) {
+            let entry = assets[hash] as? [String: Any]
+            guard (entry?["type"] as? String ?? "").hasPrefix("image/") else { continue }
+            let title = (entry?["label"] as? String) ?? String(hash.prefix(8))
+            sheet.addAction(UIAlertAction(title: t("flow_editor.image_choose") + " · " + title,
+                                          style: .default) { [weak self, weak from] _ in
+                guard let self = self, let from = from else { return }
+                self.appendFlowImage(step: step, hash: hash, from: from)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: t("flow_editor.image_upload"), style: .default) {
+            [weak self, weak from] _ in
+            guard let self = self, let from = from else { return }
+            self.pickImage(key: SettingsEditorActions.flowImageKey + step, from: from)
+        })
+        sheet.addAction(UIAlertAction(title: t("admin.cancel"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = from.view
+        sheet.popoverPresentationController?.sourceRect =
+            CGRect(x: from.view.bounds.midX, y: from.view.bounds.midY, width: 1, height: 1)
+        from.present(sheet, animated: true)
+    }
+    #endif
 
     private func removeAsset(_ hash: String) {
         guard let core = core else { return }
@@ -808,10 +890,11 @@ extension SettingsEditorActions: UIImagePickerControllerDelegate, UINavigationCo
         picker.dismiss(animated: true)
     }
 
-    /// At most 1600 px on the long edge, JPEG, comfortably below Core's 3 MiB asset limit.
-    static func jpeg(_ image: UIImage) -> Data? {
+    /// At most 1600 px on the long edge, JPEG, comfortably below Core's 3 MiB asset limit. A flow
+    /// image is smaller: 1280 px and about 400 KB, which a door station shows without delay.
+    static func jpeg(_ image: UIImage, maxEdge: CGFloat = 1600, maxBytes: Int = 2_800_000) -> Data? {
         let longest = max(image.size.width, image.size.height)
-        let scale = longest > 1600 ? 1600 / longest : 1
+        let scale = longest > maxEdge ? maxEdge / longest : 1
         let size = CGSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
         UIGraphicsBeginImageContextWithOptions(size, true, 1)
         image.draw(in: CGRect(origin: .zero, size: size))
@@ -819,7 +902,7 @@ extension SettingsEditorActions: UIImagePickerControllerDelegate, UINavigationCo
         UIGraphicsEndImageContext()
         var quality: CGFloat = 0.85
         var data = scaled.flatMap { $0.jpegData(compressionQuality: quality) }
-        while let current = data, current.count > 2_800_000, quality > 0.35 {
+        while let current = data, current.count > maxBytes, quality > 0.3 {
             quality -= 0.15
             data = scaled.flatMap { $0.jpegData(compressionQuality: quality) }
         }
@@ -832,7 +915,10 @@ extension SettingsEditorActions: UIImagePickerControllerDelegate, UINavigationCo
         var target: UIViewController? = picker.presentingViewController
         if target == nil { target = host }
         picker.dismiss(animated: true)
-        guard let picked = image, let data = SettingsEditorActions.jpeg(picked), let from = target else {
+        let forFlow = pickerKey.hasPrefix(SettingsEditorActions.flowImageKey)
+        let encoded = forFlow ? SettingsEditorActions.jpeg(image ?? UIImage(), maxEdge: 1280, maxBytes: 400_000)
+                              : image.flatMap { SettingsEditorActions.jpeg($0) }
+        guard image != nil, let data = encoded, let from = target else {
             status("settings.save_failed")
             return
         }

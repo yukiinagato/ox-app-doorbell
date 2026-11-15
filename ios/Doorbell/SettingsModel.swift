@@ -52,6 +52,8 @@ indirect enum SettingControl {
     /// "HH:mm", 24-hour.
     case time(String)
     case text(value: String, placeholder: String, numeric: Bool)
+    /// Several lines of plain text (newline = line break, blank line = paragraph).
+    case longText(value: String, placeholder: String)
     /// Never pre-filled and never echoed.
     case secret
     case info(String)

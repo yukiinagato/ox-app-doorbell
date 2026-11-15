@@ -172,6 +172,12 @@ final class MainViewController: UIViewController {
     private var tabs: PanelTabBarController?
     private var homeScreen: HomeViewController?
     private var visitorScreen: VisitorScreenView?
+    private var flowWalker: VisitorFlowWalker?
+    private var flowRevision: String?
+    private var flowFetching = false
+    private var flowFetchAgain = false
+    private var flowEndShownAt: Date?
+    private let flowQueue = DispatchQueue(label: "doorbell.visitor-flow", qos: .userInitiated)
     private var airQualityTimer: Timer?
     private var airQualityFetchInFlight = false
     private var airQualityFetchAgain = false
@@ -577,6 +583,9 @@ final class MainViewController: UIViewController {
         let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
                                        purposeSection: purposeSection, sosControl: sosSlider)
         visitorScreen = screen
+        screen.flowView.onOption = { [weak self] id in self?.onFlowOption(id) }
+        screen.flowView.onBack = { [weak self] in self?.onFlowBack() }
+        screen.flowView.onDone = { [weak self] in self?.onFlowDone() }
         screen.translatesAutoresizingMaskIntoConstraints = false
         idleView.addSubview(screen)
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
@@ -822,11 +831,13 @@ final class MainViewController: UIViewController {
     }
 
     private func dismissReply() {
+        flowWalker?.setReply(false)
         replyTimer?.invalidate()
         replyBanner.isHidden = true
     }
 
     private func presentReply(text: String, ttl: TimeInterval) {
+        flowWalker?.setReply(true)
         replyBanner.show(text: text, ttl: ttl)
         view.bringSubviewToFront(replyBanner)
         replyTimer?.invalidate()
@@ -970,6 +981,7 @@ final class MainViewController: UIViewController {
         // Core being ready. The retry costs one boolean while Core is down.
         if clockSource.waitingForCore { refreshClockBase() }
         updateClock()
+        flowTick()
         if !screensaverOn && !emergencyActive && screensaverAfterS > 0 &&
             !idleView.isHidden && callingView.isHidden && offlineView.isHidden &&
             inCallView.isHidden && presentedViewController == nil &&
@@ -1037,6 +1049,12 @@ final class MainViewController: UIViewController {
         }
         refreshSosConfig()
         refreshPairingStatus()
+        // The first read is synchronous, like the status read above, so the home never flashes the
+        // classic screen before the wizard; later changes arrive as events and are read off main.
+        if flowRevision == nil, boot.role == "door_station", visitorScreen != nil, core.isRunning,
+           let document = core.visitorFlow(door: boot.door) {
+            applyFlowDocument(document)
+        }
         buildPurposeButtons()
         buildLangBar()
         applyStrings()
@@ -1164,6 +1182,11 @@ final class MainViewController: UIViewController {
             for button in (row as? UIStackView)?.arrangedSubviews ?? [] {
                 styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "purpose.button",
                                    to: button)
+            }
+        }
+        if visitorScreen?.flowActive == true {
+            visitorScreen?.flowView.forEachControl { id, view in
+                styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view)
             }
         }
     }
@@ -1432,6 +1455,8 @@ final class MainViewController: UIViewController {
         texts.setLang(l)
         applyStrings()
         relabelPurposeButtons()
+        flowWalker?.setLanguage(l)
+        renderFlow()
         updateLangBarSelection()
         visitorScreen?.refreshAirQualityText()
         dashboard?.refreshAirQualityText()
@@ -1674,7 +1699,12 @@ final class MainViewController: UIViewController {
         }
     }
 
-    private func showIdle(hint: String? = nil) {
+    private func showIdle(hint: String? = nil, reason: String = "ended") {
+        if let walker = flowWalker, walker.mode == .calling {
+            walker.callEnded(reason: reason)
+            flowEndShownAt = nil
+            renderFlow()
+        }
         visitorActionRevision &+= 1
         dismissPurposeChoice()
         callFeedbackAudio.stop()
@@ -1746,7 +1776,7 @@ final class MainViewController: UIViewController {
         switch observation {
         case .absent:
             if inCall { onSipIdle() }
-            else { showIdle(hint: texts.t("calling.no_answer")) }
+            else { showIdle(hint: texts.t("calling.no_answer"), reason: "timeout") }
             return
         case .unavailable:
             callingDetail.text = texts.t("visitor.restoring")
@@ -1799,6 +1829,7 @@ final class MainViewController: UIViewController {
         dismissReply()
         exitScreensaver()
         if let t = title { callTitleOverride = t }
+        flowWalker?.callStartedElsewhere()
         callingText.text = callTitleOverride ?? texts.t("calling.title")
         callingDetail.text = texts.t("calling.wait_hint")
         idleView.isHidden = true
@@ -1905,7 +1936,14 @@ final class MainViewController: UIViewController {
             }
             if (type == "call_cancelled" || type == "call_ended") &&
                 (activeCallId.isEmpty || eventCall.isEmpty || eventCall == activeCallId) {
-                showIdle(hint: type == "call_cancelled" ? texts.t("ring.cancelled") : nil)
+                let reason = ConfigUtil.evStr(ev, "reason")
+                showIdle(hint: type == "call_cancelled" ? texts.t("ring.cancelled") : nil,
+                         reason: type == "call_cancelled" && !reason.isEmpty ? reason : "ended")
+            }
+        case "visitor_flow_changed":
+            let door = ConfigUtil.evStr(ev, "door")
+            if boot.role == "door_station" && (door.isEmpty || door == boot.door) {
+                fetchVisitorFlow()
             }
         case "visitor_lang":
             let door = ConfigUtil.evStr(ev, "door")
@@ -2207,17 +2245,19 @@ final class MainViewController: UIViewController {
         }
     }
 
-    private func beginCall(purpose: String, title: String?) {
+    @discardableResult
+    private func beginCall(purpose: String, title: String?) -> Bool {
         let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ?? "outdoor_call_alert"
         let loop = ConfigUtil.bool(cfg, "ui.call_sound_loop", false)
         callFeedbackAudio.playConfigured(sound, loops: loop)
         flushVisitorLang()
         guard let callId = core.pressV2(door: boot.door, purpose: purpose) else {
             showIdle(hint: texts.t("offline.body"))
-            return
+            return false
         }
         activeCallId = callId
         showCalling(title: title)
+        return true
     }
 
     private func callFlowMode() -> String {
@@ -2228,6 +2268,133 @@ final class MainViewController: UIViewController {
 
     private func availablePurposeIds() -> [String] {
         return ConfigUtil.enabledPurposeIds(cfg)
+    }
+
+    // MARK: - Visitor flow
+
+    /// Reads the resolved document off the main thread, one read at a time; a change that arrives
+    /// during a read asks for one more afterwards.
+    private func fetchVisitorFlow() {
+        guard boot.role == "door_station", visitorScreen != nil else { return }
+        if flowFetching { flowFetchAgain = true; return }
+        flowFetching = true
+        let core = self.core
+        let door = boot.door
+        flowQueue.async { [weak self] in
+            let document = core.visitorFlow(door: door)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.flowFetching = false
+                if let document = document { self.applyFlowDocument(document) }
+                if self.flowFetchAgain {
+                    self.flowFetchAgain = false
+                    self.fetchVisitorFlow()
+                }
+            }
+        }
+    }
+
+    private func applyFlowDocument(_ document: [String: Any]) {
+        let revision = (document["revision"] as? String ?? "") +
+            (document["enabled"] as? Bool == true ? "+" : "-")
+        guard revision != flowRevision else { return }
+        flowRevision = revision
+        if let walker = flowWalker {
+            walker.replace(flow: document)
+        } else {
+            flowWalker = VisitorFlowWalker(flow: document, lang: visitorLang)
+        }
+        renderFlow()
+    }
+
+    /// Shows the walker's current page, or the classic screen when the flow is off.
+    private func renderFlow() {
+        guard let screen = visitorScreen, let walker = flowWalker else { return }
+        screen.setFlowActive(walker.isEnabled)
+        guard walker.isEnabled, let page = walker.page else { return }
+        if walker.mode == .end {
+            if flowEndShownAt == nil { flowEndShownAt = Date() }
+        } else {
+            flowEndShownAt = nil
+        }
+        screen.flowView.render(page, notice: walker.notice.map { texts.t($0) })
+        applySemanticStyles()
+    }
+
+    private func onFlowOption(_ id: String) {
+        guard activeCallId.isEmpty, let walker = flowWalker else { return }
+        onActivity()
+        handleFlowIntent(walker.tap(id), walker: walker)
+        renderFlow()
+    }
+
+    private func handleFlowIntent(_ intent: VisitorFlowWalker.Intent, walker: VisitorFlowWalker) {
+        guard case .call(let call) = intent else { return }
+        switch call {
+        case .press(let purpose):
+            var title: String?
+            if !purpose.isEmpty {
+                let entry = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any])?[purpose]
+                title = texts.t("purpose.sent",
+                                ConfigUtil.labelOf(entry as? [String: Any], texts.lang, purpose))
+            }
+            walker.pressFinished(success: beginCall(purpose: purpose, title: title))
+        case .notify(let step):
+            flushVisitorLang()
+            let core = self.core
+            let door = boot.door
+            flowQueue.async { [weak self] in
+                let result = core.visitorNotify(door: door, step: step)
+                DispatchQueue.main.async {
+                    guard let self = self, self.flowWalker === walker else { return }
+                    let next = walker.notifyFinished(ok: result?["ok"] as? Bool == true)
+                    self.handleFlowIntent(next, walker: walker)
+                    self.renderFlow()
+                }
+            }
+        }
+    }
+
+    private func onFlowBack() {
+        onActivity()
+        if flowWalker?.back() == true { renderFlow() }
+    }
+
+    private func onFlowDone() {
+        onActivity()
+        flowWalker?.done()
+        flowEndShownAt = nil
+        renderFlow()
+    }
+
+    /// Idle return and the end page's own timer, from the one-second clock tick.
+    private func flowTick() {
+        guard let walker = flowWalker, walker.isEnabled, callingView.isHidden, inCallView.isHidden,
+              !walker.pendingCall else { return }
+        switch walker.mode {
+        case .page where !walker.onStartPage:
+            if Date().timeIntervalSince(lastActivity) >= Double(walker.idleSeconds) {
+                walker.idleTimeout()
+                renderFlow()
+            }
+        case .end:
+            if let shown = flowEndShownAt,
+               Date().timeIntervalSince(shown) >= Double(walker.endReturnSeconds) {
+                walker.done()
+                flowEndShownAt = nil
+                renderFlow()
+            }
+        default:
+            break
+        }
+    }
+
+    /// The screenshot hook `screen:flow:<step id>` puts one step of the current flow on screen.
+    private func showFlowStep(_ step: String) {
+        guard let walker = flowWalker, walker.isEnabled else { return }
+        walker.show(step: step)
+        flowEndShownAt = Date()
+        renderFlow()
     }
 
     private func showPurposeChoice(afterRing: Bool) {
@@ -2271,7 +2438,7 @@ final class MainViewController: UIViewController {
             refreshCallingDeadline()
             return
         }
-        showIdle()
+        showIdle(reason: "visitor")
     }
 
     @objc private func onMonitorOpen() {
@@ -2540,7 +2707,8 @@ final class MainViewController: UIViewController {
         case "sos": showEmergency(visual: true)
         case "saver": enterScreensaver()
         case "purpose": showPurposeChoice(afterRing: false)
-        default: break
+        default:
+            if name.hasPrefix("flow:") { showFlowStep(String(name.dropFirst("flow:".count))) }
         }
     }
 
