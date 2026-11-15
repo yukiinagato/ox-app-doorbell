@@ -24,6 +24,7 @@ struct SettingsContext {
     var historySummary = ""
     var versionLine = ""
     var coreVersion = ""
+    var buildIdentity = ""
     var lastSyncText = ""
     /// Cluster key state from the pairing snapshot (security protocol v3).
     var pskId = ""
@@ -1272,8 +1273,9 @@ struct SettingsCatalog {
                 SettingItem("about_node", "ID", .info(ctx.nodeId)),
                 SettingItem("about_version", t("prefs.version"), .info(ctx.versionLine)),
                 SettingItem("about_core", "Core", .info(ctx.coreVersion)),
+                SettingItem("about_build", "Build", .info(ctx.buildIdentity)),
                 SettingItem("about_sip", "SIP", .info(ctx.sipBackend)),
-            ]),
+            ].filter { $0.id != "about_build" || !ctx.buildIdentity.isEmpty }),
             // Apple TV has no diagnostics page; what it would show is the section above.
             SettingSection((ctx.isTV ? [] : [
                 SettingItem("device_info", t("settings.section_info"), .shell("device_info")),

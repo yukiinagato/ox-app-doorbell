@@ -229,6 +229,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         ctx.versionLine = DoorbellTheme.versionLine(name: boot.name, coreVersion: DoorbellTheme.coreVersion(),
                                                     texts: texts, power: power)
         ctx.coreVersion = DoorbellTheme.shortVersion(DoorbellTheme.coreVersion())
+        if SettingsStyle.isTV { ctx.buildIdentity = DoorbellTheme.buildIdentity(coreVersion: DoorbellTheme.coreVersion()) }
         let lastSync = Int64(ConfigUtil.double(status?["time"] as? [String: Any], "last_sync_ms", 0))
         ctx.lastSyncText = lastSync > 0 ? DoorbellClock.timeOfDay(core, wallMs: lastSync) : ""
         ctx.nowMs = DoorbellClock.nowMs(core)

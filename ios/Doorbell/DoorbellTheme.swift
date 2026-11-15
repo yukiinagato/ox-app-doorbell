@@ -1234,6 +1234,19 @@ enum DoorbellTheme {
         return metadata.isEmpty ? app : app + "+" + metadata.prefix(7)
     }
 
+    /// Version, build number and source revision, for example "0.6.4 (34) · a1b2c3d".
+    static func buildIdentity(coreVersion: String) -> String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "-"
+        let build = info?["CFBundleVersion"] as? String ?? "-"
+        var line = version + " (" + build + ")"
+        if let plus = coreVersion.firstIndex(of: "+") {
+            let revision = coreVersion[coreVersion.index(after: plus)...].prefix(7)
+            if !revision.isEmpty { line += " · " + revision }
+        }
+        return line
+    }
+
     static func coreVersion() -> String {
         guard let raw = db_core_version() else { return "" }
         return String(cString: raw)
