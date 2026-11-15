@@ -7,11 +7,30 @@ final class FlowOptionButton: UIButton {
     static let iconSize: CGFloat = 30
     var contentHeight: NSLayoutConstraint?
     var minimumHeight: CGFloat = TouchTarget.visitor
+    /// Shown while this option waits on Core: in place of the icon, or at the leading edge when
+    /// the option has none. The label never moves.
+    var activity: UIActivityIndicatorView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let view = activity { addSubview(view) }
+            imageView?.alpha = activity == nil ? 1 : 0
+            setNeedsLayout()
+        }
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let label = titleLabel, bounds.width > 12 else { return }
         let hasIcon = image(for: .normal) != nil
+        defer {
+            if let view = activity {
+                bringSubviewToFront(view)
+                let side = view.bounds.width
+                view.center = hasIcon
+                    ? CGPoint(x: bounds.midX, y: 16 + FlowOptionButton.iconSize / 2)
+                    : CGPoint(x: 12 + side / 2, y: bounds.midY)
+            }
+        }
         let textHeight = ceil(label.sizeThatFits(
             CGSize(width: bounds.width - 24, height: .greatestFiniteMagnitude)).height)
         let required = max(minimumHeight, textHeight + (hasIcon ? 70 : 32))
@@ -67,6 +86,8 @@ final class VisitorFlowView: UIView {
     private var columns = 1
     private var skin = DoorbellSkin.plain(.dark)
     private var optionButtons: [(option: VisitorFlowOption, button: FlowOptionButton)] = []
+    private var pendingOptionId: String?
+    private var pendingStatus: String?
     private static var imageCache: [String: UIImage] = [:]
 
     init(texts: Texts) {
@@ -215,6 +236,7 @@ final class VisitorFlowView: UIView {
         rebuildImages(page.images)
         rebuildOptions(page.options)
         applyColors()
+        applyPending(announce: false)
         if previous?.id != page.id {
             contentScroll.setContentOffset(.zero, animated: false)
             UIAccessibility.post(notification: .screenChanged,
@@ -344,7 +366,68 @@ final class VisitorFlowView: UIView {
         return button
     }
 
+    /// While an option waits on Core: that option shows an activity indicator and stays selected,
+    /// every other option and Back are dimmed and ignore touches, and `status` is the one-line
+    /// progress text under the options. `nil` restores everything. Applied again after each
+    /// `render`, which rebuilds the buttons.
+    func setPending(optionId: String?, status: String? = nil) {
+        let began = optionId != nil && optionId != pendingOptionId
+        pendingOptionId = optionId
+        let previousStatus = pendingStatus
+        pendingStatus = optionId == nil ? nil : status
+        applyPending(announce: began)
+        if let text = pendingStatus, !text.isEmpty, text != previousStatus {
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+    }
+
+    private func applyPending(announce: Bool) {
+        let pending = pendingOptionId
+        for (option, button) in optionButtons {
+            let busy = option.id == pending
+            button.isUserInteractionEnabled = pending == nil
+            button.alpha = pending == nil || busy ? 1 : 0.45
+            button.accessibilityValue = busy ? texts.t("flow.busy") : nil
+            var traits = button.accessibilityTraits
+            if pending != nil, !busy { traits.insert(.notEnabled) } else { traits.remove(.notEnabled) }
+            button.accessibilityTraits = traits
+            if busy {
+                if button.activity == nil { button.activity = makeActivityIndicator(for: button) }
+            } else if button.activity != nil {
+                button.activity = nil
+            }
+        }
+        for control in [backButton, doneButton] {
+            control.isUserInteractionEnabled = pending == nil
+            control.alpha = pending == nil ? 1 : 0.45
+            var traits = control.accessibilityTraits
+            if pending != nil { traits.insert(.notEnabled) } else { traits.remove(.notEnabled) }
+            control.accessibilityTraits = traits
+        }
+        if let text = pendingStatus, !text.isEmpty {
+            noticeLabel.text = text
+            noticeLabel.isHidden = false
+        }
+        if announce, let busy = optionButtons.first(where: { $0.option.id == pending })?.button {
+            UIAccessibility.post(notification: .layoutChanged, argument: busy)
+        }
+    }
+
+    private func makeActivityIndicator(for button: FlowOptionButton) -> UIActivityIndicatorView {
+        let style: UIActivityIndicatorView.Style
+        if #available(iOS 13.0, tvOS 13.0, *) { style = .medium } else { style = .white }
+        let view = UIActivityIndicatorView(style: style)
+        view.hidesWhenStopped = false
+        view.color = button.titleColor(for: .normal)
+        view.isAccessibilityElement = false
+        view.sizeToFit()
+        // A static indicator under reduced motion: the busy state is still visible and announced.
+        if UIAccessibility.isReduceMotionEnabled { view.stopAnimating() } else { view.startAnimating() }
+        return view
+    }
+
     @objc private func optionTapped(_ sender: UIButton) {
+        guard pendingOptionId == nil else { return }
         guard let match = optionButtons.first(where: { $0.button === sender }) else { return }
         onOption?(match.option.id)
     }
@@ -377,6 +460,7 @@ final class VisitorFlowView: UIView {
                 button.tintColor = skin.cardInk("tile_label")
             }
         }
+        for (_, button) in optionButtons { button.activity?.color = button.titleColor(for: .normal) }
         doneButton.backgroundColor = call.fill
         doneButton.setTitleColor(call.ink, for: .normal)
         backButton.setTitleColor(skin.cardInk("tile_label"), for: .normal)
@@ -398,6 +482,9 @@ final class VisitorFlowView: UIView {
     var optionGridForTesting: UIView { return optionStack }
     var titleForTesting: UIView { return titleLabel }
     var optionButtonsForTesting: [UIButton] { return optionButtons.map { $0.button } }
+    var noticeForTesting: UILabel { return noticeLabel }
+    var backButtonForTesting: UIButton { return backButton }
+    func activityVisible(on index: Int) -> Bool { return optionButtons[index].button.activity != nil }
     var columnsForTesting: Int { return columns }
     #endif
 

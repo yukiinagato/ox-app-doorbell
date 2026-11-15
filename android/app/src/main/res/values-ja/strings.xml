@@ -912,9 +912,13 @@
     <string name="firewall_rules_missing">Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</string>
     <string name="firewall_title">Windows ファイアウォール</string>
     <string name="flow_back">戻る</string>
+    <string name="flow_busy">処理中</string>
     <string name="flow_call_failed">呼び出せませんでした。もう一度お試しください。</string>
     <string name="flow_done">完了</string>
     <string name="flow_message_title">来訪者からのお知らせ</string>
+    <string name="flow_pending_call">住人を呼び出しています…</string>
+    <string name="flow_pending_failed">届きませんでした。もう一度選択肢をタップしてください。</string>
+    <string name="flow_pending_notify">住人に知らせています…</string>
     <string name="flow_sent">お知らせしました</string>
     <string name="flow_editor_add_image">画像を追加</string>
     <string name="flow_editor_add_option">選択肢を追加</string>

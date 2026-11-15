@@ -914,9 +914,13 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows 防火墙</value></data>
   <data name="flow_back" xml:space="preserve"><value>返回</value></data>
+  <data name="flow_busy" xml:space="preserve"><value>处理中</value></data>
   <data name="flow_call_failed" xml:space="preserve"><value>呼叫失败，请重试。</value></data>
   <data name="flow_done" xml:space="preserve"><value>完成</value></data>
   <data name="flow_message_title" xml:space="preserve"><value>访客留言</value></data>
+  <data name="flow_pending_call" xml:space="preserve"><value>正在呼叫住户…</value></data>
+  <data name="flow_pending_failed" xml:space="preserve"><value>未能送达，请再次点击该选项重试。</value></data>
+  <data name="flow_pending_notify" xml:space="preserve"><value>正在通知住户…</value></data>
   <data name="flow_sent" xml:space="preserve"><value>已通知</value></data>
   <data name="flow_editor_add_image" xml:space="preserve"><value>添加图片</value></data>
   <data name="flow_editor_add_option" xml:space="preserve"><value>添加选项</value></data>

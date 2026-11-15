@@ -912,9 +912,13 @@ Delete it?</string>
     <string name="firewall_rules_missing">Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?</string>
     <string name="firewall_title">Windows Firewall</string>
     <string name="flow_back">Back</string>
+    <string name="flow_busy">In progress</string>
     <string name="flow_call_failed">The call could not be placed. Please try again.</string>
     <string name="flow_done">Done</string>
     <string name="flow_message_title">Message from a visitor</string>
+    <string name="flow_pending_call">Calling the household…</string>
+    <string name="flow_pending_failed">That did not go through. Tap the option to try again.</string>
+    <string name="flow_pending_notify">Notifying the household…</string>
     <string name="flow_sent">Message sent</string>
     <string name="flow_editor_add_image">Add image</string>
     <string name="flow_editor_add_option">Add option</string>

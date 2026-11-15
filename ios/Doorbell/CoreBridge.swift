@@ -1046,6 +1046,8 @@ final class CoreBridge {
         let error: String
         /// Each entry is {"key","property","contrast","message_key"}.
         let warnings: [[String: Any]]
+        /// Core's additive `detail` object on a refusal, values as text.
+        var detail: [String: String] = [:]
     }
 
     /// Applies the batch through Core. Returns nil only when no local write capability exists.
@@ -1062,7 +1064,8 @@ final class CoreBridge {
                 return WriteOutcome(ok: ConfigUtil.bool(object, "ok", false),
                                     error: ConfigUtil.str(object, "error")
                                         ?? ConfigUtil.str(object, "err") ?? "",
-                                    warnings: (object?["warnings"] as? [[String: Any]]) ?? [])
+                                    warnings: (object?["warnings"] as? [[String: Any]]) ?? [],
+                                    detail: ConfigWriter.detail(object?["detail"]))
             }
             guard let set = CoreBridge.setConfigKeyFn,
                   let remove = CoreBridge.deleteConfigKeyFn else { return nil }

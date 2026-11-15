@@ -70,6 +70,7 @@ enum VisitorFlowText {
 final class VisitorFlowWalker {
     static let noAnswerNotice = "calling.no_answer"
     static let pressFailedNotice = "flow.call_failed"
+    static let pendingFailedNotice = "flow.pending_failed"
     static let maxSteps = 34
     static let defaultIdleS = 45
     static let defaultReturnS = 8
@@ -86,6 +87,8 @@ final class VisitorFlowWalker {
     /// True from a tap on a notify or call option until the shell reports the result, so a second
     /// tap cannot start a second call.
     private(set) var pendingCall = false
+    /// The option whose tap is waiting on the shell; the screen shows its activity indicator.
+    private(set) var pendingOptionId: String?
     private var pendingStep: String?
 
     init(flow: [String: Any], lang: String = "ja") {
@@ -137,6 +140,7 @@ final class VisitorFlowWalker {
         activeStep = nil
         pendingCall = false
         pendingStep = nil
+        pendingOptionId = nil
         if isEnabled {
             mode = .page
             stack = [startId]
@@ -219,6 +223,15 @@ final class VisitorFlowWalker {
         case call(VisitorFlowCall)
     }
 
+    /// What tapping the option leads to (`page`, `call`, `notify`, `end`), empty when unknown.
+    func targetKind(ofOption optionId: String) -> String {
+        guard mode == .page, let current = stack.last else { return "" }
+        for case let option as [String: Any] in step(current)["options"] as? [Any] ?? [] {
+            if option["id"] as? String == optionId { return kind(of: option["to"]) }
+        }
+        return ""
+    }
+
     func tap(_ optionId: String) -> Intent {
         guard mode == .page, !pendingCall, let current = stack.last else { return .none }
         var chosen: [String: Any]?
@@ -239,11 +252,13 @@ final class VisitorFlowWalker {
             return .none
         case "call":
             activeStep = target
+            pendingOptionId = optionId
             return beginCall(purpose(of: target))
         case "notify":
             guard let target = target else { return .none }
             pendingCall = true
             pendingStep = target
+            pendingOptionId = optionId
             return .call(.notify(target))
         case "end":
             mode = .end
@@ -251,6 +266,7 @@ final class VisitorFlowWalker {
             return .none
         default:
             activeStep = nil
+            pendingOptionId = optionId
             return beginCall("")
         }
     }
@@ -269,6 +285,7 @@ final class VisitorFlowWalker {
         let after = step(target)["to"]
         if ok, kind(of: after) == "end" {
             pendingCall = false
+            pendingOptionId = nil
             mode = .end
             activeStep = after as? String
             return .none
@@ -281,11 +298,22 @@ final class VisitorFlowWalker {
     func pressFinished(success: Bool) {
         guard pendingCall else { return }
         pendingCall = false
+        pendingOptionId = nil
         if success {
             mode = .calling
         } else {
             notice = VisitorFlowWalker.pressFailedNotice
         }
+    }
+
+    /// No result arrived in time: the options come back with a retry notice. A result that
+    /// arrives later finds nothing pending and is ignored.
+    func abandonPending() {
+        guard pendingCall else { return }
+        pendingCall = false
+        pendingStep = nil
+        pendingOptionId = nil
+        notice = VisitorFlowWalker.pendingFailedNotice
     }
 
     /// An external call began (the call button of the classic screen, a remote press): the walker
@@ -294,6 +322,7 @@ final class VisitorFlowWalker {
         guard mode == .page || mode == .end else { return }
         pendingCall = false
         pendingStep = nil
+        pendingOptionId = nil
         mode = .calling
     }
 
@@ -332,6 +361,7 @@ final class VisitorFlowWalker {
     func show(step id: String) {
         guard isEnabled, mode != .calling else { return }
         pendingCall = false
+        pendingOptionId = nil
         switch kind(of: id) {
         case "page":
             mode = .page

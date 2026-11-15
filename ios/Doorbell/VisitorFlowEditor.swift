@@ -340,10 +340,118 @@ struct VisitorFlowEditor {
 
     // MARK: Errors
 
-    /// The i18n key and detail for a Core refusal: `visitor_flow.<code>[: <step>[.<option>]]`.
+    /// The i18n key and detail for a Core refusal: `visitor_flow.<code>[: <location>]`.
     static func errorKey(_ code: String) -> (key: String, detail: String)? {
-        guard code.hasPrefix("visitor_flow.") else { return nil }
-        let parts = code.components(separatedBy: ": ")
-        return (parts[0], parts.count > 1 ? parts[1] : "")
+        guard let issue = FlowIssue.parse(code, detail: [:]) else { return nil }
+        return ("visitor_flow." + issue.code, issue.location)
     }
+}
+
+/// One refusal or warning of a visitor-flow write: `visitor_flow.<code>[: <location>]` plus the
+/// numbers Core attaches in `detail` (docs/en/visitor-flow-contract.md, section 8.1). Pure value;
+/// the settings host decides where it is shown.
+struct FlowIssue: Equatable {
+    let code: String
+    let location: String
+    let detail: [String: String]
+    let isWarning: Bool
+
+    static let placeholderOrder = ["lang", "limit", "value", "min", "max"]
+
+    init(code: String, location: String = "", detail: [String: String] = [:], isWarning: Bool = false) {
+        self.code = code
+        self.location = location
+        self.detail = detail
+        self.isWarning = isWarning
+    }
+
+    static func parse(_ err: String, detail: [String: String]) -> FlowIssue? {
+        guard err.hasPrefix("visitor_flow.") else { return nil }
+        let body = err.dropFirst("visitor_flow.".count)
+        let parts = body.components(separatedBy: ": ")
+        let code = parts[0]
+        guard !code.isEmpty, !code.contains(" ") else { return nil }
+        return FlowIssue(code: code, location: parts.count > 1 ? parts[1...].joined(separator: ": ") : "",
+                         detail: detail)
+    }
+
+    /// A warning of a successful write: the key is `visitor_flow.steps.<location>`.
+    static func warning(key: String, messageKey: String) -> FlowIssue? {
+        guard messageKey.hasPrefix("visitor_flow.") else { return nil }
+        let location = key.hasPrefix("visitor_flow.steps.") ? String(key.dropFirst("visitor_flow.steps.".count)) : ""
+        return FlowIssue(code: String(messageKey.dropFirst("visitor_flow.".count)), location: location,
+                         isWarning: true)
+    }
+
+    var rawCode: String { return "visitor_flow." + code + (location.isEmpty ? "" : ": " + location) }
+
+    private var catalogKey: String { return "flow_error." + code }
+
+    func isKnown(_ texts: Texts) -> Bool { return texts.t(catalogKey) != catalogKey }
+
+    /// The localized message with the placeholders filled in the order the catalog uses them; a
+    /// code the catalog does not know falls back to the generic message.
+    func message(_ texts: Texts) -> String {
+        guard isKnown(texts) else { return texts.t("visitor_flow.invalid", code) }
+        let args: [CVarArg] = FlowIssue.placeholderOrder.compactMap { name in
+            guard let value = detail[name] else { return nil }
+            return name == "lang" ? Texts.langDisplayName(value) : value
+        }
+        return args.isEmpty ? texts.t(catalogKey) : texts.t(catalogKey, list: args)
+    }
+
+    /// Secondary text under an unknown code: the raw code, so a newer Core stays diagnosable.
+    func secondary(_ texts: Texts) -> String { return isKnown(texts) ? "" : rawCode }
+
+    /// Row ids of the editor pages that show the located control, most specific first. A page
+    /// uses the first one it has; none means the banner at the top of that page.
+    var candidateItemIds: [String] {
+        if location == "start" { return ["flow_start"] }
+        let parts = location.components(separatedBy: ".")
+        if parts.count == 3, parts[0] == "doors", parts[2] == "start" { return ["flow_door_start_" + parts[1]] }
+        guard let step = parts.first, !step.isEmpty else { return [] }
+        let rest = Array(parts.dropFirst())
+        var ids: [String] = []
+        func field(_ name: String) { ids.append("\(step)_\(name)") }
+        if let first = rest.first {
+            switch first {
+            case "title", "body", "message":
+                if rest.count > 1 { field("\(first)_\(rest[1])") }
+                if first == "message" { field("to") }
+            case "images":
+                break
+            default:
+                if first.hasPrefix("images[") {
+                    let index = first.dropFirst("images[".count).dropLast()
+                    if rest.count > 2, rest[1] == "alt" { field("img\(index)_alt_\(rest[2])") }
+                    field("img\(index)_asset")
+                    field("img_\(index)")
+                } else {
+                    let option = first
+                    if rest.count > 2, rest[1] == "label" { ids.append("\(step)_\(option)_label_\(rest[2])") }
+                    if let name = FlowIssue.optionField[code] { ids.append("\(step)_\(option)_\(name)") }
+                    ids.append("\(step)_opt_\(option)")
+                }
+            }
+        } else if let name = FlowIssue.stepField[code] {
+            field(name)
+        }
+        ids.append("\(step)_kind")
+        ids.append("step_\(step)")
+        return ids
+    }
+
+    private static let optionField = [
+        "missing_target": "target", "bad_target": "target", "unknown_target": "target",
+        "bad_icon": "icon", "bad_style": "primary", "bad_enabled": "enabled",
+        "bad_purpose": "purpose", "unknown_purpose": "purpose", "disabled_purpose": "purpose",
+        "option_needs_label": "purpose", "no_options": "delete",
+    ]
+
+    private static let stepField = [
+        "bad_return_s": "return_s", "bad_purpose": "purpose", "unknown_purpose": "purpose",
+        "disabled_purpose": "purpose", "missing_target": "to", "bad_target": "to", "unknown_target": "to",
+        "bad_target_kind": "to", "bad_snapshot": "snapshot", "bad_snapshot_source": "snapshot",
+        "bad_snapshot_camera": "snapshot", "unknown_camera": "snapshot",
+    ]
 }

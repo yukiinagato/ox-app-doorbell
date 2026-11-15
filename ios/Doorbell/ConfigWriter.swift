@@ -26,8 +26,10 @@ final class ConfigWriter {
         /// refusal: §5.2 is explicit that a colour an administrator typed is saved and only
         /// commented on.
         /// `notes` are message keys of non-contrast warnings (`visitor_flow.no_call`, ...).
-        case ok(contrasts: [Double], notes: [String])
-        case failed(String)
+        /// `flowWarnings` locate the visitor-flow notes (`visitor_flow.disabled_purpose`).
+        case ok(contrasts: [Double], notes: [String], flowWarnings: [FlowIssue] = [])
+        /// `detail` is Core's additive `detail` object, values as strings.
+        case failed(String, detail: [String: String] = [:])
 
         static var ok: Result { return .ok(contrasts: [], notes: []) }
 
@@ -54,7 +56,7 @@ final class ConfigWriter {
     /// for once and the same batch is retried; a cancelled prompt reports `admin_required`.
     func apply(_ operations: [Operation], completion: @escaping (Result) -> Void) {
         applyOnce(operations) { [weak self] result in
-            guard case .failed(let error) = result, error == "admin_required",
+            guard case .failed(let error, _) = result, error == "admin_required",
                   let self = self, let core = self.core else {
                 completion(result)
                 return
@@ -106,13 +108,14 @@ final class ConfigWriter {
                 }
                 let contrasts = ConfigWriter.contrasts(outcome.warnings)
                 let notes = ConfigWriter.notes(outcome.warnings)
+                let flowWarnings = ConfigWriter.flowWarnings(outcome.warnings)
                 DispatchQueue.main.async {
                     guard outcome.ok else {
                         completion(.failed(outcome.error.isEmpty ? "config_persistence_failed"
-                            : outcome.error))
+                            : outcome.error, detail: outcome.detail))
                         return
                     }
-                    completion(.ok(contrasts: contrasts, notes: notes))
+                    completion(.ok(contrasts: contrasts, notes: notes, flowWarnings: flowWarnings))
                 }
             }
             return
@@ -141,8 +144,11 @@ final class ConfigWriter {
                 ?? (status == 404 || status == 401 ? "batch_unavailable" : "request_failed")
             let contrasts = ConfigWriter.contrasts(warnings)
             let notes = ConfigWriter.notes(warnings)
+            let flowWarnings = ConfigWriter.flowWarnings(warnings)
+            let detail = ConfigWriter.detail(payload["detail"])
             DispatchQueue.main.async {
-                completion(ok ? .ok(contrasts: contrasts, notes: notes) : .failed(error))
+                completion(ok ? .ok(contrasts: contrasts, notes: notes, flowWarnings: flowWarnings)
+                              : .failed(error, detail: detail))
             }
         }.resume()
     }
@@ -163,6 +169,24 @@ final class ConfigWriter {
             else { return nil }
             return key
         }
+    }
+
+    private static func flowWarnings(_ warnings: [[String: Any]]) -> [FlowIssue] {
+        return warnings.compactMap { warning in
+            FlowIssue.warning(key: warning["key"] as? String ?? "",
+                              messageKey: warning["message_key"] as? String ?? "")
+        }
+    }
+
+    /// Core's `detail` object (limit, value, min, max, lang) with every value as text.
+    static func detail(_ object: Any?) -> [String: String] {
+        guard let map = object as? [String: Any] else { return [:] }
+        var out: [String: String] = [:]
+        for (key, value) in map {
+            if let text = value as? String { out[key] = text }
+            else if let number = value as? NSNumber { out[key] = "\(number)" }
+        }
+        return out
     }
 
     /// JSON encoding of one value, as Core's single-key entry point expects it.
@@ -187,21 +211,17 @@ final class ConfigWriter {
     /// endpoint, because that failure means the node is too old for atomic writes.
     static func message(_ texts: Texts, _ result: Result) -> String {
         switch result {
-        case .ok(let contrasts, let notes):
+        case .ok(let contrasts, let notes, _):
             // The write went through: the warning is shown next to the confirmation, never
             // instead of it.
             let advice = contrasts.map { texts.t("theme.contrast_warning", String(format: "%.1f", $0)) }
                 + notes.map { texts.t($0) }
             guard !advice.isEmpty else { return texts.t("settings.saved") }
             return texts.t("settings.saved") + " · " + advice.joined(separator: " · ")
-        case .failed(let code):
+        case .failed(let code, let detail):
             if code == "batch_unavailable" { return texts.t("admin.atomic_batch_unavailable") }
             if code.hasPrefix("unresolved_config_conflict") { return texts.t("flow_editor.conflict") }
-            if let flow = VisitorFlowEditor.errorKey(code) {
-                let known = texts.t(flow.key)
-                let text = known == flow.key ? texts.t("visitor_flow.invalid", flow.key) : known
-                return flow.detail.isEmpty ? text : text + " (" + flow.detail + ")"
-            }
+            if let issue = FlowIssue.parse(code, detail: detail) { return issue.message(texts) }
             return texts.t("settings.save_failed")
         }
     }

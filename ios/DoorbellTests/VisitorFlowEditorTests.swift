@@ -50,9 +50,14 @@ final class VisitorFlowEditorTests: XCTestCase {
         return ops
     }
 
-    private func isInvalid(_ effect: SettingEffect?, _ key: String? = nil) -> Bool {
-        if case .invalid(let found)? = effect { return key == nil || key == found }
+    private func isInvalid(_ effect: SettingEffect?, _ code: String? = nil) -> Bool {
+        if case .refused(let issue)? = effect { return code == nil || code == issue.code }
         return false
+    }
+
+    private func issue(_ effect: SettingEffect?) -> FlowIssue? {
+        if case .refused(let issue)? = effect { return issue }
+        return nil
     }
 
     // MARK: Reading
@@ -209,12 +214,14 @@ final class VisitorFlowEditorTests: XCTestCase {
 
     func testTextLimitsAreCheckedBeforeCore() throws {
         let page = pages(flowConfig()).stepPage("s_parcel")
-        XCTAssertTrue(isInvalid(page.item("s_parcel_title_en")?.commit?(.string(String(repeating: "a", count: 61))),
-                                "visitor_flow.bad_text"))
+        let long = issue(page.item("s_parcel_title_en")?.commit?(.string(String(repeating: "a", count: 61))))
+        XCTAssertEqual(long?.code, "text_too_long")
+        XCTAssertEqual(long?.location, "s_parcel.title.en")
+        XCTAssertEqual(long?.detail, ["lang": "en", "limit": "60", "value": "61"])
         let body = try XCTUnwrap(page.item("s_parcel_body_en"))
-        XCTAssertTrue(isInvalid(body.commit?(.string(String(repeating: "x", count: 601)))))
+        XCTAssertTrue(isInvalid(body.commit?(.string(String(repeating: "x", count: 601))), "text_too_long"))
         let paragraphs = (1...9).map { "p\($0)" }.joined(separator: "\n\n")
-        XCTAssertTrue(isInvalid(body.commit?(.string(paragraphs))))
+        XCTAssertTrue(isInvalid(body.commit?(.string(paragraphs)), "too_many_paragraphs"))
         XCTAssertFalse(isInvalid(body.commit?(.string("Line one\n\nLine two"))))
     }
 
@@ -238,9 +245,9 @@ final class VisitorFlowEditorTests: XCTestCase {
 
     func testAnOptionNeedsALabelOrAPurpose() {
         let label = pages(flowConfig()).optionPageItem("s_home", "o_call", "label_en")
-        XCTAssertTrue(isInvalid(label?.commit?(.string("")), "visitor_flow.option_needs_label"))
+        XCTAssertTrue(isInvalid(label?.commit?(.string("")), "option_needs_label"))
         let purposeOnly = pages(flowConfig()).optionPageItem("s_home", "o_parcel", "purpose")
-        XCTAssertTrue(isInvalid(purposeOnly?.commit?(.string("")), "visitor_flow.option_needs_label"))
+        XCTAssertTrue(isInvalid(purposeOnly?.commit?(.string("")), "option_needs_label"))
     }
 
     func testCallNotifyAndEndFields() throws {
@@ -402,20 +409,50 @@ final class VisitorFlowEditorTests: XCTestCase {
 
     // MARK: Errors
 
+    func testIssueLocationsPickTheControlThatOwnsThem() {
+        func first(_ err: String) -> String? { return FlowIssue.parse(err, detail: [:])?.candidateItemIds.first }
+        XCTAssertEqual(first("visitor_flow.text_too_long: s_home.title.ja"), "s_home_title_ja")
+        XCTAssertEqual(first("visitor_flow.text_too_long: s_home.o_call.label.en"), "s_home_o_call_label_en")
+        XCTAssertEqual(first("visitor_flow.text_too_long: n_left.message.zh"), "n_left_message_zh")
+        XCTAssertEqual(first("visitor_flow.text_too_long: s_home.images[1].alt.en"), "s_home_img1_alt_en")
+        XCTAssertEqual(first("visitor_flow.unknown_asset: s_home.images[0]"), "s_home_img0_asset")
+        XCTAssertEqual(first("visitor_flow.unknown_target: s_home.o_call"), "s_home_o_call_target")
+        XCTAssertEqual(first("visitor_flow.unknown_start: doors.d_front.start"), "flow_door_start_d_front")
+        XCTAssertEqual(first("visitor_flow.unknown_start: start"), "flow_start")
+        XCTAssertEqual(first("visitor_flow.bad_return_s: e_thanks"), "e_thanks_return_s")
+        XCTAssertEqual(first("visitor_flow.unknown_camera: n_left"), "n_left_snapshot")
+        XCTAssertEqual(first("visitor_flow.cycle: s_home"), "s_home_kind")
+        XCTAssertTrue(FlowIssue.parse("visitor_flow.too_many_steps", detail: [:])?.candidateItemIds.isEmpty == true)
+        let warning = FlowIssue.warning(key: "visitor_flow.steps.s_home.o_parcel", messageKey: "visitor_flow.disabled_purpose")
+        XCTAssertEqual(warning?.location, "s_home.o_parcel")
+        XCTAssertEqual(warning?.isWarning, true)
+        XCTAssertEqual(warning?.candidateItemIds.first, "s_home_o_parcel_purpose")
+    }
+
     func testCoreRefusalsMapToLocalisedTextNextToTheField() {
         let texts = Texts()
         texts.setLang("en")
-        XCTAssertEqual(VisitorFlowEditor.errorKey("visitor_flow.unknown_target: s_home.o_call")?.key,
-                       "visitor_flow.unknown_target")
-        XCTAssertEqual(VisitorFlowEditor.errorKey("visitor_flow.unknown_target: s_home.o_call")?.detail, "s_home.o_call")
-        XCTAssertNil(VisitorFlowEditor.errorKey("config_persistence_failed"))
+        let parsed = FlowIssue.parse("visitor_flow.unknown_target: s_home.o_call", detail: [:])
+        XCTAssertEqual(parsed?.code, "unknown_target")
+        XCTAssertEqual(parsed?.location, "s_home.o_call")
+        XCTAssertNil(FlowIssue.parse("config_persistence_failed", detail: [:]))
+        XCTAssertNil(FlowIssue.parse("visitor_flow.", detail: [:]))
         let message = ConfigWriter.message(texts, .failed("visitor_flow.unknown_target: s_home.o_call"))
-        XCTAssertTrue(message.contains("s_home.o_call"))
-        XCTAssertNotEqual(message, "visitor_flow.unknown_target")
+        XCTAssertEqual(message, texts.t("flow_error.unknown_target"))
+        XCTAssertFalse(message.contains("s_home"))
         let unknown = ConfigWriter.message(texts, .failed("visitor_flow.something_new: s_x"))
         XCTAssertTrue(unknown.contains("something_new"))
+        let unknownIssue = FlowIssue.parse("visitor_flow.something_new: s_x", detail: [:])
+        XCTAssertEqual(unknownIssue?.secondary(texts), "visitor_flow.something_new: s_x")
+        XCTAssertEqual(parsed?.secondary(texts), "")
         XCTAssertEqual(ConfigWriter.message(texts, .failed("unresolved_config_conflict")),
                        texts.t("flow_editor.conflict"))
+        let long = ConfigWriter.message(texts, .failed("visitor_flow.text_too_long: s_x.title.ja",
+                                                       detail: ["lang": "ja", "limit": "60", "value": "75"]))
+        XCTAssertTrue(long.contains("60") && long.contains("75") && long.contains("日本語"), long)
+        let range = ConfigWriter.message(texts, .failed("visitor_flow.bad_idle_s", detail: ["min": "15", "max": "300"]))
+        XCTAssertTrue(range.contains("15") && range.contains("300"), range)
+        XCTAssertEqual(ConfigWriter.detail(["limit": 12, "lang": "en"]), ["limit": "12", "lang": "en"])
         let warned = ConfigWriter.message(texts, .ok(contrasts: [], notes: ["visitor_flow.no_call"]))
         XCTAssertTrue(warned.contains(texts.t("visitor_flow.no_call")))
     }

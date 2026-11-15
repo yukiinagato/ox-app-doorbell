@@ -28,6 +28,8 @@ enum SettingEffect {
     case write([ConfigWriter.Operation])
     /// The value was rejected before reaching Core; the string is a message key.
     case invalid(String)
+    /// A visitor-flow rule the editor checked before Core; same code and message as Core's refusal.
+    case refused(FlowIssue)
     /// A shell action the controller performs itself (identity in boot.json, a password change,
     /// a sound preview, opening another screen). The committed value travels with it.
     case local(String)

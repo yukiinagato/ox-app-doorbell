@@ -180,6 +180,9 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
 
     private(set) var lastFailureMessage = ""
 
+    /// The visitor-flow refusal or warning shown beside its control until that control is edited.
+    private(set) var flowIssue: FlowIssue?
+
     func setStatus(_ message: String) {
         guard !message.isEmpty else { return }
         toast.text = "  " + message + "  "
@@ -273,6 +276,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
 
     func commit(_ item: SettingItem, _ value: SettingValue, from: UIViewController) {
         guard let commit = item.commit else { return }
+        if flowIssue?.candidateItemIds.contains(item.id) == true { flowIssue = nil }
         let effect = commit(value)
         // A destructive action names itself and waits for a second, explicit yes. Key rotation
         // brings its own confirmation, which also says what it costs.
@@ -310,7 +314,8 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
                 if let id = pendingId { self.pendingWrites.finish(id) }
                 let message = ConfigWriter.message(self.texts, result)
                 self.lastFailureMessage = result.isOk ? "" : message
-                self.setStatus(message)
+                self.flowIssue = SettingsViewController.flowIssue(of: result)
+                if self.flowIssue == nil || result.isOk { self.setStatus(message) }
                 self.refreshAll(force: !result.isOk)
                 completion?(result.isOk)
             }
@@ -318,11 +323,23 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             setStatus(texts.t(key))
             refreshAll(force: true)
             completion?(false)
+        case .refused(let issue):
+            lastFailureMessage = issue.message(texts)
+            flowIssue = issue
+            refreshAll(force: true)
+            completion?(false)
         case .local(let id):
             let performed = performLocal(id, value: value, from: from)
             completion?(performed)
         case .none:
             completion?(true)
+        }
+    }
+
+    private static func flowIssue(of result: ConfigWriter.Result) -> FlowIssue? {
+        switch result {
+        case .failed(let code, let detail): return FlowIssue.parse(code, detail: detail)
+        case .ok(_, _, let warnings): return warnings.first { $0.code == "disabled_purpose" }
         }
     }
 

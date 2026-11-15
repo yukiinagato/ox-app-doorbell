@@ -179,6 +179,13 @@ final class MainViewController: UIViewController {
     private var flowAwaitingSince = Date()
     private static let flowAwaitLimit: TimeInterval = 5
     private var flowEndShownAt: Date?
+    private var flowPendingToken = 0
+    private var flowPendingActive = false
+    private var flowPendingStatusShown = false
+    private var flowPendingStatusWork: DispatchWorkItem?
+    private var flowPendingTimeoutWork: DispatchWorkItem?
+    private static let flowPendingStatusDelay: TimeInterval = 0.8
+    private static let flowPendingTimeout: TimeInterval = 15
     private let flowQueue = DispatchQueue(label: "doorbell.visitor-flow", qos: .userInitiated)
     private var airQualityTimer: Timer?
     private var airQualityFetchInFlight = false
@@ -2328,14 +2335,60 @@ final class MainViewController: UIViewController {
     private func renderFlow() {
         guard let screen = visitorScreen, let walker = flowWalker else { return }
         screen.setFlowActive(walker.isEnabled)
-        guard walker.isEnabled, let page = walker.page else { return }
+        guard walker.isEnabled, let page = walker.page else {
+            updateFlowPending(walker, screen: screen)
+            return
+        }
         if walker.mode == .end {
             if flowEndShownAt == nil { flowEndShownAt = Date() }
         } else {
             flowEndShownAt = nil
         }
         screen.flowView.render(page, notice: walker.notice.map { texts.t($0) })
+        updateFlowPending(walker, screen: screen)
         applySemanticStyles()
+    }
+
+    /// Mirrors the walker's pending tap on screen: the indicator at once, the status line after
+    /// 0.8 s, and a way out after 15 s so the page is never left waiting.
+    private func updateFlowPending(_ walker: VisitorFlowWalker, screen: VisitorScreenView) {
+        guard walker.pendingCall, let option = walker.pendingOptionId else {
+            if flowPendingActive {
+                flowPendingActive = false
+                flowPendingStatusShown = false
+                flowPendingStatusWork?.cancel()
+                flowPendingTimeoutWork?.cancel()
+                onActivity()
+            }
+            screen.flowView.setPending(optionId: nil)
+            return
+        }
+        if !flowPendingActive {
+            flowPendingActive = true
+            flowPendingStatusShown = false
+            flowPendingToken += 1
+            let token = flowPendingToken
+            let status = DispatchWorkItem { [weak self] in
+                guard let self = self, self.flowPendingToken == token, self.flowPendingActive else { return }
+                self.flowPendingStatusShown = true
+                self.renderFlow()
+            }
+            let timeout = DispatchWorkItem { [weak self] in
+                guard let self = self, self.flowPendingToken == token, self.flowPendingActive,
+                      let walker = self.flowWalker else { return }
+                walker.abandonPending()
+                self.renderFlow()
+            }
+            flowPendingStatusWork = status
+            flowPendingTimeoutWork = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + MainViewController.flowPendingStatusDelay,
+                                          execute: status)
+            DispatchQueue.main.asyncAfter(deadline: .now() + MainViewController.flowPendingTimeout,
+                                          execute: timeout)
+        }
+        let kind = walker.targetKind(ofOption: option)
+        let text = texts.t(kind == "notify" ? "flow.pending_notify" : "flow.pending_call")
+        screen.flowView.setPending(optionId: option, status: flowPendingStatusShown ? text : nil)
     }
 
     private func onFlowOption(_ id: String) {

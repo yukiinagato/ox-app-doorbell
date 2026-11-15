@@ -152,6 +152,70 @@ final class VisitorFlowTests: XCTestCase {
         XCTAssertEqual(walker.mode, .calling)
     }
 
+    // MARK: Pending taps
+
+    func testPendingTapIsReportedUntilTheResultAndAbandonedWithARetryNotice() {
+        let walker = VisitorFlowWalker(flow: pendingFlow(), lang: "en")
+        XCTAssertEqual(walker.targetKind(ofOption: "o_notify"), "notify")
+        XCTAssertEqual(walker.tap("o_notify"), .call(.notify("n")))
+        XCTAssertTrue(walker.pendingCall)
+        XCTAssertEqual(walker.pendingOptionId, "o_notify")
+        XCTAssertEqual(walker.tap("o_other"), .none, "other options are ignored while pending")
+        XCTAssertEqual(walker.pendingOptionId, "o_notify")
+        walker.abandonPending()
+        XCTAssertFalse(walker.pendingCall)
+        XCTAssertNil(walker.pendingOptionId)
+        XCTAssertEqual(walker.notice, VisitorFlowWalker.pendingFailedNotice)
+        XCTAssertEqual(walker.notifyFinished(ok: true), .none, "a late result changes nothing")
+        XCTAssertEqual(walker.mode, .page)
+        XCTAssertEqual(walker.tap("o_notify"), .call(.notify("n")), "tapping again retries")
+        XCTAssertNil(walker.notice)
+        _ = walker.notifyFinished(ok: true)
+        XCTAssertNil(walker.pendingOptionId)
+        XCTAssertEqual(walker.mode, .end)
+    }
+
+    private func pendingFlow() -> [String: Any] {
+        return ["enabled": true, "start": "s", "steps": [
+            "s": ["kind": "page", "options": [
+                ["id": "o_notify", "label": ["en": "Leave a message"], "to": "n"],
+                ["id": "o_other", "label": ["en": "Other"], "to": "e"],
+            ]],
+            "n": ["kind": "notify", "message": ["en": "Hi"], "to": "e"],
+            "e": ["kind": "end", "title": ["en": "Thanks"]],
+        ]]
+    }
+
+    func testPendingOptionKeepsItsLabelShowsActivityAndDimsTheRest() {
+        let view = laidOut(width: 390, height: 800, page: page(options: 3, primary: false))
+        let buttons = view.optionButtonsForTesting
+        let before = buttons.map { frame($0, in: view) }
+        var taps: [String] = []
+        view.onOption = { taps.append($0) }
+        view.setPending(optionId: "o1")
+        view.layoutIfNeeded()
+        XCTAssertTrue(view.activityVisible(on: 1))
+        XCTAssertFalse(view.activityVisible(on: 0))
+        XCTAssertEqual(buttons[1].alpha, 1)
+        XCTAssertEqual(buttons[1].title(for: .normal), "Option number 1")
+        XCTAssertEqual(buttons[0].alpha, 0.45, accuracy: 0.01)
+        XCTAssertEqual(view.backButtonForTesting.alpha, 0.45, accuracy: 0.01)
+        XCTAssertTrue(buttons.allSatisfy { !$0.isUserInteractionEnabled })
+        XCTAssertFalse(view.backButtonForTesting.isUserInteractionEnabled)
+        XCTAssertNotNil(buttons[1].accessibilityValue)
+        XCTAssertEqual(buttons.map { frame($0, in: view) }, before, "no layout shift")
+        buttons[0].sendActions(for: .touchUpInside)
+        XCTAssertEqual(taps, [], "a tap while pending is ignored")
+        view.setPending(optionId: "o1", status: "Notifying")
+        XCTAssertEqual(view.noticeForTesting.text, "Notifying")
+        XCTAssertFalse(view.noticeForTesting.isHidden)
+        view.setPending(optionId: nil)
+        XCTAssertFalse(view.activityVisible(on: 1))
+        XCTAssertTrue(buttons.allSatisfy { $0.isUserInteractionEnabled && $0.alpha == 1 })
+        buttons[0].sendActions(for: .touchUpInside)
+        XCTAssertEqual(taps, ["o0"])
+    }
+
     // MARK: Layout of the page renderer
 
     private func page(options: Int, body: String = "", primary: Bool = true, purposes: Bool = false,

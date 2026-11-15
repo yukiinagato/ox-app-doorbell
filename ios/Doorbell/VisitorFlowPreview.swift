@@ -64,6 +64,7 @@ final class FlowPreviewViewController: UIViewController {
     private let flowView: VisitorFlowView
     private let banner = HaloLabel()
     private let result = HaloLabel()
+    private var simulating = false
 
     init(session: FlowPreviewSession, texts: Texts, palette: DoorbellPalette) {
         self.session = session
@@ -109,10 +110,7 @@ final class FlowPreviewViewController: UIViewController {
         flowView.apply(skin: skin)
         skin.apply("hint", to: banner)
         skin.apply("notice", to: result)
-        flowView.onOption = { [weak self] id in
-            self?.session.tap(id)
-            self?.render()
-        }
+        flowView.onOption = { [weak self] id in self?.tapped(id) }
         flowView.onBack = { [weak self] in
             self?.session.back()
             self?.render()
@@ -127,6 +125,32 @@ final class FlowPreviewViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         flowView.viewportHeight = flowView.bounds.height
+    }
+
+    /// A call or a notify shows the same activity indicator as the door for about a second, then
+    /// the session reports what would have been sent.
+    private func tapped(_ id: String) {
+        guard !simulating else { return }
+        let kind = session.walker.targetKind(ofOption: id)
+        guard kind == "call" || kind == "notify" else {
+            session.tap(id)
+            render()
+            return
+        }
+        simulating = true
+        let status = texts.t(kind == "notify" ? "flow.pending_notify" : "flow.pending_call")
+        flowView.setPending(optionId: id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self = self, self.simulating else { return }
+            self.flowView.setPending(optionId: id, status: status)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            self.simulating = false
+            self.flowView.setPending(optionId: nil)
+            self.session.tap(id)
+            self.render()
+        }
     }
 
     private func render() {

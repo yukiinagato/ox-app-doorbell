@@ -914,9 +914,13 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows ファイアウォール</value></data>
   <data name="flow_back" xml:space="preserve"><value>戻る</value></data>
+  <data name="flow_busy" xml:space="preserve"><value>処理中</value></data>
   <data name="flow_call_failed" xml:space="preserve"><value>呼び出せませんでした。もう一度お試しください。</value></data>
   <data name="flow_done" xml:space="preserve"><value>完了</value></data>
   <data name="flow_message_title" xml:space="preserve"><value>来訪者からのお知らせ</value></data>
+  <data name="flow_pending_call" xml:space="preserve"><value>住人を呼び出しています…</value></data>
+  <data name="flow_pending_failed" xml:space="preserve"><value>届きませんでした。もう一度選択肢をタップしてください。</value></data>
+  <data name="flow_pending_notify" xml:space="preserve"><value>住人に知らせています…</value></data>
   <data name="flow_sent" xml:space="preserve"><value>お知らせしました</value></data>
   <data name="flow_editor_add_image" xml:space="preserve"><value>画像を追加</value></data>
   <data name="flow_editor_add_option" xml:space="preserve"><value>選択肢を追加</value></data>

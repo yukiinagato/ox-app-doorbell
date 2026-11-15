@@ -20,7 +20,13 @@ protocol SettingsHosting: AnyObject {
     var pendingItemIds: Set<String> { get }
     /// What Core said about the last refused write, in the user's language; empty after a success.
     var lastFailureMessage: String { get }
+    /// The visitor-flow refusal or warning to show next to its control; nil when there is none.
+    var flowIssue: FlowIssue? { get }
     func show(_ controller: UIViewController, from: UIViewController)
+}
+
+extension SettingsHosting {
+    var flowIssue: FlowIssue? { return nil }
 }
 
 protocol SettingsRefreshable: AnyObject {
@@ -275,6 +281,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
     let path: [String]
     private var page = SettingsPage(id: "", title: "", sections: [])
     private var pendingStepper: DispatchWorkItem?
+    private var shownIssue: FlowIssue?
 
     init(host: SettingsHosting, path: [String]) {
         self.host = host
@@ -299,6 +306,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         if force || page.sections.isEmpty {
             page = fresh
             tableView.reloadData()
+            showFlowIssue(afterReload: true, scroll: force)
             return
         }
         if tableView.isBusyForRefresh {
@@ -318,6 +326,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             page = fresh
             tableView.reloadData()
         }
+        showFlowIssue(afterReload: false, scroll: false)
     }
 
     private func item(at indexPath: IndexPath) -> SettingItem {
@@ -336,7 +345,10 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        let footer = page.sections[section].footer
+        var footer = page.sections[section].footer
+        if issueSection == section, let note = issueNote {
+            footer = footer.isEmpty ? note : note + "\n" + footer
+        }
         return footer.isEmpty ? nil : footer
     }
 
@@ -348,6 +360,64 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
     override func tableView(_ tableView: UITableView, willDisplayFooterView view: UIView,
                             forSection section: Int) {
         if let palette = host?.palette { SettingsStyle.header(palette, view) }
+        if issueSection == section, let issue = host?.flowIssue, !issue.isWarning,
+           let footer = view as? UITableViewHeaderFooterView {
+            footer.textLabel?.textColor = SystemStyle.negative
+        }
+    }
+
+    // MARK: Visitor-flow issue
+
+    /// The section whose rows hold the control a visitor-flow issue points at, or nil.
+    private var issueSection: Int? {
+        guard let id = issueRowId else { return nil }
+        return page.sections.firstIndex { $0.items.contains { $0.id == id } }
+    }
+
+    private var inFlowEditor: Bool { return path.contains("visitor_flow") }
+
+    private var issueRowId: String? {
+        guard inFlowEditor, let issue = host?.flowIssue else { return nil }
+        return issue.candidateItemIds.first { page.item($0) != nil }
+    }
+
+    private var issueNote: String? {
+        guard let host = host, let issue = host.flowIssue else { return nil }
+        let secondary = issue.secondary(host.texts)
+        return issue.message(host.texts) + (secondary.isEmpty ? "" : "\n" + secondary)
+    }
+
+    /// Puts the issue under its control, or in a banner at the top of the page when the control is
+    /// on another page, and brings the control into view.
+    private func showFlowIssue(afterReload: Bool, scroll: Bool) {
+        #if os(iOS)
+        guard let host = host else { return }
+        let current = inFlowEditor ? host.flowIssue : nil
+        let changed = current != shownIssue
+        shownIssue = current
+        let placed = issueRowId != nil
+        if let issue = current, !placed {
+            let label = UILabel()
+            label.numberOfLines = 0
+            label.font = SystemStyle.font(.footnote)
+            label.textColor = issue.isWarning ? SystemStyle.secondaryLabel : SystemStyle.negative
+            label.text = issueNote
+            label.accessibilityIdentifier = "flow_issue_banner"
+            let width = max(tableView.bounds.width, 280) - 32
+            let height = ceil(label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+            let holder = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: height + 20))
+            label.frame = CGRect(x: 16, y: 10, width: width, height: height)
+            holder.addSubview(label)
+            tableView.tableHeaderView = holder
+        } else if tableView.tableHeaderView?.subviews.first?.accessibilityIdentifier == "flow_issue_banner" {
+            tableView.tableHeaderView = nil
+        }
+        if changed, !afterReload { tableView.reloadData() }
+        if scroll, let section = issueSection, let id = issueRowId,
+           let row = page.sections[section].items.firstIndex(where: { $0.id == id }) {
+            tableView.scrollToRow(at: IndexPath(row: row, section: section), at: .middle, animated: true)
+        }
+        #endif
     }
 
     override func tableView(_ tableView: UITableView,
@@ -386,6 +456,10 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
             SettingsStyle.apply(palette, to: cell)
             configure(cell, item: item, palette: palette)
+        }
+        if item.id == issueRowId, let note = issueNote {
+            if host.flowIssue?.isWarning == false { cell.textLabel?.textColor = SystemStyle.negative }
+            cell.accessibilityHint = note
         }
         cell.accessibilityIdentifier = item.id
         return cell
@@ -1051,6 +1125,11 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
         }
         if case .invalid(let key) = effect {
             message = host.texts.t(key)
+            tableView.reloadData()
+            return
+        }
+        if case .refused(let issue) = effect {
+            message = issue.message(host.texts)
             tableView.reloadData()
             return
         }

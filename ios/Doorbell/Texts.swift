@@ -36,6 +36,12 @@ final class Texts {
         return args.isEmpty ? fmt : String(format: fmt, arguments: args)
     }
 
+    func t(_ key: String, list args: [CVarArg]) -> String {
+        if let ov = overrides?[key] as? String, !ov.isEmpty { return Texts.fillNamed(ov, args) }
+        let fmt = bundle.localizedString(forKey: key, value: key, table: nil)
+        return args.isEmpty ? fmt : String(format: fmt, arguments: args)
+    }
+
     private static func fillNamed(_ s: String, _ args: [CVarArg]) -> String {
         guard !args.isEmpty,
               let re = try? NSRegularExpression(pattern: "\\{[A-Za-z_][A-Za-z0-9_]*\\}")

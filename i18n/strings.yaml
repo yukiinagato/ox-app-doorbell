@@ -1397,6 +1397,10 @@ flow.back: { ja: "戻る", en: "Back", zh: "返回" }
 flow.done: { ja: "完了", en: "Done", zh: "完成" }
 flow.sent: { ja: "お知らせしました", en: "Message sent", zh: "已通知" }
 flow.call_failed: { ja: "呼び出せませんでした。もう一度お試しください。", en: "The call could not be placed. Please try again.", zh: "呼叫失败，请重试。" }
+flow.pending_notify: { ja: "住人に知らせています…", en: "Notifying the household…", zh: "正在通知住户…" }
+flow.pending_call: { ja: "住人を呼び出しています…", en: "Calling the household…", zh: "正在呼叫住户…" }
+flow.pending_failed: { ja: "届きませんでした。もう一度選択肢をタップしてください。", en: "That did not go through. Tap the option to try again.", zh: "未能送达，请再次点击该选项重试。" }
+flow.busy: { ja: "処理中", en: "In progress", zh: "处理中" }
 flow.message_title: { ja: "来訪者からのお知らせ", en: "Message from a visitor", zh: "访客留言" }
 flow_editor.title: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
 flow_editor.enabled: { ja: "ウィザードを使う", en: "Use the wizard", zh: "启用向导" }

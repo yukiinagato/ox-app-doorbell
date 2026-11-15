@@ -59,6 +59,19 @@ struct VisitorFlowPages {
         return map
     }
 
+    /// Core's `text_too_long` for one language of one text, measured in code points like Core.
+    private func tooLong(_ text: String, limit: Int, at location: String, lang: String) -> FlowIssue? {
+        let length = text.unicodeScalars.count
+        guard length > limit else { return nil }
+        return FlowIssue(code: "text_too_long", location: location,
+                         detail: ["lang": lang, "limit": "\(limit)", "value": "\(length)"])
+    }
+
+    private func tooManySteps() -> SettingEffect {
+        return .refused(FlowIssue(code: "too_many_steps",
+                                  detail: ["limit": "\(VisitorFlowEditor.maxSteps)", "value": "\(editor.steps.count)"]))
+    }
+
     private func langTitle(_ key: String, _ lang: String) -> String {
         return languages.count > 1 ? "\(t(key)) · \(Texts.langDisplayName(lang))" : t(key)
     }
@@ -152,7 +165,7 @@ struct VisitorFlowPages {
         let adds = ["page", "call", "notify", "end"].map { kind -> SettingItem in
             SettingItem("flow_add_\(kind)", "\(t("flow_editor.add_step")) · \(t("flow_editor.kind_" + kind))",
                         .action(destructive: false)) { _ in
-                guard !atLimit else { return .invalid("visitor_flow.too_many_steps") }
+                guard !atLimit else { return self.tooManySteps() }
                 return .write(self.editor.newStep(kind: kind, defaults: self.defaults).ops)
             }
         }
@@ -221,9 +234,13 @@ struct VisitorFlowPages {
         return SettingItem(itemId, title, detail: shown, control) { value in
             let text = multiline ? (value.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                                  : (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
-            guard text.count <= limit else { return .invalid("visitor_flow.bad_text") }
-            if multiline, VisitorFlowEditor.paragraphCount(text) > VisitorFlowEditor.limits.bodyParagraphs {
-                return .invalid("visitor_flow.bad_text")
+            let place = "\(id).\(field).\(lang)"
+            if let issue = self.tooLong(text, limit: limit, at: place, lang: lang) { return .refused(issue) }
+            let paragraphs = VisitorFlowEditor.paragraphCount(text)
+            if multiline, paragraphs > VisitorFlowEditor.limits.bodyParagraphs {
+                return .refused(FlowIssue(code: "too_many_paragraphs", location: place,
+                                          detail: ["lang": lang, "limit": "\(VisitorFlowEditor.limits.bodyParagraphs)",
+                                                   "value": "\(paragraphs)"]))
             }
             return .write(self.editor.update(id) { step in
                 if let map = VisitorFlowEditor.setting(step[field], lang: lang, to: text) {
@@ -298,7 +315,10 @@ struct VisitorFlowPages {
             alts.append(SettingItem("\(id)_img\(index)_alt_\(lang)", langTitle("flow_editor.image_alt", lang),
                                     detail: current, .text(value: current, placeholder: "", numeric: false)) { value in
                 let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
-                guard text.count <= VisitorFlowEditor.limits.alt else { return .invalid("visitor_flow.bad_text") }
+                if let issue = self.tooLong(text, limit: VisitorFlowEditor.limits.alt,
+                                            at: "\(id).images[\(index)].alt.\(lang)", lang: lang) {
+                    return .refused(issue)
+                }
                 return change { image in
                     if let map = VisitorFlowEditor.setting(image["alt"], lang: lang, to: text) {
                         image["alt"] = map
@@ -412,9 +432,14 @@ struct VisitorFlowPages {
             labels.append(SettingItem("\(id)_\(optionId)_label_\(lang)", langTitle("flow_editor.option_label", lang),
                                       detail: current, .text(value: current, placeholder: "", numeric: false)) { value in
                 let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
-                guard text.count <= VisitorFlowEditor.limits.label else { return .invalid("visitor_flow.bad_text") }
+                if let issue = self.tooLong(text, limit: VisitorFlowEditor.limits.label,
+                                            at: "\(id).\(optionId).label.\(lang)", lang: lang) {
+                    return .refused(issue)
+                }
                 let remaining = ((option["label"] as? [String: Any]) ?? [:]).filter { $0.key != lang && !(($0.value as? String ?? "").isEmpty) }
-                if text.isEmpty, remaining.isEmpty, purpose.isEmpty { return .invalid("visitor_flow.option_needs_label") }
+                if text.isEmpty, remaining.isEmpty, purpose.isEmpty {
+                    return .refused(FlowIssue(code: "option_needs_label", location: "\(id).\(optionId).label.\(lang)"))
+                }
                 return .write(self.editor.updateOption(id, option: optionId) { option in
                     if let map = VisitorFlowEditor.setting(option["label"], lang: lang, to: text) {
                         option["label"] = map
@@ -459,7 +484,7 @@ struct VisitorFlowPages {
                                 + purposeOptions(), searchable: false)) { value in
                     let chosen = value.stringValue ?? ""
                     if chosen.isEmpty, (option["label"] as? [String: Any] ?? [:]).isEmpty {
-                        return .invalid("visitor_flow.option_needs_label")
+                        return .refused(FlowIssue(code: "option_needs_label", location: "\(id).\(optionId)"))
                     }
                     return .write(self.editor.updateOption(id, option: optionId) { option in
                         if chosen.isEmpty { option.removeValue(forKey: "purpose") } else { option["purpose"] = chosen }
@@ -478,7 +503,7 @@ struct VisitorFlowPages {
         if !move.isEmpty { sections.append(SettingSection(move)) }
         sections.append(SettingSection([
             SettingItem("\(id)_\(optionId)_delete", t("flow_editor.delete_option"), .action(destructive: true)) { _ in
-                options.count <= 1 ? .invalid("visitor_flow.no_options")
+                options.count <= 1 ? .refused(FlowIssue(code: "no_options", location: "\(id).\(optionId)"))
                                    : .write(self.editor.deleteOption(id, option: optionId))
             },
         ]))
@@ -573,7 +598,7 @@ struct VisitorFlowPages {
             })
         }
         items.append(SettingItem("\(id)_duplicate", t("flow_editor.duplicate_step"), .action(destructive: false)) { _ in
-            guard let copy = self.editor.duplicate(id) else { return .invalid("visitor_flow.too_many_steps") }
+            guard let copy = self.editor.duplicate(id) else { return self.tooManySteps() }
             return .write(copy.ops)
         })
         let users = editor.referencers(of: id)
