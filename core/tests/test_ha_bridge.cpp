@@ -325,7 +325,8 @@ TEST_CASE("ha bridge: discovery publishes per-door call, history, image and sele
   std::vector<std::string> types;
   cJSON* t = nullptr;
   cJSON_ArrayForEach(t, json::get(event.get(), "event_types")) types.push_back(t->valuestring);
-  CHECK(types == std::vector<std::string>{"press", "answered", "missed", "replied", "cancelled"});
+  CHECK(types == std::vector<std::string>{"press", "answered", "missed", "replied", "cancelled",
+                                          "visitor_message"});
   CHECK(json::getString(event.get(), "object_id") == "doorbell_front");
 
   auto call_state = json::parse(h.latest("homeassistant/sensor/doorbell_front_call_state/config"));
@@ -399,6 +400,11 @@ TEST_CASE("ha bridge: call outcomes become doorbell events and history state") {
   CHECK(h.waitValue("doorbell/front/call_state", "idle"));
   CHECK(h.waitValue("doorbell/front/last_call", "replied"));
   CHECK(h.waitValue("doorbell/front/missed", "2"));
+  // The attributes are published right after the state, so wait for them rather than racing.
+  CHECK(waitUntil([&] {
+    auto published = json::parse(h.latest("doorbell/front/last_call/attrs"));
+    return published && json::getString(published.get(), "outcome") == "replied";
+  }));
   auto attrs = json::parse(h.latest("doorbell/front/last_call/attrs"));
   CHECK(json::getString(attrs.get(), "reply_text") == "One moment");
   CHECK(json::getString(attrs.get(), "time") == "2023-11-14T22:13:20Z");

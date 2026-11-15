@@ -49,11 +49,15 @@ def fixed_failing_launcher() -> Path:
     """A real root-owned executable that always exits nonzero.
 
     The helper rejects scripts, so the launcher-failure path needs a compiled
-    binary rather than a shell stub.
+    binary rather than a shell stub. The helper also rejects symlinks, and
+    false(1) is one on distributions whose coreutils is a multi-call binary, so
+    the candidate is resolved to its real file; the multi-call binary still
+    exits nonzero when invoked without an applet name.
     """
     for candidate in (Path("/usr/bin/false"), Path("/bin/false")):
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+        resolved = candidate.resolve()
+        if resolved.is_file() and os.access(resolved, os.X_OK):
+            return resolved
     raise unittest.SkipTest("no fixed false(1) binary available")
 
 

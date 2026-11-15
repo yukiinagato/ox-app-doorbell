@@ -1261,7 +1261,7 @@ TEST_CASE("standby: idle channels have no video subscription and activation is o
   track.setEnabled(true);
   StandbyServer server;
   auto slot = server.open("owner", "channel", track);
-  REQUIRE(slot);
+  REQUIRE(static_cast<bool>(slot));
   bool ended = false;
   CHECK(StandbyServer::pull(slot, &ended).size() == 12);
   CHECK(track.subscriberCount() == 0);
