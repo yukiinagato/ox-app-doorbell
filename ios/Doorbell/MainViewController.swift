@@ -32,6 +32,8 @@ final class MainViewController: UIViewController {
     private var cfg: [String: Any]?
     private var nodeId = ""
     private var visitorLang = "ja"
+    private var langCoalescer = LangSelectionCoalescer()
+    private let langQueue = DispatchQueue(label: "doorbell.visitor-lang", qos: .userInitiated)
     private let audio = SirenPlayer()
     private let callFeedbackAudio = SirenPlayer()
     private var callTitleOverride: String?
@@ -1030,8 +1032,7 @@ final class MainViewController: UIViewController {
                 if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
             if boot.role == "door_station" && !boot.door.isEmpty {
-                let vl = ConfigUtil.str(st, "visitor_lang.\(boot.door)") ?? "ja"
-                setVisitorLang(vl)
+                acceptVisitorLangEcho(ConfigUtil.str(st, "visitor_lang.\(boot.door)") ?? "ja")
             }
         }
         refreshSosConfig()
@@ -1364,8 +1365,64 @@ final class MainViewController: UIViewController {
     @objc private func onLangChanged() {
         let index = langBar.selectedSegmentIndex
         guard index >= 0, index < langCodes.count else { return }
-        core.setVisitorLang(door: boot.door, lang: langCodes[index])
-        setVisitorLang(langCodes[index])
+        selectLanguage(langCodes[index])
+    }
+
+    /// The screen follows the tap at once. Core hears only the final value, off the main thread,
+    /// after a short pause with no further taps.
+    private func selectLanguage(_ code: String) {
+        let generation = langCoalescer.select(code, at: ProcessInfo.processInfo.systemUptime)
+        setVisitorLang(code)
+        DispatchQueue.main.asyncAfter(deadline: .now() + LangSelectionCoalescer.debounce) {
+            [weak self] in
+            guard let self = self, let value = self.langCoalescer.commit(generation: generation)
+            else { return }
+            self.sendVisitorLang(value)
+        }
+    }
+
+    private func sendVisitorLang(_ lang: String) {
+        let core = self.core
+        let door = boot.door
+        langQueue.async { core.setVisitorLang(door: door, lang: lang) }
+    }
+
+    /// A press reads the language from Core, so a selection still waiting is sent and awaited first.
+    private func flushVisitorLang() {
+        guard let value = langCoalescer.flush() else { return }
+        sendVisitorLang(value)
+        langQueue.sync {}
+    }
+
+    private func acceptVisitorLangEcho(_ lang: String) {
+        let l = lang.isEmpty ? "ja" : lang
+        if langCoalescer.acceptsEcho(l, at: ProcessInfo.processInfo.systemUptime) {
+            setVisitorLang(l)
+        }
+    }
+
+    /// Titles change in place; the buttons are rebuilt only if the set of purposes differs.
+    private func relabelPurposeButtons() {
+        let ids = ConfigUtil.enabledPurposeIds(cfg)
+        var buttons: [UIButton] = []
+        for row in purposeGrid.arrangedSubviews {
+            for case let button as PurposeButton in (row as? UIStackView)?.arrangedSubviews ?? [] {
+                buttons.append(button)
+            }
+        }
+        let current = buttons.map { String(($0.accessibilityIdentifier ?? "").dropFirst("purpose_".count)) }
+        guard current == ids, !purposeSection.isHidden else {
+            buildPurposeButtons()
+            return
+        }
+        let purposes = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]) ?? [:]
+        for (id, button) in zip(ids, buttons) {
+            let entry = purposes[id] as? [String: Any]
+            let label = ConfigUtil.labelOf(entry, texts.lang, id)
+            let icon = entry?["icon"] as? String ?? ""
+            button.setTitle(AppIcon.purpose(id) != nil || icon.isEmpty ? label : "\(icon) \(label)",
+                            for: .normal)
+        }
     }
 
     private func setVisitorLang(_ lang: String) {
@@ -1374,7 +1431,7 @@ final class MainViewController: UIViewController {
         visitorLang = l
         texts.setLang(l)
         applyStrings()
-        buildPurposeButtons()
+        relabelPurposeButtons()
         updateLangBarSelection()
         visitorScreen?.refreshAirQualityText()
         dashboard?.refreshAirQualityText()
@@ -1853,7 +1910,7 @@ final class MainViewController: UIViewController {
         case "visitor_lang":
             let door = ConfigUtil.evStr(ev, "door")
             if boot.role == "door_station" && (door.isEmpty || door == boot.door) {
-                setVisitorLang(ConfigUtil.evStr(ev, "lang"))
+                acceptVisitorLangEcho(ConfigUtil.evStr(ev, "lang"))
             }
         case "asset_ready":
             // A replacement can arrive while the old picture is still on screen. Match the
@@ -2154,6 +2211,7 @@ final class MainViewController: UIViewController {
         let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ?? "outdoor_call_alert"
         let loop = ConfigUtil.bool(cfg, "ui.call_sound_loop", false)
         callFeedbackAudio.playConfigured(sound, loops: loop)
+        flushVisitorLang()
         guard let callId = core.pressV2(door: boot.door, purpose: purpose) else {
             showIdle(hint: texts.t("offline.body"))
             return
@@ -2439,8 +2497,16 @@ final class MainViewController: UIViewController {
         onActivity()
         let door = ConfigUtil.doorsWithCamera(config: cfg, status: core.status()).first
             ?? ((ConfigUtil.dig(cfg, "doors") as? [String: Any])?.keys.sorted().first ?? "front")
+        #if DEBUG
+        if name.hasPrefix("langtap:") {
+            runLanguageTimingProbe(String(name.dropFirst("langtap:".count)))
+            return
+        }
+        #endif
         if name.hasPrefix("reply:") {
-            presentReply(text: String(name.dropFirst("reply:".count)), ttl: 600)
+            var ttl = (ConfigUtil.dig(cfg, "reply.display_ttl_s") as? NSNumber)?.doubleValue ?? 30
+            if ttl <= 0 { ttl = 30 }
+            presentReply(text: String(name.dropFirst("reply:".count)), ttl: ttl)
             return
         }
         switch name {
@@ -2473,6 +2539,23 @@ final class MainViewController: UIViewController {
         default: break
         }
     }
+
+    #if DEBUG
+    /// Taps each listed language in turn without yielding to the run loop and records the time
+    /// from the handler's start to the end of the layout pass that follows it.
+    private func runLanguageTimingProbe(_ list: String) {
+        var lines: [String] = []
+        for code in list.split(separator: ",").map(String.init) {
+            let start = CACurrentMediaTime()
+            if let index = langCodes.firstIndex(of: code) { langBar.selectedSegmentIndex = index }
+            selectLanguage(code)
+            view.layoutIfNeeded()
+            lines.append("\(code) \(Int((CACurrentMediaTime() - start) * 1000000)) us")
+        }
+        let path = (BootConfig.dataDir() as NSString).appendingPathComponent("lang-timing.txt")
+        try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
+    }
+    #endif
 
     func debugRefreshH264() {
         IOSAvailability.logDebug("h264 debug refresh requested")
