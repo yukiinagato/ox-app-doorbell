@@ -31,6 +31,10 @@ LDID      := $(shell command -v ldid 2>/dev/null || echo /opt/homebrew/bin/ldid)
 
 ARCH      := -arch armv7
 MINVER    := -miphoneos-version-min=5.1
+# The current linker records the deployment target as the SDK version too. iOS 7 and
+# later then treat the app as linked against a pre-7 SDK and draw the legacy (iOS 6)
+# control appearance, so the SDK actually used is stated explicitly.
+SDKVER    := -Wl,-platform_version,ios,5.1,7.1
 SYSROOT   := -isysroot $(SDK)
 
 # Objective-C uses ARC, which is supported by the iOS 5.1 target.
@@ -45,7 +49,8 @@ FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework CoreAudio -framework AVFoundation -framework Security \
               -framework CoreFoundation -framework SystemConfiguration \
               -framework ImageIO -framework MediaPlayer -framework CoreMedia \
-              -framework CoreVideo -framework OpenGLES -framework GLKit
+              -framework CoreVideo -framework OpenGLES -framework GLKit \
+              -weak_framework CoreBluetooth
 # Static C++ runtime in dependency order, required by libdoorbell_all.a.
 RTLIBS := $(TC_LIB)/libc++.a $(TC_LIB)/libc++abi.a $(TC_LIB)/libunwind.a $(CLANG_RT)
 
@@ -90,7 +95,7 @@ $(OBJ)/qr_%.o: $(QR)/%.c | $(OBJ)
 # Relink the app whenever the combined Core archive changes.
 $(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(ENTITLEMENTS)
 	@mkdir -p $(APP)
-	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -o $@ \
+	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) $(SDKVER) -o $@ \
 	  $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(RTLIBS) $(FRAMEWORKS)
 
 $(RELAUNCH): $(KIOSK)/tools/relaunch.c $(ENTITLEMENTS)

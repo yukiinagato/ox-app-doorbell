@@ -25,7 +25,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.8</string>
+	<string>0.7.9</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>iPhoneOS</string>
@@ -42,11 +42,13 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>92</string>
+	<string>93</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>5.1</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>PM2.5 センサーに Bluetooth で接続するときに使います。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>門口機の背景画像を選ぶときに使います。</string>
 	<key>UIBackgroundModes</key>
