@@ -49,7 +49,6 @@ UIButton *DBChromeFilledButton(CGFloat fontSize);
 UIBarButtonItem *DBChromeBarItem(NSString *title, id target, SEL action);
 UIBarButtonItem *DBChromeDoneBarItem(NSString *title, id target, SEL action);
 UIBarButtonItem *DBChromeSystemBarItem(UIBarButtonSystemItem item, id target, SEL action);
-UIBarButtonItem *DBChromeFlexibleSpace(void);
 
 // A standalone UINavigationBar and its page stack.
 //

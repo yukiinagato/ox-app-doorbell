@@ -111,13 +111,27 @@ static NSArray *DBCommonTimeZones(void) {
 }
 @end
 
-// Accessory controls with the gap the cell keeps beside them.
-static const CGFloat kDBSwitchAccessoryWidth = 104;
+// Accessory controls with the gap the cell keeps beside them; switch and indicator widths
+// come from DBEditor.h.
 static const CGFloat kDBStepperAccessoryWidth = 114;
-static const CGFloat kDBIndicatorAccessoryWidth = 30;
+static const CGFloat kDBControlGap = 12;  // value text to stepper or slider
+static const CGFloat kDBSegmentTotalWidth = 216;
+static const CGFloat kDBSegmentHeight = 30;
+static const CGFloat kDBSliderHeight = 34;
 static const CGFloat kDBTwoPaneMinWidth = 700;
+static const CGFloat kDBMasterWidthWide = 320;
+static const CGFloat kDBMasterWidthNarrow = 280;
+static const CGFloat kDBMasterWideMinWidth = 900;
 static const CGFloat kDBPromptBarHeight = 74;
+static const CGFloat kDBRowHeight = 44;
+// The admin QR block on the device-information page.
 static const CGFloat kDBQrSide = 96;
+static const CGFloat kDBQrRowPadding = 16;
+// Category tiles follow the system Settings icon: a 29 pt rounded square, 18 pt glyph.
+static const CGFloat kDBTileSide = 29;
+static const CGFloat kDBTileGlyph = 18;
+static const CGFloat kDBTileCornerRadius = 6.5f;
+static NSString *const kDBInfoSectionId = @"settings.section_info";
 
 @interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
                                 UIActionSheetDelegate>
@@ -174,6 +188,7 @@ static const CGFloat kDBQrSide = 96;
 
   UIImage *_qrCode;
   NSString *_qrUrl;
+  NSMutableDictionary *_layoutCache;  // row pointer -> NSValue(DBEditCellLayout)
 
   // The transient message shown on the navigation item's prompt line.
   NSString *_promptText;
@@ -1456,6 +1471,7 @@ static const CGFloat kDBQrSide = 96;
     [current addObject:row];
   }
   _groups = groups;
+  [_layoutCache removeAllObjects];
 }
 
 - (DBSettingsRow *)rowAt:(NSIndexPath *)indexPath {
@@ -1538,6 +1554,7 @@ static const CGFloat kDBQrSide = 96;
   _selectedSection = index;
   _selectedId = [[_sections objectAtIndex:(NSUInteger)index] objectForKey:@"id"];
   [self regroup];
+  [self updateFooter];
   if (!_twoPane) {
     __weak DBSettingsScreen *weakSelf = self;
     _categoryItem = [_nav pushTitle:[self detailTitle] onPop:^{
@@ -1569,37 +1586,53 @@ static const CGFloat kDBQrSide = 96;
                            appVersion:appVersion batteryPct:battery charging:charging];
 }
 
-// The admin page's QR code, its address, and the version line close every category as the last
-// grouped section of the detail table.
+- (BOOL)showsAdmin {
+  return [_selectedId isEqualToString:kDBInfoSectionId];
+}
+
+// Only the device-information page carries the admin QR code, address and version line, as
+// its last grouped section.
 - (void)updateFooter {
+  if (![self showsAdmin]) return;
   NSString *url = [self adminUrl];
-  if (![url isEqualToString:_qrUrl]) {
-    _qrUrl = [url copy];
-    _qrCode = nil;
-    __weak DBSettingsScreen *weakSelf = self;
-    // QR generation is pure CPU work and stays off the main thread of an A4 device.
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-      UIImage *code = [DBQrCode imageForString:url targetPx:kDBQrSide * 2];
-      dispatch_async(dispatch_get_main_queue(), ^{
-        DBSettingsScreen *screen = weakSelf;
-        if (screen && [screen->_qrUrl isEqualToString:url]) {
-          screen->_qrCode = code;
-          [screen reloadAdminSection];
-        }
-      });
+  if ([url isEqualToString:_qrUrl]) return;
+  _qrUrl = [url copy];
+  _qrCode = nil;
+  __weak DBSettingsScreen *weakSelf = self;
+  // QR generation is pure CPU work and stays off the main thread of an A4 device.
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+    UIImage *code = [DBQrCode imageForString:url pointSize:kDBQrSide];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBSettingsScreen *screen = weakSelf;
+      if (screen && [screen->_qrUrl isEqualToString:url]) {
+        screen->_qrCode = code;
+        [screen reloadAdminSection];
+      }
     });
-  }
+  });
 }
 
 - (void)reloadAdminSection {
   NSInteger section = (NSInteger)[_groups count];
-  if ([_table numberOfSections] != section + 1 || [self volumeBeingDragged]) return;
+  if (![self showsAdmin] || [_table numberOfSections] != section + 1 ||
+      [self volumeBeingDragged]) return;
   [_table reloadSections:[NSIndexSet indexSetWithIndex:(NSUInteger)section]
         withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (BOOL)isAdminSection:(NSInteger)section {
-  return section == (NSInteger)[_groups count];
+  return [self showsAdmin] && section == (NSInteger)[_groups count];
+}
+
+// Holds the QR block's place until the code is rasterised, so the row does not jump.
+- (UIImage *)blankQr {
+  static UIImage *blank;
+  if (blank == nil) {
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(kDBQrSide, kDBQrSide), NO, 0);
+    blank = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+  }
+  return blank;
 }
 
 - (UITableViewCell *)adminCell {
@@ -1614,13 +1647,7 @@ static const CGFloat kDBQrSide = 96;
     cell.textLabel.textColor = [UIColor grayColor];
     cell.imageView.isAccessibilityElement = YES;
   }
-  UIImage *code = _qrCode;
-  if (code == nil) {
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(kDBQrSide, kDBQrSide), NO, 0);
-    code = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-  }
-  cell.imageView.image = code;
+  cell.imageView.image = _qrCode ?: [self blankQr];
   cell.imageView.accessibilityLabel = [_texts ts:@"web_admin.scan"];
   cell.textLabel.text = [NSString stringWithFormat:@"%@\n%@", [self adminUrl] ?: @"",
                                                    [self versionLine] ?: @""];
@@ -2364,7 +2391,7 @@ static const CGFloat kDBQrSide = 96;
   if (_volumeSliders == nil) _volumeSliders = [NSMutableDictionary dictionary];
   DBVolumeSlider *slider = [_volumeSliders objectForKey:key];
   if (slider == nil) {
-    slider = [[DBVolumeSlider alloc] initWithFrame:CGRectMake(0, 0, width, 34)];
+    slider = [[DBVolumeSlider alloc] initWithFrame:CGRectMake(0, 0, width, kDBSliderHeight)];
     slider.configKey = key;
     slider.minimumValue = 0;
     slider.maximumValue = 100;
@@ -2392,7 +2419,7 @@ static const CGFloat kDBQrSide = 96;
   }
   slider.accessibilityLabel = row.title;
   if (!slider.editingVolume && ![slider isTracking]) {
-    slider.bounds = CGRectMake(0, 0, width, 34);
+    slider.bounds = CGRectMake(0, 0, width, kDBSliderHeight);
     slider.savedValue = [row.value floatValue];
     slider.value = slider.savedValue;
     slider.pendingVolume = (NSInteger)slider.savedValue;
@@ -2410,15 +2437,18 @@ static const CGFloat kDBQrSide = 96;
   return MAX(120, MIN(280, floor(DBEditCellTextWidth(_table, 0, 0) * 0.5f)));
 }
 
-// The width of the row's segmented control, or zero when the row has none: more than three
-// choices, or a control that would not leave room for the title.
+// The width of the row's segmented control, or zero when the row has none: no choices, labels
+// that do not fit their share, or a control that would not leave room for the title. Every
+// segmented control is the same width so the column of controls lines up.
 - (CGFloat)segmentWidthForRow:(DBSettingsRow *)row {
-  if (![row.action isEqualToString:@"segment"] || [row.choices count] == 0) return 0;
+  NSUInteger count = [row.choices count];
+  if (![row.action isEqualToString:@"segment"] || count == 0) return 0;
   CGFloat widest = 0;
   for (NSArray *choice in row.choices)
     widest = MAX(widest, [[choice objectAtIndex:1]
         sizeWithFont:[UIFont boldSystemFontOfSize:13]].width);
-  CGFloat width = ceil(MAX(56, widest + 24)) * [row.choices count];
+  CGFloat share = kDBSegmentTotalWidth / count;
+  CGFloat width = widest + 16 <= share ? kDBSegmentTotalWidth : ceil(MAX(56, widest + 24)) * count;
   CGFloat title = [row.title sizeWithFont:[UIFont boldSystemFontOfSize:17]].width;
   return title + width + 24 <= DBEditCellTextWidth(_table, 0, 0) ? width : 0;
 }
@@ -2433,12 +2463,12 @@ static const CGFloat kDBQrSide = 96;
 - (CGFloat)accessoryWidthForRow:(DBSettingsRow *)row {
   NSString *action = row.action;
   if ([action isEqualToString:@"toggle"] || [action isEqualToString:@"role_toggle"])
-    return kDBSwitchAccessoryWidth;
-  if ([action isEqualToString:@"stepper"]) return kDBStepperAccessoryWidth + 12;
-  if ([self isVolumeRow:row]) return [self volumeSliderWidth] + 32;
+    return kDBEditSwitchAccessoryWidth;
+  if ([action isEqualToString:@"stepper"]) return kDBStepperAccessoryWidth + kDBControlGap;
+  if ([self isVolumeRow:row]) return [self volumeSliderWidth] + kDBControlGap + 20;
   CGFloat segment = [self segmentWidthForRow:row];
-  if (segment > 0) return segment + 20;
-  return [self opensElsewhere:row] ? kDBIndicatorAccessoryWidth : 0;
+  if (segment > 0) return segment + kDBControlGap + 8;
+  return [self opensElsewhere:row] ? kDBEditIndicatorAccessoryWidth : 0;
 }
 
 - (NSString *)detailForRow:(DBSettingsRow *)row {
@@ -2448,13 +2478,26 @@ static const CGFloat kDBQrSide = 96;
   return row.value;
 }
 
+// Measuring text is the expensive part of a row, so it happens once per row and table width.
 - (DBEditCellLayout)layoutForRow:(DBSettingsRow *)row {
-  return DBEditCellLayoutMake(row.title, [self detailForRow:row],
-                              DBEditCellTextWidth(_table, [self accessoryWidthForRow:row], 0));
+  if (_layoutCache == nil) _layoutCache = [NSMutableDictionary dictionary];
+  NSNumber *key = [NSNumber numberWithUnsignedInteger:(NSUInteger)row];
+  NSValue *cached = [_layoutCache objectForKey:key];
+  DBEditCellLayout layout;
+  if (cached != nil) {
+    [cached getValue:&layout];
+    return layout;
+  }
+  layout = DBEditCellLayoutMake(row.title, [self detailForRow:row],
+                                DBEditCellTextWidth(_table, [self accessoryWidthForRow:row], 0));
+  [_layoutCache setObject:[NSValue valueWithBytes:&layout objCType:@encode(DBEditCellLayout)]
+                   forKey:key];
+  return layout;
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-  return tableView == _categoryTable ? 1 : (NSInteger)[_groups count] + 1;
+  return tableView == _categoryTable ? 1
+      : (NSInteger)[_groups count] + ([self showsAdmin] ? 1 : 0);
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -2481,8 +2524,8 @@ static const CGFloat kDBQrSide = 96;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-  if (tableView == _categoryTable) return 44;
-  if ([self isAdminSection:indexPath.section]) return kDBQrSide + 16;
+  if (tableView == _categoryTable) return kDBRowHeight;
+  if ([self isAdminSection:indexPath.section]) return kDBQrSide + kDBQrRowPadding;
   return [self layoutForRow:[self rowAt:indexPath]].height;
 }
 
@@ -2506,18 +2549,19 @@ static const CGFloat kDBQrSide = 96;
   if (tile != nil) return tile;
   UIImage *glyph = [DBIconAsset tintedImageNamed:icon
                                            color:[UIColor whiteColor]
-                                            size:CGSizeMake(18, 18)];
+                                            size:CGSizeMake(kDBTileGlyph, kDBTileGlyph)];
   if (glyph == nil) return nil;
   NSArray *rgb = [palette objectForKey:icon] ?: @[ @142, @142, @147 ];
-  CGSize size = CGSizeMake(29, 29);
+  CGSize size = CGSizeMake(kDBTileSide, kDBTileSide);
   UIGraphicsBeginImageContextWithOptions(size, NO, 0);
   UIColor *fill = [UIColor colorWithRed:[[rgb objectAtIndex:0] floatValue] / 255
                                   green:[[rgb objectAtIndex:1] floatValue] / 255
                                    blue:[[rgb objectAtIndex:2] floatValue] / 255 alpha:1];
   [fill setFill];
   [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, size.width, size.height)
-                              cornerRadius:6.5f] fill];
-  [glyph drawInRect:CGRectMake(5.5f, 5.5f, 18, 18)];
+                              cornerRadius:kDBTileCornerRadius] fill];
+  CGFloat inset = (kDBTileSide - kDBTileGlyph) / 2;
+  [glyph drawInRect:CGRectMake(inset, inset, kDBTileGlyph, kDBTileGlyph)];
   tile = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   if (tile != nil) [tiles setObject:tile forKey:icon];
@@ -2553,17 +2597,18 @@ static const CGFloat kDBQrSide = 96;
   cell.textLabel.text = row.title;
   cell.detailTextLabel.text = [self detailForRow:row];
   NSUInteger index = [[self selectedRows] indexOfObjectIdenticalTo:row];
-  UIView *control = index == NSNotFound ? nil : [self controlForRow:row index:(NSInteger)index];
+  UIView *control = index == NSNotFound ? nil
+      : [self controlForRow:row index:(NSInteger)index reusing:cell];
   if (control != nil) {
     // A volume slider outlives its cell. Its former cell lets go of it first, or that cell
     // would pull the slider out of this one when it is reused.
     UITableViewCell *former = [self cellContaining:control];
     if (former != nil && former != cell) former.accessoryView = nil;
-    // Steppers and sliders keep 12 pt between the value text and the control.
     if ([row.action isEqualToString:@"stepper"] || [self isVolumeRow:row]) {
       UIView *seat = [[UIView alloc] initWithFrame:CGRectMake(0, 0,
-          control.bounds.size.width + 12, control.bounds.size.height)];
-      control.frame = CGRectMake(12, 0, control.bounds.size.width, control.bounds.size.height);
+          control.bounds.size.width + kDBControlGap, control.bounds.size.height)];
+      control.frame = CGRectMake(kDBControlGap, 0, control.bounds.size.width,
+                                 control.bounds.size.height);
       [seat addSubview:control];
       cell.accessoryView = seat;
     } else {
@@ -2580,11 +2625,12 @@ static const CGFloat kDBQrSide = 96;
 
 // Native controls are built per bind; a table shows one category, so this is a
 // handful of controls at a time.
-- (UIView *)controlForRow:(DBSettingsRow *)row index:(NSInteger)index {
+- (UIView *)controlForRow:(DBSettingsRow *)row index:(NSInteger)index
+                  reusing:(UITableViewCell *)cell {
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if (([row.action isEqualToString:@"toggle"] || [row.action isEqualToString:@"role_toggle"]) &&
       [parts count] == 2) {
-    UISwitch *toggle = [[UISwitch alloc] init];
+    UISwitch *toggle = (UISwitch *)DBEditSpareAccessory(cell, [UISwitch class]) ?: [[UISwitch alloc] init];
     toggle.on = [[parts objectAtIndex:1] integerValue] != 0;
     toggle.tag = index;
     toggle.accessibilityLabel = row.title;
@@ -2616,10 +2662,17 @@ static const CGFloat kDBQrSide = 96;
       [labels addObject:[choice objectAtIndex:1]];
       if ([[choice objectAtIndex:0] isEqualToString:current]) selected = (NSInteger)i;
     }
-    UISegmentedControl *segment = [[UISegmentedControl alloc] initWithItems:labels];
-    // The compact stock style; it is the only one on iOS 7 and later.
-    segment.segmentedControlStyle = UISegmentedControlStyleBar;
-    segment.frame = CGRectMake(0, 0, segmentWidth, 30);
+    UISegmentedControl *segment = (UISegmentedControl *)DBEditSpareAccessory(
+        cell, [UISegmentedControl class]);
+    if (segment != nil && (NSUInteger)segment.numberOfSegments == [labels count]) {
+      for (NSUInteger i = 0; i < [labels count]; i++)
+        [segment setTitle:[labels objectAtIndex:i] forSegmentAtIndex:i];
+    } else {
+      segment = [[UISegmentedControl alloc] initWithItems:labels];
+      // The compact stock style; it is the only one on iOS 7 and later.
+      segment.segmentedControlStyle = UISegmentedControlStyleBar;
+    }
+    segment.frame = CGRectMake(0, 0, segmentWidth, kDBSegmentHeight);
     segment.selectedSegmentIndex = selected;
     segment.tag = index;
     segment.accessibilityLabel = row.title;
@@ -2656,7 +2709,7 @@ static const CGFloat kDBQrSide = 96;
   CGFloat body = MAX(0, height - bar);
   CGRect detail;
   if (_twoPane) {
-    CGFloat master = width >= 900 ? 320 : 280;
+    CGFloat master = width >= kDBMasterWideMinWidth ? kDBMasterWidthWide : kDBMasterWidthNarrow;
     _masterNav.bar.frame = CGRectMake(0, 0, master, bar);
     _categoryTable.frame = CGRectMake(0, bar, master, body);
     _divider.frame = CGRectMake(master, 0, 1, height);
@@ -2680,6 +2733,7 @@ static const CGFloat kDBQrSide = 96;
   }
   if (CGRectGetWidth(detail) != _tableWidth) {
     _tableWidth = CGRectGetWidth(detail);
+    [_layoutCache removeAllObjects];
     if (![self volumeBeingDragged]) [_table reloadData];
   }
 }

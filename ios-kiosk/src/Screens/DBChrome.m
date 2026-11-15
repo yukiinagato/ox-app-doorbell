@@ -116,11 +116,6 @@ UIBarButtonItem *DBChromeSystemBarItem(UIBarButtonSystemItem item, id target, SE
   return [[UIBarButtonItem alloc] initWithBarButtonSystemItem:item target:target action:action];
 }
 
-UIBarButtonItem *DBChromeFlexibleSpace(void) {
-  return [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:NULL];
-}
-
 @implementation DBNavBar {
   UINavigationBar *_bar;
   // The parent placeholder (when the root has a back title), the root, then pushed pages.

@@ -4,6 +4,15 @@
 @implementation DBQrCode
 
 + (UIImage *)imageForString:(NSString *)s targetPx:(CGFloat)px {
+  return [self imageForString:s targetPx:px imageScale:1];
+}
+
++ (UIImage *)imageForString:(NSString *)s pointSize:(CGFloat)points {
+  CGFloat scale = [[UIScreen mainScreen] scale];
+  return [self imageForString:s targetPx:points * scale imageScale:scale];
+}
+
++ (UIImage *)imageForString:(NSString *)s targetPx:(CGFloat)px imageScale:(CGFloat)imageScale {
   if ([s length] == 0) return nil;
   const char *text = [s UTF8String];
   uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
@@ -42,7 +51,8 @@
   CGContextRelease(ctx);
   free(buf);
   if (img == NULL) return nil;
-  UIImage *ui = [UIImage imageWithCGImage:img];
+  UIImage *ui = [UIImage imageWithCGImage:img scale:imageScale
+                                    orientation:UIImageOrientationUp];
   CGImageRelease(img);
   return ui;
 }

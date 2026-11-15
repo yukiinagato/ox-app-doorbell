@@ -1,6 +1,7 @@
 #import "DBEditor.h"
 
 #import "../Core/DBConfigUtil.h"
+#import <objc/runtime.h>
 #import "DBChrome.h"
 
 @implementation DBEditField
@@ -50,9 +51,6 @@
 #pragma mark - stock cell metrics
 
 static const CGFloat kDBEditMinRowHeight = 44;
-// A switch or a disclosure indicator with the gap the cell keeps beside it.
-static const CGFloat kDBEditSwitchWidth = 104;
-static const CGFloat kDBEditIndicatorWidth = 30;
 
 CGFloat DBEditCellTextWidth(UITableView *table, CGFloat accessoryWidth, CGFloat imageWidth) {
   CGFloat width = CGRectGetWidth(table.bounds);
@@ -97,6 +95,15 @@ DBEditCellLayout DBEditCellLayoutMake(NSString *title, NSString *detail, CGFloat
   return layout;
 }
 
+static char kDBSpareAccessoryKey;
+
+UIView *DBEditSpareAccessory(UITableViewCell *cell, Class controlClass) {
+  UIView *spare = objc_getAssociatedObject(cell, &kDBSpareAccessoryKey);
+  if (![spare isMemberOfClass:controlClass]) return nil;
+  objc_setAssociatedObject(cell, &kDBSpareAccessoryKey, nil, OBJC_ASSOCIATION_ASSIGN);
+  return spare;
+}
+
 UITableViewCell *DBEditDequeueCell(UITableView *table, UITableViewCellStyle style,
                                    BOOL destructive) {
   NSString *base = style == UITableViewCellStyleValue1 ? @"edit.value"
@@ -117,6 +124,8 @@ UITableViewCell *DBEditDequeueCell(UITableView *table, UITableViewCellStyle styl
   cell.textLabel.text = nil;
   cell.detailTextLabel.text = nil;
   cell.imageView.image = nil;
+  objc_setAssociatedObject(cell, &kDBSpareAccessoryKey, cell.accessoryView,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   cell.accessoryView = nil;
   cell.accessoryType = UITableViewCellAccessoryNone;
   cell.selectionStyle = UITableViewCellSelectionStyleBlue;
@@ -131,15 +140,31 @@ UITableViewCell *DBEditDequeueCell(UITableView *table, UITableViewCellStyle styl
 @synthesize completion = _completion;
 @end
 
-static UIImage *DBSwatchImage(UIColor *color) {
-  CGSize size = CGSizeMake(28, 28);
-  UIGraphicsBeginImageContextWithOptions(size, NO, 0);
+// Swatches are rounded like the other settings tiles and composited once per colour.
+static const CGFloat kDBSwatchCornerRadius = 6;
+
+UIImage *DBEditSwatchImage(UIColor *color) {
+  static NSMutableDictionary *cache;
+  if (cache == nil) cache = [NSMutableDictionary dictionary];
+  CGFloat r = 0, g = 0, b = 0, a = 0;
+  if (![color getRed:&r green:&g blue:&b alpha:&a]) {
+    const CGFloat *c = CGColorGetComponents(color.CGColor);
+    r = c[0]; g = CGColorGetNumberOfComponents(color.CGColor) > 2 ? c[1] : c[0];
+    b = CGColorGetNumberOfComponents(color.CGColor) > 2 ? c[2] : c[0];
+  }
+  NSString *key = [NSString stringWithFormat:@"%.3f,%.3f,%.3f", r, g, b];
+  UIImage *image = [cache objectForKey:key];
+  if (image != nil) return image;
+  UIGraphicsBeginImageContextWithOptions(CGSizeMake(28, 28), NO, 0);
   [[UIColor colorWithWhite:0.5 alpha:0.6] setFill];
-  UIRectFill(CGRectMake(1, 1, 26, 26));
+  [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(1, 1, 26, 26)
+                              cornerRadius:kDBSwatchCornerRadius] fill];
   [color setFill];
-  UIRectFill(CGRectMake(2, 2, 24, 24));
-  UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+  [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(2, 2, 24, 24)
+                              cornerRadius:kDBSwatchCornerRadius - 1] fill];
+  image = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
+  if (image != nil) [cache setObject:image forKey:key];
   return image;
 }
 
@@ -448,8 +473,8 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 }
 
 - (DBEditCellLayout)layoutFor:(DBEditField *)field inTable:(UITableView *)tableView {
-  CGFloat accessory = field.kind == DBEditKindBool ? kDBEditSwitchWidth
-      : (([self opensPage:field] || field.checked) ? kDBEditIndicatorWidth : 0);
+  CGFloat accessory = field.kind == DBEditKindBool ? kDBEditSwitchAccessoryWidth
+      : (([self opensPage:field] || field.checked) ? kDBEditIndicatorAccessoryWidth : 0);
   CGFloat image = field.image ? field.image.size.width + 10 : 0;
   DBEditCellLayout layout = DBEditCellLayoutMake(
       field.title, [self detailFor:field], DBEditCellTextWidth(tableView, accessory, image));
@@ -495,7 +520,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   cell.detailTextLabel.text = [self detailFor:field];
   cell.imageView.image = field.image;
   if (field.kind == DBEditKindBool) {
-    UISwitch *toggle = [[UISwitch alloc] init];
+    UISwitch *toggle = (UISwitch *)DBEditSpareAccessory(cell, [UISwitch class]) ?: [[UISwitch alloc] init];
     toggle.on = [field.value boolValue];
     toggle.tag = indexPath.section * 10000 + indexPath.row;
     toggle.accessibilityLabel = field.title;
@@ -699,7 +724,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     custom.placeholder = @"#RRGGBB";
     custom.keyboard = UIKeyboardTypeASCIICapable;
     UIColor *now = [DBConfigUtil parseHexColor:field.value];
-    if (now) custom.image = DBSwatchImage(now);
+    if (now) custom.image = DBEditSwatchImage(now);
     custom.onChange = ^BOOL(id value) {
       NSString *hex = [[value description] uppercaseString];
       if (![hex hasPrefix:@"#"]) hex = [@"#" stringByAppendingString:hex];
@@ -720,7 +745,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     for (NSString *hex in swatches) {
       DBEditField *row = [DBEditField kind:DBEditKindAction title:hex value:hex];
       row.checked = [[field.value description] caseInsensitiveCompare:hex] == NSOrderedSame;
-      row.image = DBSwatchImage([DBConfigUtil parseHexColor:hex]);
+      row.image = DBEditSwatchImage([DBConfigUtil parseHexColor:hex]);
       row.action = ^{
         if (field.onChange && field.onChange(hex)) field.value = hex;
         [weakSelf reloadPage];

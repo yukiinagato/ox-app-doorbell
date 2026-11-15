@@ -116,7 +116,16 @@ typedef struct {
 // The width a grouped cell leaves for its labels beside an accessory and an image.
 CGFloat DBEditCellTextWidth(UITableView *table, CGFloat accessoryWidth, CGFloat imageWidth);
 DBEditCellLayout DBEditCellLayoutMake(NSString *title, NSString *detail, CGFloat textWidth);
+// Widths a grouped cell reserves for an accessory, gap included; the settings tables share them.
+static const CGFloat kDBEditSwitchAccessoryWidth = 104;
+static const CGFloat kDBEditIndicatorAccessoryWidth = 30;
 // A reset cell of that style. A destructive cell carries the system red on its title, the
 // one colour a settings row may set.
 UITableViewCell *DBEditDequeueCell(UITableView *table, UITableViewCellStyle style,
                                    BOOL destructive);
+// A 28 pt rounded colour swatch at screen scale, cached per colour.
+UIImage *DBEditSwatchImage(UIColor *color);
+// The accessory control the dequeued cell carried before it was reset, if it is a control of
+// that class, so a scrolled table rebinds controls instead of allocating them. Callers must
+// reset its state; target-action pairs are idempotent.
+UIView *DBEditSpareAccessory(UITableViewCell *cell, Class controlClass);

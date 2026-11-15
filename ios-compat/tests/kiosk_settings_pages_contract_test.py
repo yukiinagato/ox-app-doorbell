@@ -358,5 +358,49 @@ class KioskSettingsPagesContracts(unittest.TestCase):
         self.assertEqual(missing, [])
 
 
+class KioskSettingsRenderingContracts(unittest.TestCase):
+    """Visual and performance rules of the settings tables (ios-kiosk/src/Screens)."""
+
+    def test_admin_qr_belongs_to_the_information_page_only(self):
+        screen = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        self.assertIn("- (BOOL)showsAdmin {\n  return [_selectedId isEqualToString:kDBInfoSectionId];", screen)
+        self.assertIn("return [self showsAdmin] && section ==", screen)
+        self.assertIn("([self showsAdmin] ? 1 : 0)", screen)
+        self.assertIn("if (![self showsAdmin]) return;", screen)
+
+    def test_bitmaps_are_made_at_screen_scale(self):
+        screen = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        qr = read("ios-kiosk/src/Media/DBQrCode.m")
+        pages = read(PAGES)
+        self.assertIn("imageForString:url pointSize:kDBQrSide", screen)
+        self.assertNotIn("targetPx", screen)
+        self.assertIn("scale:imageScale", qr)
+        self.assertIn("pointSize:(CGFloat)points", qr)
+        self.assertNotIn("targetPx:240", pages)
+        self.assertNotIn("BeginImageContextWithOptions(target, YES, 1);\n      [image drawInRect", pages)
+
+    def test_one_radius_per_element_type(self):
+        screen = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        editor = read(EDITOR)
+        self.assertIn("cornerRadius:kDBTileCornerRadius", screen)
+        self.assertIn("cornerRadius:kDBSwatchCornerRadius", editor)
+        for source in (screen, editor):
+            self.assertNotRegex(source, r"cornerRadius:\s*[0-9]")
+            self.assertNotIn("masksToBounds", source)
+
+    def test_scrolling_reuses_controls_and_cached_layout(self):
+        screen = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        editor = read(EDITOR)
+        self.assertIn("DBEditSpareAccessory(cell, [UISwitch class])", screen)
+        self.assertIn("DBEditSpareAccessory(cell, [UISwitch class])", editor)
+        self.assertIn("_layoutCache", screen)
+        self.assertIn("static NSMutableDictionary *tiles;", screen)
+
+    def test_segmented_controls_share_one_width(self):
+        screen = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        self.assertIn("kDBSegmentTotalWidth", screen)
+        self.assertIn("CGRectMake(0, 0, segmentWidth, kDBSegmentHeight)", screen)
+
+
 if __name__ == "__main__":
     unittest.main()

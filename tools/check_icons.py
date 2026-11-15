@@ -42,7 +42,8 @@ ALLOWED = [
     ("webui/icons/tabler-sprite.svg", "the generated Tabler sprite"),
     ("webui/admin/index.html", "carries the generated sprite between its markers"),
     ("ios-kiosk/src/Screens/DBSettingsScreen.m",
-     "rounded masks for grouped settings cell backgrounds, not icon geometry"),
+     "the rounded square behind a category glyph, not icon geometry"),
+    ("ios-kiosk/src/Screens/DBEditor.m", "rounded colour swatches in settings rows, not icon geometry"),
     ("android/app/src/main/res/drawable/banner_tv.xml",
      "the Android TV launcher banner: artwork with a title, not a UI icon"),
 ]

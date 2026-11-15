@@ -71,6 +71,22 @@ static BOOL DBSafeId(NSString *identifier) {
                                UIPopoverControllerDelegate>
 @end
 
+static const CGFloat kDBPageQrSide = 120;
+// Longest edge, in points, of a wallpaper or theme preview row image.
+static const CGFloat kDBThumbnailSide = 120;
+
+// A panel link's code is rasterised once per link, not on every page rebuild.
+static UIImage *DBPanelLinkQr(NSString *link) {
+  static NSMutableDictionary *codes;
+  if (codes == nil) codes = [NSMutableDictionary dictionary];
+  UIImage *code = [codes objectForKey:link];
+  if (code == nil) {
+    code = [DBQrCode imageForString:link pointSize:kDBPageQrSide];
+    if (code != nil) [codes setObject:code forKey:link];
+  }
+  return code;
+}
+
 @implementation DBSettingsPages {
   __weak DBRouter *_router;
   __weak DBEditorView *_editor;
@@ -2124,7 +2140,7 @@ static NSArray *DBPanelGrants(void) {
       DBEditField *field = [DBEditField kind:DBEditKindInfo
                                        title:[pages t:[@"panels.link_" stringByAppendingString:screen]]
                                        value:link];
-      field.image = [DBQrCode imageForString:link targetPx:240];
+      field.image = DBPanelLinkQr(link);
       [fields addObject:field];
     }
     DBEditSection *section = [DBEditSection title:nil fields:fields];
@@ -2663,7 +2679,7 @@ static NSArray *DBPanelGrants(void) {
                                                   token];
       DBEditField *field = [pages info:[pages t:[@"panels.link_" stringByAppendingString:screen]]
                                  value:link];
-      field.image = [DBQrCode imageForString:link targetPx:240];
+      field.image = DBPanelLinkQr(link);
       [fields addObject:field];
     }
     DBEditSection *section = [DBEditSection title:nil fields:fields];
@@ -2785,11 +2801,7 @@ static NSArray *DBPanelGrants(void) {
   field.detail = hex ?: [self t:@"editor.automatic"];
   UIColor *color = [DBConfigUtil parseHexColor:hex ?: fallback];
   if (color) {
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(24, 24), NO, 0);
-    [color setFill];
-    UIRectFill(CGRectMake(0, 0, 24, 24));
-    field.image = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
+    field.image = DBEditSwatchImage(color);
   }
   __weak DBSettingsPages *weakSelf = self;
   field.onChange = ^BOOL(id value) {
@@ -3541,10 +3553,10 @@ static NSData *DBJpegForUpload(UIImage *image) {
       UIImage *image = [UIImage imageWithData:data];
       CGSize size = image.size;
       if (image == nil || size.width < 1 || size.height < 1) return;
-      CGFloat scale = MIN(1.0f, 160.0f / MAX(size.width, size.height));
+      CGFloat scale = MIN(1.0f, kDBThumbnailSide / MAX(size.width, size.height));
       CGSize target = CGSizeMake(MAX(1, floorf(size.width * scale)),
                                  MAX(1, floorf(size.height * scale)));
-      UIGraphicsBeginImageContextWithOptions(target, YES, 1);
+      UIGraphicsBeginImageContextWithOptions(target, YES, 0);
       [image drawInRect:CGRectMake(0, 0, target.width, target.height)];
       UIImage *thumbnail = UIGraphicsGetImageFromCurrentImageContext();
       UIGraphicsEndImageContext();
