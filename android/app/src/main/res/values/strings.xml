@@ -1935,6 +1935,7 @@ On</string>
     <string name="settings_cat_display">Display &amp; appearance</string>
     <string name="settings_cat_doors">Doors and announcements</string>
     <string name="settings_cat_emergency">SOS</string>
+    <string name="settings_cat_flow">Visitor wizard</string>
     <string name="settings_cat_integrations">Integrations</string>
     <string name="settings_cat_kiosk">Kiosk &amp; recovery</string>
     <string name="settings_cat_more">More in Admin</string>
@@ -2543,6 +2544,8 @@ On</string>
     <string name="settings_view_log_action">Show</string>
     <string name="settings_visit_purposes">Visit purposes</string>
     <string name="settings_visit_purposes_desc">Buttons visitors choose from, in display order</string>
+    <string name="settings_visitor_flow">Visitor wizard</string>
+    <string name="settings_visitor_flow_native">Edit the pages, texts, images and options a visitor walks through at the door station. Turn it off to return to the classic call screen.</string>
     <string name="settings_visitor_layout">Visitor screen layout</string>
     <string name="settings_visitor_layout_edges">Clock above, controls below</string>
     <string name="settings_visitor_layout_left">Controls on left</string>

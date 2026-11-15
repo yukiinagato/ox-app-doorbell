@@ -1937,6 +1937,7 @@
   <data name="settings_cat_display" xml:space="preserve"><value>显示与外观</value></data>
   <data name="settings_cat_doors" xml:space="preserve"><value>门口与公告</value></data>
   <data name="settings_cat_emergency" xml:space="preserve"><value>SOS</value></data>
+  <data name="settings_cat_flow" xml:space="preserve"><value>访客向导</value></data>
   <data name="settings_cat_integrations" xml:space="preserve"><value>集成</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>展台模式与恢复</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>管理页面中的更多设置</value></data>
@@ -2545,6 +2546,8 @@
   <data name="settings_view_log_action" xml:space="preserve"><value>显示</value></data>
   <data name="settings_visit_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="settings_visit_purposes_desc" xml:space="preserve"><value>访客可选的按钮，按显示顺序排列</value></data>
+  <data name="settings_visitor_flow" xml:space="preserve"><value>访客向导</value></data>
+  <data name="settings_visitor_flow_native" xml:space="preserve"><value>编辑访客在门口机上经过的页面、文字、图片和选项。关闭后恢复为原来的呼叫画面。</value></data>
   <data name="settings_visitor_layout" xml:space="preserve"><value>訪客畫面佈局</value></data>
   <data name="settings_visitor_layout_edges" xml:space="preserve"><value>時鐘在上、控制項在下</value></data>
   <data name="settings_visitor_layout_left" xml:space="preserve"><value>控制項靠左</value></data>

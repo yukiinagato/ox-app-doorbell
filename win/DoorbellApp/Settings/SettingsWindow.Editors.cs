@@ -45,6 +45,7 @@ namespace DoorbellApp.Settings
                 case "software_update": return BuildSoftwareUpdate(item);
                 case "speech": return BuildSpeech(item);
                 case "caps_override": return BuildCapsOverride(item);
+                case "visitor_flow": return BuildFlowEditor(item);
                 default: return null;
             }
         }

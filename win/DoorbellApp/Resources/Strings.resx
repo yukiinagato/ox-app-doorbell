@@ -1937,6 +1937,7 @@ ON</value></data>
   <data name="settings_cat_display" xml:space="preserve"><value>画面と外観</value></data>
   <data name="settings_cat_doors" xml:space="preserve"><value>門口とお知らせ</value></data>
   <data name="settings_cat_emergency" xml:space="preserve"><value>SOS</value></data>
+  <data name="settings_cat_flow" xml:space="preserve"><value>来訪者ウィザード</value></data>
   <data name="settings_cat_integrations" xml:space="preserve"><value>連携</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>キオスクと復旧</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>管理画面のその他の設定</value></data>
@@ -2545,6 +2546,8 @@ ON</value></data>
   <data name="settings_view_log_action" xml:space="preserve"><value>表示</value></data>
   <data name="settings_visit_purposes" xml:space="preserve"><value>来訪目的</value></data>
   <data name="settings_visit_purposes_desc" xml:space="preserve"><value>来訪者が選ぶボタン。並び順は表示順です</value></data>
+  <data name="settings_visitor_flow" xml:space="preserve"><value>来訪者ウィザード</value></data>
+  <data name="settings_visitor_flow_native" xml:space="preserve"><value>門口機で来訪者が進むページ、文章、画像、選択肢を編集します。オフにすると従来の呼出画面に戻ります。</value></data>
   <data name="settings_visitor_layout" xml:space="preserve"><value>来訪者画面の配置</value></data>
   <data name="settings_visitor_layout_edges" xml:space="preserve"><value>時計を上、操作を下に</value></data>
   <data name="settings_visitor_layout_left" xml:space="preserve"><value>操作を左側に</value></data>

@@ -72,14 +72,14 @@ namespace DoorbellApp
             if (width <= 40) width = ActualWidth > 40 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
             double available = Math.Max(1, Math.Min(620, width - 40) - 40);
             double height = 96;
-            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction })
+            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction, FlowDoneButton })
             {
                 var text = new TextBlock { Text = button.Content as string ?? "", FontSize = button.FontSize,
                     FontFamily = button.FontFamily, FontWeight = button.FontWeight, TextWrapping = TextWrapping.Wrap };
                 text.Measure(new Size(available, double.PositiveInfinity));
                 height = Math.Max(height, Math.Ceiling(text.DesiredSize.Height + 32));
             }
-            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction })
+            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction, FlowDoneButton })
                 button.MinHeight = height;
         }
     }

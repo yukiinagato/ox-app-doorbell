@@ -1509,6 +1509,9 @@ flow_editor.target_new_call: { ja: "新しい呼び出しステップを作る",
 flow_editor.target_new_end: { ja: "新しい完了ページを作る", en: "New end page", zh: "新建结束页" }
 flow_editor.image_place_current: { ja: "画像の位置: {place}", en: "Image placement: {place}", zh: "图片位置：{place}" }
 flow_editor.step_kind: { ja: "ステップの種類", en: "Kind of step", zh: "步骤类型" }
+settings.cat_flow: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
+settings.visitor_flow: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
+settings.visitor_flow_native: { ja: "門口機で来訪者が進むページ、文章、画像、選択肢を編集します。オフにすると従来の呼出画面に戻ります。", en: "Edit the pages, texts, images and options a visitor walks through at the door station. Turn it off to return to the classic call screen.", zh: "编辑访客在门口机上经过的页面、文字、图片和选项。关闭后恢复为原来的呼叫画面。" }
 # ---- Web: panel identities and security protocol v3 (2026-11 review) ----
 panels.tab: { ja: "パネル", en: "Panels", zh: "面板" }
 panels.title: { ja: "パネルの資格情報", en: "Panel credentials", zh: "面板凭据" }

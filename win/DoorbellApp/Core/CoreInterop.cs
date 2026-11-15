@@ -211,6 +211,21 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int H264PlayerFeedFn(IntPtr player, byte[] data, UIntPtr len);
 
+        // Visitor flow (door-station wizard). All three answer with an owned string released by
+        // db_free and marshal into Core's run loop, so they are called off the UI thread.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr VisitorFlowJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr VisitorFlowTemplateJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr VisitorNotifyJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string stepId);
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate IntPtr H264PlayerStatsJsonFn(IntPtr player);
 

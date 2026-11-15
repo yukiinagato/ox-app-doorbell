@@ -1935,6 +1935,7 @@
     <string name="settings_cat_display">显示与外观</string>
     <string name="settings_cat_doors">门口与公告</string>
     <string name="settings_cat_emergency">SOS</string>
+    <string name="settings_cat_flow">访客向导</string>
     <string name="settings_cat_integrations">集成</string>
     <string name="settings_cat_kiosk">展台模式与恢复</string>
     <string name="settings_cat_more">管理页面中的更多设置</string>
@@ -2543,6 +2544,8 @@
     <string name="settings_view_log_action">显示</string>
     <string name="settings_visit_purposes">来访目的</string>
     <string name="settings_visit_purposes_desc">访客可选的按钮，按显示顺序排列</string>
+    <string name="settings_visitor_flow">访客向导</string>
+    <string name="settings_visitor_flow_native">编辑访客在门口机上经过的页面、文字、图片和选项。关闭后恢复为原来的呼叫画面。</string>
     <string name="settings_visitor_layout">訪客畫面佈局</string>
     <string name="settings_visitor_layout_edges">時鐘在上、控制項在下</string>
     <string name="settings_visitor_layout_left">控制項靠左</string>

@@ -1937,6 +1937,7 @@ On</value></data>
   <data name="settings_cat_display" xml:space="preserve"><value>Display &amp; appearance</value></data>
   <data name="settings_cat_doors" xml:space="preserve"><value>Doors and announcements</value></data>
   <data name="settings_cat_emergency" xml:space="preserve"><value>SOS</value></data>
+  <data name="settings_cat_flow" xml:space="preserve"><value>Visitor wizard</value></data>
   <data name="settings_cat_integrations" xml:space="preserve"><value>Integrations</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>Kiosk &amp; recovery</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>More in Admin</value></data>
@@ -2545,6 +2546,8 @@ On</value></data>
   <data name="settings_view_log_action" xml:space="preserve"><value>Show</value></data>
   <data name="settings_visit_purposes" xml:space="preserve"><value>Visit purposes</value></data>
   <data name="settings_visit_purposes_desc" xml:space="preserve"><value>Buttons visitors choose from, in display order</value></data>
+  <data name="settings_visitor_flow" xml:space="preserve"><value>Visitor wizard</value></data>
+  <data name="settings_visitor_flow_native" xml:space="preserve"><value>Edit the pages, texts, images and options a visitor walks through at the door station. Turn it off to return to the classic call screen.</value></data>
   <data name="settings_visitor_layout" xml:space="preserve"><value>Visitor screen layout</value></data>
   <data name="settings_visitor_layout_edges" xml:space="preserve"><value>Clock above, controls below</value></data>
   <data name="settings_visitor_layout_left" xml:space="preserve"><value>Controls on left</value></data>

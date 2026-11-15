@@ -136,6 +136,20 @@
                            TextWrapping="Wrap" TextAlignment="Center"
                            Foreground="{DynamicResource Muted}" Margin="0,16,0,0"/>
 
+                <!-- The visitor flow's page (MainWindow.VisitorFlow.cs): title, images above, plain
+                     body text, images below. It shares the row with the classic purpose grid, and
+                     only one of the two is ever visible. The options live in the fixed zone below. -->
+                <StackPanel x:Name="FlowContent" Grid.Row="3" Visibility="Collapsed"
+                            Margin="0,16,0,8" MaxWidth="860" HorizontalAlignment="Stretch">
+                    <TextBlock x:Name="FlowTitle" FontSize="34" FontWeight="SemiBold"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               Foreground="{DynamicResource OnSurface}"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <StackPanel x:Name="FlowImagesAbove" Margin="0,12,0,0"/>
+                    <StackPanel x:Name="FlowBody" Margin="0,12,0,0"/>
+                    <StackPanel x:Name="FlowImagesBelow" Margin="0,4,0,0"/>
+                </StackPanel>
+
                 <StackPanel x:Name="PurposeSection" Grid.Row="3" Visibility="Collapsed"
                             Margin="0,16,0,8">
                     <TextBlock x:Name="PurposeHint" FontSize="18" TextWrapping="Wrap"
@@ -157,6 +171,27 @@
                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,12"
                                Foreground="{DynamicResource Fg}" AutomationProperties.LiveSetting="Polite"/>
                     <Button x:Name="CallButton" Style="{StaticResource VisitorPrimaryAction}" Click="OnCallClick"/>
+                    <!-- Visitor flow options: fixed here so they never scroll off screen. The zone
+                         scrolls internally (fade at the bottom) when the options need more than half
+                         of the window. -->
+                    <Grid x:Name="FlowOptionZone" Visibility="Collapsed" MaxWidth="900">
+                        <ScrollViewer x:Name="FlowOptionScroll" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      PanningMode="VerticalOnly">
+                            <StackPanel>
+                                <StackPanel x:Name="FlowPrimaryHost"/>
+                                <UniformGrid x:Name="FlowOptionGrid" Columns="2"
+                                             HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border x:Name="FlowOptionFade" Height="28" VerticalAlignment="Bottom"
+                                IsHitTestVisible="False" Visibility="Collapsed"/>
+                    </Grid>
+                    <Button x:Name="FlowBackButton" Visibility="Collapsed" MinHeight="56"
+                            FontSize="20" Padding="22,8" Margin="8,8,8,0"
+                            HorizontalAlignment="Left" Click="OnFlowBackClick"/>
+                    <Button x:Name="FlowDoneButton" Style="{StaticResource VisitorSecondaryAction}"
+                            Visibility="Collapsed" Click="OnFlowDoneClick"/>
                 </StackPanel>
             </Grid>
 

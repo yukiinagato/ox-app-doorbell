@@ -56,6 +56,30 @@ namespace DoorbellApp.Ui
             return Math.Max(1, columns);
         }
 
+        /// <summary>
+        /// Visitor flow options: one column on phone-class and portrait kiosk windows, two
+        /// otherwise (a single option never leaves an empty second cell).
+        /// </summary>
+        public static int FlowOptionColumns(SizeClass size, double width, double height, int count)
+        {
+            bool portrait = height > width;
+            int columns = size == SizeClass.Compact || (portrait && size != SizeClass.Expanded) ? 1 : 2;
+            if (count > 0 && count < columns) columns = count;
+            return Math.Max(1, columns);
+        }
+
+        /// <summary>The option zone scrolls inside itself beyond half of the window height.</summary>
+        public static double FlowOptionZoneMax(double height)
+        {
+            return Math.Max(160, height * 0.5);
+        }
+
+        /// <summary>A flow image never takes more than 40 % of the window height.</summary>
+        public static double FlowImageMax(double height)
+        {
+            return Math.Max(96, height * 0.4);
+        }
+
         /// <summary>Dashboard door tiles: 1 compact, 2 medium, 3–4 expanded.</summary>
         public static int TileColumns(SizeClass size, double width, int count)
         {

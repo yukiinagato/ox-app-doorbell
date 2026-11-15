@@ -58,6 +58,9 @@ namespace DoorbellApp.Core
         private CoreInterop.ConfigBatchJsonFn _configBatchJson;
         private CoreInterop.DeleteConfigKeyFn _deleteConfigKey;
         private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
+        private CoreInterop.VisitorFlowJsonFn _visitorFlowJson;
+        private CoreInterop.VisitorFlowTemplateJsonFn _visitorFlowTemplateJson;
+        private CoreInterop.VisitorNotifyJsonFn _visitorNotifyJson;
         private CoreInterop.LocalTokenFn _localToken;
         private CoreInterop.AdminLockFn _adminLock;
         private CoreInterop.InviteDeviceCodeFn _inviteDeviceCode;
@@ -286,6 +289,52 @@ namespace DoorbellApp.Core
                     CoreInterop.db_core_press_v2(_core, doorId ?? "", purpose ?? ""));
         }
 
+        /// <summary>True when this Core publishes the resolved visitor flow.</summary>
+        public bool VisitorFlowAvailable
+        {
+            get { ProbeOptionalExports(); return _visitorFlowJson != null; }
+        }
+
+        /// <summary>
+        /// The resolved flow document for a door (empty selects this shell's door), or null when
+        /// this Core predates the flow. Marshals into Core's loop: call it off the UI thread.
+        /// </summary>
+        public string VisitorFlowJson(string doorId)
+        {
+            ProbeOptionalExports();
+            if (_visitorFlowJson == null) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null :
+                    CoreInterop.TakeUtf8(_visitorFlowJson(_core, doorId ?? ""));
+        }
+
+        /// <summary>
+        /// An editor template ("default", "purposes" or "delivery") as {ok,flow} in configuration
+        /// shape, or null. Marshals into Core's loop: call it off the UI thread.
+        /// </summary>
+        public string VisitorFlowTemplateJson(string name)
+        {
+            ProbeOptionalExports();
+            if (_visitorFlowTemplateJson == null) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null :
+                    CoreInterop.TakeUtf8(_visitorFlowTemplateJson(_core, name ?? "default"));
+        }
+
+        /// <summary>
+        /// Sends the resident-facing message of one notify step without ringing. The step id is
+        /// the only input; the text and the snapshot stay inside Core. Returns the answer
+        /// document, or null when Core is unavailable. Call it off the UI thread.
+        /// </summary>
+        public string VisitorNotifyJson(string doorId, string stepId)
+        {
+            ProbeOptionalExports();
+            if (_visitorNotifyJson == null || string.IsNullOrEmpty(stepId)) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null :
+                    CoreInterop.TakeUtf8(_visitorNotifyJson(_core, doorId ?? "", stepId));
+        }
+
         public bool SelectPurpose(string doorId, string callId, string purpose)
         {
             if (string.IsNullOrEmpty(callId) || string.IsNullOrEmpty(purpose)) return false;
@@ -461,6 +510,13 @@ namespace DoorbellApp.Core
                     "db_core_rotate_cluster_key");
                 _callLogJsonV2 = CoreInterop.OptionalExport<CoreInterop.CallLogJsonV2Fn>(
                     "db_core_call_log_json_v2");
+                _visitorFlowJson = CoreInterop.OptionalExport<CoreInterop.VisitorFlowJsonFn>(
+                    "db_core_visitor_flow_json");
+                _visitorFlowTemplateJson =
+                    CoreInterop.OptionalExport<CoreInterop.VisitorFlowTemplateJsonFn>(
+                        "db_core_visitor_flow_template_json");
+                _visitorNotifyJson = CoreInterop.OptionalExport<CoreInterop.VisitorNotifyJsonFn>(
+                    "db_core_visitor_notify_json");
             }
         }
 

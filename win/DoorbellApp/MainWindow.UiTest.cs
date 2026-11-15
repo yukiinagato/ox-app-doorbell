@@ -104,6 +104,28 @@ namespace DoorbellApp
                     // Modal: answered before it opens, so the suite can drive the window.
                     Dispatcher.BeginInvoke(new Action(OpenSettings));
                     return "ok";
+                case "flow-sample":
+                    return LoadUiTestFlow();
+                case "flow-core":
+                    _flowTestDocument = false;
+                    _flowFetched = false;
+                    _flowRevision = "";
+                    _flow = null;
+                    BuildPurposeButtons();
+                    RenderVisitorFlow();
+                    RequestFlowRefresh();
+                    return "ok";
+                case "flow-start":
+                    if (_flow == null) return "error: no flow";
+                    _flow.IdleTimeout();
+                    _flow.Done();
+                    RenderVisitorFlow();
+                    RestartFlowTimer();
+                    return "ok";
+                case "flow-state":
+                    return _flow == null || _flow.Mode == FlowMode.Legacy
+                        ? "ok classic"
+                        : "ok flow " + _flow.Mode.ToString().ToLowerInvariant() + " " + _flow.Page;
                 case "quit":
                     AllowClose();
                     Dispatcher.BeginInvoke(new Action(Close));
@@ -111,6 +133,45 @@ namespace DoorbellApp
                 default:
                     return "error: unknown command";
             }
+        }
+
+        // A resolved visitor flow for the suite: the delivery branch of Core's built-in wizard in
+        // English, with an end page that stays long enough for a screenshot. Notify steps are
+        // answered locally while it is loaded, so the suite never sends a message to a household.
+        // Single quotes stand for the JSON quotes.
+        private const string UiTestFlow =
+            "{'schema_version':1,'enabled':true,'door':'door-uitest1','source':'config'," +
+            "'revision':'uitest-flow-1','start':'s_home','idle_s':45,'require_call':true,'steps':{" +
+            "'s_home':{'kind':'page','title':{'ja':'How can we help?','en':'How can we help?','zh':'How can we help?'}," +
+            "'images':[],'options':[" +
+            "{'id':'o_call','semantic_id':'call.primary','label':{'ja':'Call','en':'Call','zh':'Call'},'icon':'','style':'primary','to':'c_any'}," +
+            "{'id':'o_p_visit','semantic_id':'purpose.button','label':{'ja':'Visit','en':'Visit','zh':'Visit'},'icon':'','style':'normal','to':'c_visit','purpose':'p_visit'}," +
+            "{'id':'o_p_delivery','semantic_id':'purpose.button','label':{'ja':'Delivery','en':'Delivery','zh':'Delivery'},'icon':'','style':'normal','to':'s_parcel','purpose':'p_delivery'}]}," +
+            "'s_parcel':{'kind':'page','title':{'ja':'Can you leave it at the door?','en':'Can you leave it at the door?','zh':'Can you leave it at the door?'}," +
+            "'body':{'ja':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'," +
+            "'en':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'," +
+            "'zh':'If no signature is needed, please leave the parcel by the door.\\n\\nOtherwise press Hand over.'}," +
+            "'images':[],'options':[" +
+            "{'id':'o_leave','semantic_id':'call.primary','label':{'ja':'Leave it','en':'Leave it','zh':'Leave it'},'icon':'','style':'primary','to':'n_left'}," +
+            "{'id':'o_hand','semantic_id':'purpose.button','label':{'ja':'Hand over','en':'Hand over','zh':'Hand over'},'icon':'','style':'normal','to':'c_delivery'}]}," +
+            "'c_any':{'kind':'call'},'c_visit':{'kind':'call','purpose':'p_visit'}," +
+            "'c_delivery':{'kind':'call','purpose':'p_delivery','on_unanswered':'s_parcel'}," +
+            "'n_left':{'kind':'notify','purpose':'p_delivery','to':'e_thanks'}," +
+            "'e_thanks':{'kind':'end','title':{'ja':'Thank you','en':'Thank you','zh':'Thank you'}," +
+            "'body':{'ja':'The household has been told.','en':'The household has been told.','zh':'The household has been told.'}," +
+            "'images':[],'return_s':30}},'issues':[]}";
+
+        private string LoadUiTestFlow()
+        {
+            if (App.Boot.Role != "door_station") return "error: not a door station";
+            var doc = VisitorFlowDocument.Parse(UiTestFlow.Replace('\'', '"'));
+            if (doc == null || !doc.Enabled) return "error: the test flow did not parse";
+            _flowTestDocument = true;
+            _flowFetched = true;
+            _flowRevision = doc.Revision;
+            _flow = null;
+            InstallFlowDocument(doc);
+            return FlowHomeActive ? "ok" : "error: the flow is not showing";
         }
 
         /// <summary>

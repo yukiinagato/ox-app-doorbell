@@ -48,6 +48,7 @@ namespace DoorbellApp
             TouchHint.Text = IdleHintText();
             VisitorContentScroll.ScrollToTop();
             UpdateVisitorActionHeights(ActualWidth);
+            FlowAfterShowIdle();
         }
 
         private void ShowOffline()
@@ -112,6 +113,7 @@ namespace DoorbellApp
             if (reading != null && reading.Absent)
             {
                 _activeCallId = "";
+                _flowEndReason = "timeout";
                 ShowIdle(Texts.T("calling.no_answer"));
             }
             else if (!_inCall && CallingView.Visibility == Visibility.Visible)
@@ -334,6 +336,7 @@ namespace DoorbellApp
                             _activeCallId = "";
                             System.Threading.Interlocked.Increment(ref _callViewRevision);
                             _callTimeout.Stop();
+                            _flowEndReason = ev.Str("reason");
                             if (App.Boot.Role == "door_station") ShowIdle();
                         }
                         int resolvedStage = Math.Max(0,
@@ -372,6 +375,9 @@ namespace DoorbellApp
                         UpdateIncomingBadges();
                         BuildQuickReplies();
                     }
+                    break;
+                case "visitor_flow_changed":
+                    if (App.Boot.Role == "door_station") RequestFlowRefresh();
                     break;
                 case "asset_ready":
                     if (!string.IsNullOrEmpty(_themeHash) && ev.Str("hash") == _themeHash &&

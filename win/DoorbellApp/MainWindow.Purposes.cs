@@ -66,7 +66,8 @@ namespace DoorbellApp
 
         private bool ShowsHomePurposes()
         {
-            return App.Boot.Role == "door_station" && _callFlow == "purpose_first" &&
+            // With a visitor flow the start page replaces the classic purpose grid.
+            return App.Boot.Role == "door_station" && !FlowHomeActive && _callFlow == "purpose_first" &&
                 PurposeGrid.Children.Count > 0;
         }
 
@@ -314,6 +315,7 @@ namespace DoorbellApp
             ApplyStrings();
             BuildPurposeButtons();
             UpdateLangBarSelection();
+            OnFlowLanguageChanged();
         }
     }
 }

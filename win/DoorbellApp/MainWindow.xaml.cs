@@ -365,7 +365,8 @@ namespace DoorbellApp
             PreviewKeyDown += (s, e) => OnActivity();
             AddHandler(Button.ClickEvent, new RoutedEventHandler((s, e) =>
             {
-                if (!ReferenceEquals(e.OriginalSource, CallButton))
+                if (!ReferenceEquals(e.OriginalSource, CallButton) &&
+                    !FlowSuppressesClickSound(e.OriginalSource))
                     _effects = PlayConfigured(_effects,
                         SoundValue("button_sound", "button_click"), false, null, _volumeIdle);
             }));

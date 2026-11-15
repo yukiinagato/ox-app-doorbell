@@ -173,7 +173,7 @@ namespace DoorbellApp.Settings
         /// 3 MiB is scaled down to at most 1920 pixels and re-encoded as JPEG first. Returns the
         /// hash, or null when cancelled or refused (the reason is shown).
         /// </summary>
-        private string UploadAsset(string prefix, RowParts parts)
+        private string UploadAsset(string prefix, RowParts parts, bool forFlow = false)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
@@ -184,7 +184,7 @@ namespace DoorbellApp.Settings
                        : prefix == "audio/" ? Texts.T("settings.filter_sounds") + "|*.mp3;*.wav"
                        : Texts.T("settings.filter_assets") + "|*.jpg;*.jpeg;*.png;*.mp3;*.wav",
             };
-            if (dialog.ShowDialog(this) != true) return null;
+            if (dialog.ShowDialog(_formOwner ?? this) != true) return null;
             string path = dialog.FileName;
             string type;
             switch (Path.GetExtension(path).ToLowerInvariant())
@@ -203,6 +203,17 @@ namespace DoorbellApp.Settings
             {
                 Report(new SettingsWriteResult { Error = Texts.T("admin.file_read_failed") }, parts);
                 return null;
+            }
+            // A visitor-flow picture is shown on a door screen: at most 1280 pixels on the long
+            // edge and about 400 KB, so the page stays quick on a small tablet.
+            if (forFlow && type.StartsWith("image/", StringComparison.Ordinal))
+            {
+                byte[] fitted = FitFlowImage(bytes);
+                if (fitted != null)
+                {
+                    bytes = fitted;
+                    type = "image/jpeg";
+                }
             }
             if (bytes.Length > CoreClient.MaxAssetBytes && type.StartsWith("image/", StringComparison.Ordinal))
             {
@@ -231,6 +242,45 @@ namespace DoorbellApp.Settings
             ShowStatus(Texts.T("admin.asset_registered"), false);
             _store.Reload();
             return hash;
+        }
+
+        /// <summary>
+        /// Scales a picture to at most 1280 pixels on its long edge and re-encodes it as JPEG
+        /// until it is about 400 KB or less. Null when it is already that small or cannot be read.
+        /// </summary>
+        private static byte[] FitFlowImage(byte[] original)
+        {
+            try
+            {
+                var source = new BitmapImage();
+                using (var stream = new MemoryStream(original))
+                {
+                    source.BeginInit();
+                    source.CacheOption = BitmapCacheOption.OnLoad;
+                    source.StreamSource = stream;
+                    source.EndInit();
+                }
+                int edge = Math.Max(source.PixelWidth, source.PixelHeight);
+                if (edge <= 1280 && original.Length <= 400 * 1024) return null;
+                double scale = Math.Min(1.0, 1280.0 / edge);
+                BitmapSource scaled = scale < 1.0
+                    ? new TransformedBitmap(source, new System.Windows.Media.ScaleTransform(scale, scale))
+                    : (BitmapSource)source;
+                byte[] best = null;
+                foreach (int quality in new[] { 85, 72, 60, 48 })
+                {
+                    var encoder = new JpegBitmapEncoder { QualityLevel = quality };
+                    encoder.Frames.Add(BitmapFrame.Create(scaled));
+                    using (var output = new MemoryStream())
+                    {
+                        encoder.Save(output);
+                        best = output.ToArray();
+                    }
+                    if (best.Length <= 400 * 1024) break;
+                }
+                return best;
+            }
+            catch (Exception) { return null; }
         }
 
         private static byte[] ShrinkImage(byte[] original)

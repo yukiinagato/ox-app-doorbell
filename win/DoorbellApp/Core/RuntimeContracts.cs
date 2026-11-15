@@ -68,6 +68,8 @@ namespace DoorbellApp.Core
                         { "call_lifecycle_v2", pjsip },
                         { "device_alert_v1", true },
                         { "air_quality_display_v1", true },
+                        // Only a door station renders the visitor flow (MainWindow.VisitorFlow.cs).
+                        { "visitor_flow_v1", string.Equals(role, "door_station", StringComparison.Ordinal) },
                         { "ui_manifest_v1", uiManifest },
                         { "runtime_recovery_v1", true },
                         { "helper_policy_v1", false },

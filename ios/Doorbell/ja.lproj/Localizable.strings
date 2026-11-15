@@ -1926,6 +1926,7 @@
 "settings.cat_display" = "画面と外観";
 "settings.cat_doors" = "門口とお知らせ";
 "settings.cat_emergency" = "SOS";
+"settings.cat_flow" = "来訪者ウィザード";
 "settings.cat_integrations" = "連携";
 "settings.cat_kiosk" = "キオスクと復旧";
 "settings.cat_more" = "管理画面のその他の設定";
@@ -2534,6 +2535,8 @@
 "settings.view_log_action" = "表示";
 "settings.visit_purposes" = "来訪目的";
 "settings.visit_purposes_desc" = "来訪者が選ぶボタン。並び順は表示順です";
+"settings.visitor_flow" = "来訪者ウィザード";
+"settings.visitor_flow_native" = "門口機で来訪者が進むページ、文章、画像、選択肢を編集します。オフにすると従来の呼出画面に戻ります。";
 "settings.visitor_layout" = "来訪者画面の配置";
 "settings.visitor_layout_edges" = "時計を上、操作を下に";
 "settings.visitor_layout_left" = "操作を左側に";

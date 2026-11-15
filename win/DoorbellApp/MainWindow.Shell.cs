@@ -77,6 +77,7 @@ namespace DoorbellApp
             CallButton.MinWidth = 0;
             PurposeGrid.Columns = LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count);
             CallingPurposeGrid.Columns = PurposeGrid.Columns;
+            LayOutVisitorFlow(width, height);
             InCallHeaderScroll.MaxHeight = Math.Max(56, height / 3);
             UpdateVisitorActionHeights(width);
             TouchHint.FontSize = (compact ? 16 : 20) * scale;
@@ -396,6 +397,8 @@ namespace DoorbellApp
                 CallButton.Background = ThemeContrast.Brush(fill);
                 CallButton.Foreground =
                     ThemeContrast.Brush(ThemeContrast.CallButtonInk(_display, fill));
+                PaintFlowPrimary();
+                InkFlowText();
             }
         }
 

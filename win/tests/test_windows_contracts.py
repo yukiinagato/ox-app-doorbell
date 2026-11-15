@@ -19,7 +19,7 @@ MAIN_WINDOW_PARTS = (
     "MainWindow.Theme.cs", "MainWindow.Purposes.cs", "MainWindow.Audio.cs",
     "MainWindow.Display.cs", "MainWindow.Emergency.cs", "MainWindow.CallFlow.cs",
     "MainWindow.IncomingVideo.cs", "MainWindow.CallControls.cs", "MainWindow.InCallVideo.cs",
-    "MainWindow.Calling.cs", "MainWindow.Pairing.cs",
+    "MainWindow.Calling.cs", "MainWindow.Pairing.cs", "MainWindow.VisitorFlow.cs",
 )
 
 
@@ -2983,6 +2983,12 @@ class WindowsContracts(unittest.TestCase):
                       read("win/DoorbellApp/MainWindow.Purposes.cs"))
         names |= {"Purpose_" + ident for ident in
                   re.findall(r'case "(p_[a-z]+)":', read("win/DoorbellApp/MainWindow.Purposes.cs"))}
+        # Flow option buttons carry "FlowOption_" and the option id of the document the test
+        # hook loads (MainWindow.UiTest.cs), which is the document the suite walks.
+        self.assertIn('"FlowOption_" + option.Id',
+                      read("win/DoorbellApp/MainWindow.VisitorFlow.cs"))
+        names |= {"FlowOption_" + ident for ident in
+                  re.findall(r"\{'id':'(o_\w+)'", read("win/DoorbellApp/MainWindow.UiTest.cs"))}
         used = set(re.findall(r"(?:Assert-Element|Click-Id|Assert-Gone) '[^']+' '(\w+)'", suite))
         for group in re.findall(r"foreach \(\$id in @\(([^)]*)\)\)", suite):
             used |= set(re.findall(r"'(\w+)'", group))
@@ -3368,6 +3374,145 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('else data.Remove("audio");', lists)
         # The visitor language list can never be emptied.
         self.assertIn('if (item.Key == "ui.languages" && ordered.Count == 0)', rows)
+
+    def test_the_visitor_flow_is_the_door_station_home(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        flow = read("win/DoorbellApp/MainWindow.VisitorFlow.cs")
+        model = read("win/DoorbellApp/Core/VisitorFlow.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+        parents = {child: parent for parent in root.iter() for child in parent}
+
+        def ancestors(name):
+            node = by_name[name]
+            found = set()
+            while node in parents:
+                node = parents[node]
+                if node.get(ns):
+                    found.add(node.get(ns))
+            return found
+
+        # The model has no UI imports and is the one place that knows the walk rules.
+        self.assertNotIn("System.Windows", model.replace("System.Web.Script", ""))
+        for step_kind in ('"page"', '"call"', '"notify"', '"end"'):
+            self.assertIn(step_kind, model)
+        # The flow is advertised only by a door station, and only the three exports Core
+        # defines are bound, each optional so an older Core keeps the classic screen.
+        self.assertIn('{ "visitor_flow_v1", string.Equals(role, "door_station"', contracts)
+        for export in ("db_core_visitor_flow_json", "db_core_visitor_flow_template_json",
+                       "db_core_visitor_notify_json"):
+            self.assertIn('"%s"' % export, client)
+        for element in ("call.primary", "cancel.call", "purpose.button"):
+            self.assertIn('AddElement(elements, "%s"' % element, contracts)
+        # Content scrolls; the options sit in the fixed bottom zone beside the Call slot, and
+        # the classic Call button stays in the tree for the fallback.
+        self.assertIn("VisitorContentScroll", ancestors("FlowContent"))
+        self.assertNotIn("VisitorContentScroll", ancestors("FlowOptionZone"))
+        self.assertIn("VisitorCallBlock", ancestors("FlowOptionZone"))
+        self.assertIn("VisitorCallBlock", ancestors("CallButton"))
+        self.assertEqual(by_name["FlowBackButton"].get("Click"), "OnFlowBackClick")
+        self.assertEqual(by_name["FlowDoneButton"].get("Click"), "OnFlowDoneClick")
+        self.assertGreaterEqual(int(by_name["FlowBackButton"].get("MinHeight")), 44)
+        # Options: primary uses the Call button's slot and semantic id, the rest purpose.button;
+        # minimum height 72 (they are 96); a column count by size class; the option zone is
+        # limited to half of the window and an image to 40 % of its height.
+        self.assertIn('option.Primary ? "call.primary" : "purpose.button"', flow)
+        self.assertIn("MinHeight = 96", flow)
+        self.assertIn("LayoutMetrics.FlowOptionColumns(", flow)
+        self.assertIn("LayoutMetrics.FlowOptionZoneMax(height)", flow)
+        self.assertIn("LayoutMetrics.FlowImageMax(height)", flow)
+        metrics = read("win/DoorbellApp/Ui/LayoutMetrics.cs")
+        self.assertIn("height * 0.5", metrics)
+        self.assertIn("height * 0.4", metrics)
+        # Core is asked off the UI thread; the notify sends a step id and nothing else.
+        self.assertIn("Task.Run(() =>", flow)
+        self.assertIn("App.Core.VisitorFlowJson(door)", flow)
+        self.assertIn("App.Core.VisitorNotifyJson(door, step)", flow)
+        self.assertRegex(client, r"public string VisitorNotifyJson\(string doorId, string stepId\)")
+        # A visitor is never stranded: a failed walk or draw is a direct call or the classic screen.
+        self.assertIn('DoFlowPress("");', flow)
+        self.assertIn("_flow = null;", flow)
+        # The classic purpose grid and Call button give way to the start page, not the reverse.
+        self.assertIn("!FlowHomeActive", read("win/DoorbellApp/MainWindow.Purposes.cs"))
+        self.assertIn('CallButton.Content = Texts.T(ShowsHomePurposes() ? "door.call_direct" : "idle.call");', window)
+        # Events: refetch on visitor_flow_changed; a call ends into the walker through ShowIdle.
+        callflow = read("win/DoorbellApp/MainWindow.CallFlow.cs")
+        self.assertIn('case "visitor_flow_changed":', callflow)
+        self.assertIn('_flowEndReason = "timeout";', callflow)
+        self.assertIn("FlowAfterShowIdle();", callflow)
+        # Settings stay out of reach: nothing in the flow renderer opens settings or a program.
+        self.assertNotIn("OpenSettings", flow)
+        self.assertNotIn("Process.Start", flow)
+        # The host test runs the shared walk fixture against the model.
+        script = read("win/scripts/test_visitor_flow.sh")
+        self.assertIn("win/DoorbellApp/Core/VisitorFlow.cs", script)
+        self.assertIn("tools/conformance/fixtures/visitor-flow-v1.json", script)
+        tests = read("win/tests/VisitorFlowTests.cs")
+        self.assertIn('suite["walk"]', tests)
+        self.assertIn("RunWalk(", tests)
+
+    def test_the_flow_editor_writes_whole_steps_in_one_batch_on_the_write_lane(self):
+        editor = read("win/DoorbellApp/Settings/SettingsWindow.Flow.cs")
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        self.assertIn('Category("flow", "IconList")', catalog)
+        self.assertIn('Editor("visitor_flow", "visitor_flow")', catalog)
+        self.assertIn('case "visitor_flow": return BuildFlowEditor(item);',
+                      read("win/DoorbellApp/Settings/SettingsWindow.Editors.cs"))
+        # Every write is one batch on the serial lane; a step is one whole value; the
+        # container and keys below a step are never written.
+        self.assertIn("_writes.Run(() =>", editor)
+        self.assertIn("_store.Commit(sets, deletes)", editor)
+        self.assertIn('"visitor_flow.steps." + id, next', editor)
+        self.assertIn('"visitor_flow.steps." + seed.Key, seed.Value', editor)
+        self.assertNotIn('"visitor_flow.steps"', editor.replace('_store.Get("visitor_flow.steps")', ""))
+        self.assertNotRegex(editor, r'"visitor_flow\.steps\.[A-Za-z_]+\.')
+        for leaf in ("enabled", "start", "idle_s", "require_call"):
+            self.assertIn('"visitor_flow.%s"' % leaf, editor)
+        self.assertIn('"doors." + door + ".visitor_flow.start"', editor)
+        # Reset is a single delete of visitor_flow; templates come from Core.
+        self.assertIn('new List<string> { "visitor_flow" }', editor)
+        self.assertIn("App.Core.VisitorFlowTemplateJson(name)", editor)
+        for template in ("default", "purposes", "delivery"):
+            self.assertIn('"%s"' % template, editor)
+        # Core's validation error is shown in the dialog that caused it, and the conflict error
+        # is shown (never retried).
+        self.assertIn("FlowErrorText(result.Error)", editor)
+        self.assertIn('"unresolved_config_conflict"', editor)
+        self.assertIn("FlowErrorText(error)", rows)
+        # Limits the editor enforces before Core does.
+        self.assertIn("MaxFlowSteps = 32", editor)
+        self.assertIn("MaxFlowOptions = 12", editor)
+        self.assertIn("MaxFlowImages = 2", editor)
+        # Explicit steps supersede ui.call_flow, and the select says why it is disabled.
+        self.assertIn('item.Key == "ui.call_flow" && FlowHasExplicitSteps()', rows)
+        # Flow images are fitted before upload, from Assets or a new file.
+        admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
+        self.assertIn("1280.0 / edge", admin)
+        self.assertIn("400 * 1024", admin)
+        self.assertIn('UploadAsset("image/", parts, true)', editor)
+
+    def test_the_ui_suite_walks_the_visitor_flow_and_opens_its_editor(self):
+        suite = read("win/scripts/ui_smoke.ps1")
+        hooks = read("win/DoorbellApp/MainWindow.UiTest.cs")
+        for verb in ("flow-sample", "flow-core", "flow-start", "flow-state"):
+            self.assertIn('case "%s":' % verb, hooks)
+            self.assertIn(verb, suite)
+        self.assertIn("function Test-VisitorFlow", suite)
+        self.assertIn("function Test-FlowEditor", suite)
+        self.assertIn("'FlowOption_o_p_delivery'", suite)
+        self.assertIn("'FlowDoneButton'", suite)
+        self.assertIn('Save-Shot ("flow-start-" + $look)', suite)
+        self.assertIn('Save-Shot ("flow-end-" + $look)', suite)
+        self.assertIn('Save-Shot ("flow-editor-" + $look)', suite)
+        # The fixed test document answers notify locally, so no household is messaged.
+        self.assertIn("bool local = _flowTestDocument;",
+                      read("win/DoorbellApp/MainWindow.VisitorFlow.cs"))
+        self.assertIn("'revision':'uitest-flow-1'", hooks)
 
 
 if __name__ == "__main__":

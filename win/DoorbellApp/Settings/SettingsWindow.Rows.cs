@@ -33,6 +33,8 @@ namespace DoorbellApp.Settings
             var parts = new RowParts();
             FrameworkElement control = BuildControl(item, parts);
             if (control == null) return null;
+            // Explicit visitor-flow steps supersede this setting; say why it is greyed out.
+            if (item.Key == "ui.call_flow" && FlowHasExplicitSteps()) control.IsEnabled = false;
             bool wideControl = item.Kind == SettingKind.Slider || item.Kind == SettingKind.Text ||
                                item.Kind == SettingKind.MultiChoice;
             bool stacked = wideControl && ActualWidth < 700;
@@ -111,6 +113,8 @@ namespace DoorbellApp.Settings
                 else if (item.Scope == SettingScope.AllDevices) parts.Add(Texts.T("settings.scope_all"));
             }
             if (item.RequiresRestart) parts.Add(Texts.T("settings.requires_restart"));
+            if (item.Key == "ui.call_flow" && FlowHasExplicitSteps())
+                parts.Add(Texts.T("flow_editor.call_flow_superseded"));
             return string.Join(" · ", parts);
         }
 
@@ -210,6 +214,9 @@ namespace DoorbellApp.Settings
         {
             if (error == "core_unavailable") return Texts.T("settings.err_core_unavailable");
             if (error == "admin_required") return Texts.T("settings.err_admin_required");
+            if (error == "unresolved_config_conflict" ||
+                (error != null && error.StartsWith("visitor_flow.", StringComparison.Ordinal)))
+                return FlowErrorText(error);
             return error ?? "";
         }
 

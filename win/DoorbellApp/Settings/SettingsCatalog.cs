@@ -17,7 +17,7 @@ namespace DoorbellApp.Settings
         {
             var all = new List<SettingCategory>
             {
-                Device(), Sound(), Display(), Calls(), Replies(), Purposes(), Notices(),
+                Device(), Sound(), Display(), Calls(), Replies(), Purposes(), VisitorFlow(), Notices(),
                 Emergency(), Rules(), Camera(), Sip(), Integrations(), Time(), Pairing(),
                 Places(), Wording(), Backup(), Kiosk(), Advanced(), About(),
             };
@@ -389,6 +389,14 @@ namespace DoorbellApp.Settings
             var c = Category("purposes", "IconList");
             Add(Group(c, "admin.purposes"),
                 Describe(ListEditor("visit_purposes", "visit_purposes", "visit_purposes")));
+            return c;
+        }
+
+        /// <summary>The door-station wizard: steps, texts, images, options and templates.</summary>
+        private static SettingCategory VisitorFlow()
+        {
+            var c = Category("flow", "IconList");
+            Add(Group(c, "flow_editor.title"), Editor("visitor_flow", "visitor_flow"));
             return c;
         }
 

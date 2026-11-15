@@ -36,6 +36,11 @@ namespace DoorbellApp
                 _semanticApplier.Apply(child, _semanticStyles.Get("purpose.button"), false);
             foreach (FrameworkElement child in CallingPurposeGrid.Children)
                 _semanticApplier.Apply(child, _semanticStyles.Get("purpose.button"), false);
+            foreach (FrameworkElement child in FlowOptionGrid.Children)
+                _semanticApplier.Apply(child, _semanticStyles.Get("purpose.button"), false);
+            foreach (FrameworkElement child in FlowPrimaryHost.Children)
+                _semanticApplier.Apply(child, _semanticStyles.Get("call.primary"), false);
+            PaintFlowPrimary();
             foreach (FrameworkElement child in QuickReplyPanel.Children)
                 _semanticApplier.Apply(child, _semanticStyles.Get("reply.button"), false);
             foreach (FrameworkElement child in new FrameworkElement[]

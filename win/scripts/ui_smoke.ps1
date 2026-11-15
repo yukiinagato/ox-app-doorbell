@@ -506,31 +506,109 @@ function Test-IndoorPanel {
     }
 }
 
+# The option buttons of the visitor flow's page that are on screen right now.
+function Get-FlowOptions {
+    $found = @()
+    foreach ($window in @(Get-AppWindows)) {
+        $all = $window.FindAll($Tree::Subtree, [System.Windows.Automation.Condition]::TrueCondition)
+        foreach ($element in $all) {
+            if (($element.Current.AutomationId -like 'FlowOption_*') -and (Test-OnScreen $element)) { $found += $element }
+        }
+    }
+    return $found
+}
+
+# The visitor flow on a fixed document (the test hook loads it, so the run does not depend on
+# what Core publishes): the start page, the delivery branch down to the end page, Back, Done.
+# Notify steps are answered locally while the sample is loaded, so no household is messaged.
+function Test-VisitorFlow([string]$look) {
+    [void](Assert-Command 'flow-sample')
+    foreach ($id in @('FlowTitle', 'FlowOption_o_call', 'FlowOption_o_p_visit', 'FlowOption_o_p_delivery', 'ClockText')) {
+        [void](Assert-Element 'flow start' $id)
+    }
+    Add-Check 'flow start: no separate Call button above the options' (-not (Test-OnScreen (Find-ById 'CallButton' 300)))
+    Add-Check 'flow start: no Back on the start page' (-not (Test-OnScreen (Find-ById 'FlowBackButton' 300)))
+    foreach ($id in @('FlowOption_o_call', 'FlowOption_o_p_visit', 'FlowOption_o_p_delivery')) { Assert-Drawn 'flow start' $id }
+    foreach ($option in @(Get-FlowOptions)) {
+        $rect = $option.Current.BoundingRectangle
+        Add-Check ("flow start: {0} is at least 72 px tall" -f $option.Current.AutomationId) ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
+    }
+    Save-Shot ("flow-start-" + $look)
+
+    if (Click-Id 'flow start' 'FlowOption_o_p_delivery') {
+        foreach ($id in @('FlowTitle', 'FlowOption_o_leave', 'FlowOption_o_hand', 'FlowBackButton')) {
+            [void](Assert-Element 'flow parcel page' $id)
+        }
+        Save-Shot ("flow-parcel-" + $look)
+        # Back returns to the start page, and the same branch is walked again to its end.
+        if (Click-Id 'flow parcel page' 'FlowBackButton') {
+            [void](Assert-Element 'flow back at start' 'FlowOption_o_call')
+            Assert-Gone 'flow back at start' 'FlowBackButton'
+        }
+        if (Click-Id 'flow back at start' 'FlowOption_o_p_delivery') {
+            if (Click-Id 'flow parcel page' 'FlowOption_o_leave') {
+                [void](Assert-Element 'flow end page' 'FlowDoneButton')
+                Assert-Gone 'flow end page' 'FlowBackButton'
+                Assert-Gone 'flow end page' 'FlowOption_o_leave'
+                Save-Shot ("flow-end-" + $look)
+                [void](Click-Id 'flow end page' 'FlowDoneButton')
+                [void](Assert-Element 'flow done returns to start' 'FlowOption_o_call')
+            }
+        }
+    }
+    [void](Assert-Command 'flow-start')
+    [void](Assert-Command 'flow-core')
+}
+
+# Settings > Visitor wizard: the editor opens and offers its controls. The suite writes nothing.
+function Test-FlowEditor([string]$look) {
+    if (-not (Click-Id 'settings' 'SettingsCategory_flow')) { return }
+    foreach ($id in @('FlowEnabled', 'FlowTemplatePurposes', 'FlowTemplateDelivery')) { [void](Assert-Element 'flow editor' $id) }
+    Save-Shot ("flow-editor-" + $look)
+}
+
 function Test-DoorStation {
     $pairing = Find-ById 'PairingOverlay' 8000
     if (Test-OnScreen $pairing) { [void](Assert-Command 'skip-pairing') }
     foreach ($look in @('light', 'dark')) {
         Set-Look $look
         Close-Onboarding
-        foreach ($id in @('CallButton', 'ClockText', 'TouchHint')) { [void](Assert-Element 'visitor' $id) }
+        [void](Assert-Element 'visitor' 'ClockText')
         # A door station shows no route to settings or to the dashboard.
         foreach ($id in @('AdminEntryButton', 'HomeNav', 'NoticeGlobalButton')) {
             Add-Check ("visitor: no {0}" -f $id) (-not (Test-OnScreen (Find-ById $id 300)))
         }
-        # The purpose buttons and the call button can be seen in both appearances.
-        foreach ($id in @('Purpose_p_visit', 'Purpose_p_delivery', 'CallButton')) { Assert-Drawn 'visitor' $id }
-        $call = Find-ById 'CallButton'
-        if (Test-OnScreen $call) {
-            $rect = $call.Current.BoundingRectangle
-            Add-Check 'visitor: Call button is at least 72 px tall' ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
+        # With a flow, the start page is the home: a title and its options, no separate Call
+        # button. Without one the classic screen is unchanged.
+        $state = Send-Command 'flow-state'
+        if ($state -like 'ok flow*') {
+            [void](Assert-Element 'visitor start page' 'FlowTitle')
+            $options = @(Get-FlowOptions)
+            Add-Check 'visitor start page: shows its options' ($options.Count -ge 1) ("{0} options, {1}" -f $options.Count, $state)
+            Add-Check 'visitor start page: no separate Call button' (-not (Test-OnScreen (Find-ById 'CallButton' 300)))
+            foreach ($option in $options) {
+                $rect = $option.Current.BoundingRectangle
+                Add-Check ("visitor start page: {0} is at least 72 px tall" -f $option.Current.AutomationId) ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
+            }
+        } else {
+            foreach ($id in @('CallButton', 'TouchHint')) { [void](Assert-Element 'visitor' $id) }
+            # The purpose buttons and the call button can be seen in both appearances.
+            foreach ($id in @('Purpose_p_visit', 'Purpose_p_delivery', 'CallButton')) { Assert-Drawn 'visitor' $id }
+            $call = Find-ById 'CallButton'
+            if (Test-OnScreen $call) {
+                $rect = $call.Current.BoundingRectangle
+                Add-Check 'visitor: Call button is at least 72 px tall' ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
+            }
         }
         Save-Shot ("visitor-" + $look)
+        Test-VisitorFlow $look
         # A door station reaches settings only through the hidden corner and the admin
         # password; the test hook stands in for that to check the role form opens here too.
         [void](Assert-Command 'settings')
         if (Test-OnScreen (Assert-Element 'door station settings' 'SettingsNavigation' 8000)) {
             Test-RoleForm $look
             [void](Assert-Element 'role form (door station)' 'SettingsAction_change_role')
+            Test-FlowEditor $look
             [void](Click-Id 'door station settings' 'SettingsClose')
             Assert-Gone 'door station settings' 'SettingsNavigation'
         }

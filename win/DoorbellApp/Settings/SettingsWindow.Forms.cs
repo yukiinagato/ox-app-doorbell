@@ -113,7 +113,7 @@ namespace DoorbellApp.Settings
         {
             var dialog = new Window
             {
-                Owner = this,
+                Owner = _formOwner ?? this,
                 Topmost = Topmost,
                 Title = title ?? "",
                 ResizeMode = ResizeMode.NoResize,

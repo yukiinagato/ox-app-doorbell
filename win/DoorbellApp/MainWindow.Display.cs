@@ -107,6 +107,7 @@ namespace DoorbellApp
         {
             _lastActivity = DateTime.Now;
             ExitScreensaver();
+            FlowInputSeen();
         }
 
         private void EnterScreensaver()

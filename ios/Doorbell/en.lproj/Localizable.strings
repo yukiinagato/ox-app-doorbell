@@ -1926,6 +1926,7 @@
 "settings.cat_display" = "Display & appearance";
 "settings.cat_doors" = "Doors and announcements";
 "settings.cat_emergency" = "SOS";
+"settings.cat_flow" = "Visitor wizard";
 "settings.cat_integrations" = "Integrations";
 "settings.cat_kiosk" = "Kiosk & recovery";
 "settings.cat_more" = "More in Admin";
@@ -2534,6 +2535,8 @@
 "settings.view_log_action" = "Show";
 "settings.visit_purposes" = "Visit purposes";
 "settings.visit_purposes_desc" = "Buttons visitors choose from, in display order";
+"settings.visitor_flow" = "Visitor wizard";
+"settings.visitor_flow_native" = "Edit the pages, texts, images and options a visitor walks through at the door station. Turn it off to return to the classic call screen.";
 "settings.visitor_layout" = "Visitor screen layout";
 "settings.visitor_layout_edges" = "Clock above, controls below";
 "settings.visitor_layout_left" = "Controls on left";

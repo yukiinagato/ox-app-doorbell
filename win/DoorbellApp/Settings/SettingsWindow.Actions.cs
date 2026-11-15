@@ -242,7 +242,7 @@ namespace DoorbellApp.Settings
 
         private bool Confirm(string message, bool destructive = false)
         {
-            return MessageBox.Show(this, message, Texts.T("settings.title"), MessageBoxButton.YesNo,
+            return MessageBox.Show(_formOwner ?? this, message, Texts.T("settings.title"), MessageBoxButton.YesNo,
                                    destructive ? MessageBoxImage.Warning : MessageBoxImage.Question,
                                    MessageBoxResult.No) == MessageBoxResult.Yes;
         }
