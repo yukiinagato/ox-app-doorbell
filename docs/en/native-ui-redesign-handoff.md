@@ -1,21 +1,16 @@
-# Native UI redesign: handoff (state after the fourth integration)
+# Native UI redesign: handoff (state after the fifth integration)
 
 This file describes `main` after the air-quality work, the Core/CI fixes, the
 per-platform fixes and the kiosk settings audit were brought together, the second
 integration (the Core visitor-flow completion, the full-screen quick-reply overlay on
 every shell, the language-switch and settings responsiveness work), and the third
 integration: the visitor flow implemented on Core, the web door page, Admin, the kiosk,
-<<<<<<< HEAD
-iOS and tvOS, Android and Windows. The fourth integration adds the per-shell polish of that
-flow (step ordering, option icons, preview, start-page composition, no classic-screen flash)
-on every shell and the web Admin. Current versions: Windows 0.4.0 (file version
-0.4.0.33), Android 0.6.1 (55), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.1 (102)
-with the iOS 9 profile 0.8.1 (425). Verification is stated per deliverable; anything
-=======
-iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
-0.3.1.32), Android 0.6.0 (54), iOS 0.7.2 (82), tvOS 0.6.3 (33), iOS 5 kiosk 0.9.0 (101)
-with the iOS 9 profile 0.8.0 (424). Verification is stated per deliverable; anything
->>>>>>> d6d95a3d (tvOS: screenshot request hook (home/history/settings/monitor/notice/sos/sos_active) behind debug_screenshots; tvOS 0.6.2 (32))
+iOS and tvOS, Android and Windows. The fourth integration added the per-shell polish of that
+flow (step ordering, option icons, preview, start-page composition, no classic-screen flash).
+The fifth integration adds the flow feedback round described in "Fifth integration" below.
+Current versions: Windows 0.4.2 (file version 0.4.2.35), Android 0.6.2 (56), iOS 0.7.3 (83),
+tvOS 0.6.4 (34), iOS 5 kiosk 0.9.2 (103) with the iOS 9 profile 0.8.2 (426). Verification is
+stated per deliverable; anything
 under "Not verified" is untested, not passing.
 
 Related documents:
@@ -76,9 +71,48 @@ and `tools/check_icons.py` rejects hand-drawn icons.
 - Web: the vendored Tabler set. `tools/gen_icons.py` skips Tabler's invisible
   `stroke="none"` background path; existing sprite symbols are unchanged.
 
+## Fifth integration (flow feedback)
+
+Added:
+
+- Core: precise visitor-flow validation. A refused write names the code and location
+  (`visitor_flow.<code>: <location>`) and, where numbers matter, a `detail` object (limit,
+  value, min, max, language); `flow_error.*` strings explain each code. The detail travels
+  through an explicit out-parameter (a thread-local broke the iOS 5.1 toolchain).
+- Every shell shows the Core error beside the offending control in its flow editor (web Admin,
+  iOS, kiosk, Android, Windows) and a pending indicator on the visitor flow: the tapped notify
+  option shows a spinner, `flow.pending_notify` follows after a short delay, `flow.pending_failed`
+  appears when nothing answered in 15 s. One string set serves all shells: `flow.pending_notify`,
+  `flow.pending_call`, `flow.pending_failed`, `flow.busy`.
+- Notify failure rule (contract): an explicit failure answer rings the household; only silence
+  restores the options with the retry line. Web, kiosk and Android were aligned with iOS and
+  Windows.
+- tvOS: TV-first Home (door shelf, status line, corner QR), full-screen admin sign-in with a
+  saved password, locked Settings, live-view overlay, History filter menu, a screenshot
+  request hook behind `debug_screenshots`, and the build identity (version, build number,
+  source revision) in Settings > This device.
+- Windows: the re-test fixes (flow language follows the device language, option-level errors,
+  pending ring and status line).
+
+Verified in this integration (host and simulator only): Core tests (636 cases, 86411
+assertions), the Python and web suites, conformance, both Android lanes (assemble, 539 unit
+tests each, lint), DoorbellTests (286) on the iPhone 17 simulator, DoorbellIOS9 device build
+(unsigned), DoorbellTV simulator build, the kiosk host tests, the iOS 5 Core (now free of
+`thread_local`) and the kiosk app linked against it, and the Windows host checks.
+
+NOT verified:
+
+- tvOS: no remote input was exercised, and the signed-in Settings page was not rebuilt
+  after the build-identity row was added.
+- Call options (the ring path, as opposed to notify) have no pending state on iOS, Windows
+  and Android.
+- Windows has not been compiled since 0.4.0; only the host type-check and contract tests ran.
+- The kiosk was not seen on hardware, and neither were the notify-failure ring fallback and
+  the pending indicator on any real device.
+
 ## State per deliverable
 
-### Windows (0.4.0, file version 0.4.0.33)
+### Windows (0.4.2, file version 0.4.2.35)
 
 Polish (0.4.0): the flow editor lists steps by Core's `order` and moves them with buttons
 (consecutive `order` values, changed steps written whole); options draw vendored Fluent icons
@@ -125,7 +159,7 @@ permanent firewall rule (`DoorbellTest SSH (LAN)`), OpenSSH Server, the task
 `DoorbellTest-RunJob` and `C:\DoorbellTest`; `setup_test_host.ps1 -Uninstall` reverts
 them. The session there is Remote Desktop: UI tests need it connected.
 
-### Android (0.6.1, build 55)
+### Android (0.6.2, build 56)
 
 Visitor flow (0.6.0, polished in 0.6.1): the flow wizard on the door station and a native
 flow editor (`VisitorFlowEditor.kt`, `VisitorFlowEditModel.kt`). 0.6.1: options show vendored
@@ -169,7 +203,7 @@ speech, playback policy, logs, capability override, other devices' local setting
 delete confirmations) until `KNOWN_GAPS` and `DYNAMIC_GAPS` in
 `tools/tests/test_android_settings_parity.py` are empty.
 
-### iOS and tvOS (iOS 0.7.2, build 82; tvOS 0.6.3, build 33)
+### iOS and tvOS (iOS 0.7.3, build 83; tvOS 0.6.4, build 34)
 
 Visitor flow: the wizard on the door-station home (`VisitorFlowView.swift`,
 `VisitorFlowPages.swift`) and a full flow editor in Settings (`VisitorFlowEditor.swift`);
@@ -187,7 +221,7 @@ flash before the first flow answer. Fixed: `.local` settings actions never ran w
 handler was passed (the template, reset and preview rows). Verified on an isolated single-node
 simulator: XCUITest taps (option, Back, notify path to the end page, Done; iPhone and iPad),
 a page with a registered test image, a reorder and an invalid editor save (Core `bad_text` shown under
-the field). Not verified: real devices; the notify takes about 4 s with no pending indicator.
+the field). Not verified: real devices. (The pending indicator on notify arrived in 0.7.3.)
 `ios-compat/tests/modern_settings_parity_test.py` now scans the flow editor sources and
 ignores message ids; it is still not wired into `test_host.sh`.
 
@@ -214,7 +248,7 @@ quiet-hours suppress lists, unlock binding, colour picker, SIP TLS, cluster volu
 defaults, other devices' roles, speech, playback policy, raw config, logs, capability and
 UI-element overrides, tvOS search).
 
-### iOS 5 kiosk (0.9.1, build 102; iOS 9 profile 0.8.1, build 425)
+### iOS 5 kiosk (0.9.2, build 103; iOS 9 profile 0.8.2, build 426)
 
 Polish (0.9.1): the flow editor lists steps in Core's `step_order` and reorders them with the
 stock table reorder control (`DBFlowOrder`: consecutive `order` values, changed steps rewritten
