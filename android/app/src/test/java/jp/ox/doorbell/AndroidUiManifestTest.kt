@@ -11,9 +11,16 @@ class AndroidUiManifestTest {
         for (feature in listOf(
             "platform_v2", "call_flow_v2", "call_cancel_v2", "device_alert_v1",
             "call_lifecycle_v2", "ui_manifest_v1", "runtime_recovery_v1", "helper_policy_v1",
-            "air_quality_display_v1",
+            "air_quality_display_v1", "visitor_flow_v1",
         )) assertTrue("missing nested feature $feature", features.getBoolean(feature))
-        assertEquals(9, features.length())
+        assertEquals(10, features.length())
+    }
+
+    @Test
+    fun theVisitorFlowFeatureComesWithTheElementsCoreGatesItOn() {
+        val elements = AndroidRuntimeContracts.uiManifest().getJSONObject("elements")
+        for (id in listOf("purpose.button", "call.primary", "cancel.call"))
+            assertTrue("manifest lacks $id", elements.has(id))
     }
 
     @Test

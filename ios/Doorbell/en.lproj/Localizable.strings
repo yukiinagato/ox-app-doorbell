@@ -944,6 +944,7 @@
 "flow_editor.image_choose" = "Choose from Assets";
 "flow_editor.image_pick" = "Choose from Assets";
 "flow_editor.image_place" = "Image position";
+"flow_editor.image_place_current" = "Image placement: %@";
 "flow_editor.image_upload" = "Upload an image";
 "flow_editor.image_uploading" = "Uploading…";
 "flow_editor.issues" = "Things to fix";
@@ -997,11 +998,15 @@
 "flow_editor.status_legacy" = "The classic call flow stays in use until you customize the wizard.";
 "flow_editor.status_off" = "The wizard is off. Visitors see the classic call screen.";
 "flow_editor.step_in_use" = "Other steps lead here: %@";
+"flow_editor.step_kind" = "Kind of step";
 "flow_editor.step_untitled" = "(no title)";
 "flow_editor.steps" = "Steps";
 "flow_editor.steps_hint" = "Steps are listed from the start page in the order they are reached. Swipe to delete one.";
+"flow_editor.summary_options" = "Options: %@";
 "flow_editor.tab_overview" = "Overview";
 "flow_editor.target_choose" = "Choose a step";
+"flow_editor.target_new_call" = "New call step";
+"flow_editor.target_new_end" = "New end page";
 "flow_editor.template_confirm" = "This replaces the current steps with the template.";
 "flow_editor.template_default" = "Built-in wizard";
 "flow_editor.template_delivery" = "Delivery and leave-at-door";

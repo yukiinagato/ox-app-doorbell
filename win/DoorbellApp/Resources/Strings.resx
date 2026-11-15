@@ -951,6 +951,7 @@
   <data name="flow_editor_image_choose" xml:space="preserve"><value>アセットから選ぶ</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>アセットから選ぶ</value></data>
   <data name="flow_editor_image_place" xml:space="preserve"><value>画像の位置</value></data>
+  <data name="flow_editor_image_place_current" xml:space="preserve"><value>画像の位置: {0}</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>画像をアップロード</value></data>
   <data name="flow_editor_image_uploading" xml:space="preserve"><value>アップロード中…</value></data>
   <data name="flow_editor_issues" xml:space="preserve"><value>修正が必要です</value></data>
@@ -1004,11 +1005,15 @@
   <data name="flow_editor_status_legacy" xml:space="preserve"><value>ウィザードを編集するまで、従来の呼出フローを使います。</value></data>
   <data name="flow_editor_status_off" xml:space="preserve"><value>ウィザードはオフです。来訪者には従来の呼出画面が表示されます。</value></data>
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>ほかのステップから参照されています: {0}</value></data>
+  <data name="flow_editor_step_kind" xml:space="preserve"><value>ステップの種類</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>（タイトルなし）</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>ステップ</value></data>
   <data name="flow_editor_steps_hint" xml:space="preserve"><value>ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。</value></data>
+  <data name="flow_editor_summary_options" xml:space="preserve"><value>選択肢: {0}</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>概要</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>選んでください</value></data>
+  <data name="flow_editor_target_new_call" xml:space="preserve"><value>新しい呼び出しステップを作る</value></data>
+  <data name="flow_editor_target_new_end" xml:space="preserve"><value>新しい完了ページを作る</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>現在のステップをテンプレートで置き換えます。</value></data>
   <data name="flow_editor_template_default" xml:space="preserve"><value>標準のウィザード</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>宅配・置き配</value></data>

@@ -949,6 +949,7 @@
     <string name="flow_editor_image_choose">从素材库选择</string>
     <string name="flow_editor_image_pick">从素材库选择</string>
     <string name="flow_editor_image_place">图片位置</string>
+    <string name="flow_editor_image_place_current">图片位置：%1$s</string>
     <string name="flow_editor_image_upload">上传图片</string>
     <string name="flow_editor_image_uploading">正在上传…</string>
     <string name="flow_editor_issues">需要修正</string>
@@ -1002,11 +1003,15 @@
     <string name="flow_editor_status_legacy">在自定义向导之前，仍使用原来的呼叫流程。</string>
     <string name="flow_editor_status_off">向导已关闭，访客看到的是原来的呼叫画面。</string>
     <string name="flow_editor_step_in_use">其他步骤指向此处：%1$s</string>
+    <string name="flow_editor_step_kind">步骤类型</string>
     <string name="flow_editor_step_untitled">（无标题）</string>
     <string name="flow_editor_steps">步骤</string>
     <string name="flow_editor_steps_hint">步骤按从起始页可到达的顺序排列。左滑可删除。</string>
+    <string name="flow_editor_summary_options">选项：%1$s</string>
     <string name="flow_editor_tab_overview">概览</string>
     <string name="flow_editor_target_choose">请选择步骤</string>
+    <string name="flow_editor_target_new_call">新建呼叫步骤</string>
+    <string name="flow_editor_target_new_end">新建结束页</string>
     <string name="flow_editor_template_confirm">将用模板替换当前步骤。</string>
     <string name="flow_editor_template_default">内置向导</string>
     <string name="flow_editor_template_delivery">快递与放置门口</string>

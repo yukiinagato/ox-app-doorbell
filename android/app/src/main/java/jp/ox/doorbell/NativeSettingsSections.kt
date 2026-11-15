@@ -263,7 +263,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         ""
     }.ifEmpty { uri.lastPathSegment.orEmpty() }.take(64)
 
-    private fun pick(mime: String, extra: Array<String>, onBytes: (ByteArray, String) -> Unit) {
+    internal fun pick(mime: String, extra: Array<String>, onBytes: (ByteArray, String) -> Unit) {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = mime
@@ -305,7 +305,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     }
 
     /** Add bytes to the ledger; [done] gets the sha256 or null (already toasted). */
-    private fun addAsset(bytes: ByteArray, type: String, label: String, done: (String) -> Unit) {
+    internal fun addAsset(bytes: ByteArray, type: String, label: String, done: (String) -> Unit) {
         if (bytes.size > AssetTypes.MAX_BYTES) { a.toast(L("admin.asset_too_large")); return }
         a.coreCall({ a.app.core.assetAdd(bytes, type, label) }) { result ->
             val hash = result?.optString("hash").orEmpty()
@@ -1762,7 +1762,8 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     fun searchLabels(category: SettingsCategory): List<String> = when (category) {
         SettingsCategory.SOUND -> listOf(L("admin.sound_manager"), L("nset.sound_record"), L("nset.sos_alarm_sound"))
         SettingsCategory.DISPLAY -> listOf(L("settings.background_image"), L("nset.wording"))
-        SettingsCategory.CALLS -> listOf(L("admin.quick_replies"), L("settings.purposes"), L("settings.item_reply_audio"))
+        SettingsCategory.CALLS -> listOf(L("admin.quick_replies"), L("settings.purposes"), L("settings.item_reply_audio"),
+                                         L("flow_editor.title"), L("flow_editor.steps"), L("flow_editor.templates"))
         SettingsCategory.DOORS -> listOf(L("admin.add_door"), L("admin.buildings"), L("settings.notice_presets"),
                                          L("settings.media_sources"))
         SettingsCategory.NOTIFICATIONS -> listOf(L("settings.rules"), L("settings.quiet_hours"), L("settings.households"),

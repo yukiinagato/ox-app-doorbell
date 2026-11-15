@@ -949,6 +949,7 @@
     <string name="flow_editor_image_choose">アセットから選ぶ</string>
     <string name="flow_editor_image_pick">アセットから選ぶ</string>
     <string name="flow_editor_image_place">画像の位置</string>
+    <string name="flow_editor_image_place_current">画像の位置: %1$s</string>
     <string name="flow_editor_image_upload">画像をアップロード</string>
     <string name="flow_editor_image_uploading">アップロード中…</string>
     <string name="flow_editor_issues">修正が必要です</string>
@@ -1002,11 +1003,15 @@
     <string name="flow_editor_status_legacy">ウィザードを編集するまで、従来の呼出フローを使います。</string>
     <string name="flow_editor_status_off">ウィザードはオフです。来訪者には従来の呼出画面が表示されます。</string>
     <string name="flow_editor_step_in_use">ほかのステップから参照されています: %1$s</string>
+    <string name="flow_editor_step_kind">ステップの種類</string>
     <string name="flow_editor_step_untitled">（タイトルなし）</string>
     <string name="flow_editor_steps">ステップ</string>
     <string name="flow_editor_steps_hint">ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。</string>
+    <string name="flow_editor_summary_options">選択肢: %1$s</string>
     <string name="flow_editor_tab_overview">概要</string>
     <string name="flow_editor_target_choose">選んでください</string>
+    <string name="flow_editor_target_new_call">新しい呼び出しステップを作る</string>
+    <string name="flow_editor_target_new_end">新しい完了ページを作る</string>
     <string name="flow_editor_template_confirm">現在のステップをテンプレートで置き換えます。</string>
     <string name="flow_editor_template_default">標準のウィザード</string>
     <string name="flow_editor_template_delivery">宅配・置き配</string>

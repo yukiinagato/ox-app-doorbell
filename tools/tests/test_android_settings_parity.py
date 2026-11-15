@@ -20,7 +20,7 @@ ANDROID = ROOT / "android" / "app" / "src" / "main" / "java" / "jp" / "ox" / "do
 
 CONFIG_ROOTS = (
     "ui", "display", "sip", "emergency", "integrations", "time", "quiet_hours",
-    "video_playback", "speech", "reply", "events",
+    "video_playback", "speech", "reply", "events", "visitor_flow",
 )
 LITERAL = re.compile(
     r"""["'`]((?:%s)\.[A-Za-z0-9_.]+)["'`]""" % "|".join(CONFIG_ROOTS))
@@ -141,6 +141,62 @@ class AndroidSettingsParity(unittest.TestCase):
         self.assertEqual([], missing, "Dynamic Admin keys with no Android row: %s" % missing)
         stale = sorted(gap for gap in DYNAMIC_GAPS if covered(gap, sources))
         self.assertEqual([], stale, "Remove closed gaps from DYNAMIC_GAPS: %s" % stale)
+
+
+# The visitor-flow editor writes these: the scalar leaves, one whole value per step, and a leaf per
+# door start (docs/en/visitor-flow-contract.md, section 8). The container itself is never written.
+FLOW_KEYS = [
+    "visitor_flow.enabled", "visitor_flow.start", "visitor_flow.idle_s", "visitor_flow.require_call",
+    "visitor_flow.steps", "doors.%s.visitor_flow.start",
+]
+FLOW_STRINGS = [
+    "flow_editor.title", "flow_editor.enabled", "flow_editor.start", "flow_editor.door_start",
+    "flow_editor.idle_s", "flow_editor.require_call", "flow_editor.require_call_off_warning",
+    "flow_editor.steps", "flow_editor.add_step", "flow_editor.duplicate_step",
+    "flow_editor.delete_step", "flow_editor.step_in_use", "flow_editor.field_title",
+    "flow_editor.field_body", "flow_editor.field_images", "flow_editor.add_image",
+    "flow_editor.image_alt", "flow_editor.field_options", "flow_editor.add_option",
+    "flow_editor.option_label", "flow_editor.option_icon", "flow_editor.option_purpose",
+    "flow_editor.option_primary", "flow_editor.option_enabled", "flow_editor.option_target",
+    "flow_editor.field_purpose", "flow_editor.field_on_unanswered", "flow_editor.field_message",
+    "flow_editor.field_to", "flow_editor.field_return_s", "flow_editor.field_snapshot",
+    "flow_editor.snapshot_none", "flow_editor.snapshot_door_station", "flow_editor.snapshot_camera",
+    "flow_editor.snapshot_no_camera", "flow_editor.templates", "flow_editor.template_purposes",
+    "flow_editor.template_delivery", "flow_editor.template_confirm", "flow_editor.reset_default",
+    "flow_editor.reset_default_confirm", "flow_editor.customize", "flow_editor.default_note",
+    "flow_editor.conflict", "flow_editor.call_flow_superseded", "visitor_flow.invalid",
+]
+
+
+class AndroidVisitorFlowEditor(unittest.TestCase):
+    def sources(self):
+        return "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(ANDROID.glob("*Flow*.kt")) + sorted(ANDROID.glob("*Settings*.kt")))
+
+    def test_every_flow_key_is_written_by_the_editor(self):
+        sources = self.sources()
+        for key in FLOW_KEYS:
+            self.assertIn(key.replace("%s", "$door"), sources, key)
+
+    def test_the_editor_never_writes_a_container_or_a_key_below_a_step(self):
+        model = (ANDROID / "VisitorFlowEditModel.kt").read_text(encoding="utf-8")
+        editor = (ANDROID / "VisitorFlowEditor.kt").read_text(encoding="utf-8")
+        for text in (model, editor):
+            self.assertNotRegex(text, r'Set\("visitor_flow(\.steps)?"')
+            self.assertNotRegex(text, r'Set\("\$STEPS\.\$\w+\.(title|body|options|images|kind)')
+        # Deleting visitor_flow as one op is how "Reset to the built-in wizard" works.
+        self.assertIn("ConfigOp.Delete(ROOT)", model)
+
+    def test_every_editor_string_exists_in_the_catalogue(self):
+        ids = i18n_ids()
+        for key in FLOW_STRINGS:
+            self.assertIn(key, ids, key)
+
+    def test_the_editor_sits_in_the_calls_category(self):
+        activity = (ANDROID / "SettingsActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("flowEditor.section()", activity)
+        self.assertIn('key == "ui.call_flow" && FlowEdit.hasSteps(config)', activity)
 
 
 if __name__ == "__main__":

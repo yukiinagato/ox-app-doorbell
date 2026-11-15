@@ -78,6 +78,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     private val native by lazy { NativeSettingsSections(this) }
     private val parity by lazy { SettingsParitySections(this) }
+    private val flowEditor by lazy { VisitorFlowEditor(this, native) }
 
     /** Pending file pickers / document creators, by request code. */
     private val resultHandlers = HashMap<Int, (Intent?) -> Unit>()
@@ -528,6 +529,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             }
             SettingsCategory.CALLS -> {
                 specSection(category)
+                flowEditor.section()
                 sectionQuickReplies()
                 native.purposes()
             }
@@ -1141,11 +1143,18 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         return when (spec) {
             is SettingSpec.Toggle ->
                 toggleRow(title, key, SettingsModel.currentBool(config, key, spec.default), note)
-            is SettingSpec.Choice -> choiceRow(
-                title, key, spec.options, { optionLabel(spec.optionKeyPrefix, spec.noneKey, it) },
-                SettingsModel.currentString(config, key, spec.default), note,
-                asNumber = spec.numeric,
-            )
+            is SettingSpec.Choice ->
+                // Explicit wizard steps supersede ui.call_flow: the choice stays visible but inert.
+                if (key == "ui.call_flow" && FlowEdit.hasSteps(config))
+                    ShellUi.row(this, palette, title,
+                        optionLabel(spec.optionKeyPrefix, spec.noneKey,
+                                    SettingsModel.currentString(config, key, spec.default)),
+                        label("flow_editor.call_flow_superseded"), enabled = false)
+                else choiceRow(
+                    title, key, spec.options, { optionLabel(spec.optionKeyPrefix, spec.noneKey, it) },
+                    SettingsModel.currentString(config, key, spec.default), note,
+                    asNumber = spec.numeric,
+                )
             is SettingSpec.MultiChoice -> multiChoiceRow(spec, key, title)
             is SettingSpec.IntRange -> {
                 val current = SettingsModel.currentInt(config, key, spec.default)
@@ -1437,6 +1446,48 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         card.row(ShellUi.row(this, palette, label("settings.item_mesh_port"),
                              boot.optInt("listen_port", 47172).toString(),
                              label("settings.item_ports_note")))
+    }
+
+    /**
+     * One batch, with Core's answer handed back: the flow editor shows a refusal inside the open
+     * dialog. [onResult] gets null when no writer exists. A success also reloads the snapshot.
+     */
+    internal fun writeOpsReporting(ops: List<ConfigOp>, onResult: (ConfigWriteResult?) -> Unit) {
+        val active = writer ?: run {
+            toast(texts.t("settings.offline", R.string.settings_offline))
+            onResult(null)
+            return
+        }
+        pendingWrites.begin()
+        io.execute {
+            val result = active.applyOps(ops)
+            ui.post {
+                pendingWrites.end()
+                if (isFinishing) return@post
+                if (result.adminRequired) {
+                    reauthenticateThen { writeOpsReporting(ops, onResult) }
+                    return@post
+                }
+                if (result.ok) {
+                    val advisory = flowWarning(result.warnings)
+                    toast(advisory.ifEmpty { texts.t("admin.saved", R.string.admin_saved) })
+                    reload()
+                } else if (result.unauthorized) {
+                    toast(texts.t("admin.pin_wrong", R.string.admin_pin_wrong))
+                }
+                onResult(result)
+            }
+        }
+    }
+
+    /** A visitor-flow advisory that rode along with a successful write, in words. */
+    private fun flowWarning(warnings: JSONArray?): String {
+        if (warnings == null) return ""
+        for (index in 0 until warnings.length()) {
+            val key = warnings.optJSONObject(index)?.optString("message_key").orEmpty()
+            if (key.startsWith("visitor_flow.")) return label(key).takeIf { it != key }.orEmpty()
+        }
+        return ""
     }
 
     /** Batch write with the same admin-window handling as a single key. */

@@ -951,6 +951,7 @@
   <data name="flow_editor_image_choose" xml:space="preserve"><value>从素材库选择</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>从素材库选择</value></data>
   <data name="flow_editor_image_place" xml:space="preserve"><value>图片位置</value></data>
+  <data name="flow_editor_image_place_current" xml:space="preserve"><value>图片位置：{0}</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>上传图片</value></data>
   <data name="flow_editor_image_uploading" xml:space="preserve"><value>正在上传…</value></data>
   <data name="flow_editor_issues" xml:space="preserve"><value>需要修正</value></data>
@@ -1004,11 +1005,15 @@
   <data name="flow_editor_status_legacy" xml:space="preserve"><value>在自定义向导之前，仍使用原来的呼叫流程。</value></data>
   <data name="flow_editor_status_off" xml:space="preserve"><value>向导已关闭，访客看到的是原来的呼叫画面。</value></data>
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>其他步骤指向此处：{0}</value></data>
+  <data name="flow_editor_step_kind" xml:space="preserve"><value>步骤类型</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>（无标题）</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>步骤</value></data>
   <data name="flow_editor_steps_hint" xml:space="preserve"><value>步骤按从起始页可到达的顺序排列。左滑可删除。</value></data>
+  <data name="flow_editor_summary_options" xml:space="preserve"><value>选项：{0}</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>概览</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>请选择步骤</value></data>
+  <data name="flow_editor_target_new_call" xml:space="preserve"><value>新建呼叫步骤</value></data>
+  <data name="flow_editor_target_new_end" xml:space="preserve"><value>新建结束页</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>将用模板替换当前步骤。</value></data>
   <data name="flow_editor_template_default" xml:space="preserve"><value>内置向导</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>快递与放置门口</value></data>

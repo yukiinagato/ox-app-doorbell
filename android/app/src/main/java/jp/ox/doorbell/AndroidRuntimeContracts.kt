@@ -31,6 +31,7 @@ internal object AndroidRuntimeContracts {
         .put("runtime_recovery_v1", true)
         .put("helper_policy_v1", true)
         .put("air_quality_display_v1", true)
+        .put("visitor_flow_v1", true)
         .apply { if (bleAirSensor) put("ble_air_sensor_v1", true) }
 
     internal fun uiProperties(@Suppress("UNUSED_PARAMETER") semanticId: String): Set<String> =

@@ -944,6 +944,7 @@
 "flow_editor.image_choose" = "アセットから選ぶ";
 "flow_editor.image_pick" = "アセットから選ぶ";
 "flow_editor.image_place" = "画像の位置";
+"flow_editor.image_place_current" = "画像の位置: %@";
 "flow_editor.image_upload" = "画像をアップロード";
 "flow_editor.image_uploading" = "アップロード中…";
 "flow_editor.issues" = "修正が必要です";
@@ -997,11 +998,15 @@
 "flow_editor.status_legacy" = "ウィザードを編集するまで、従来の呼出フローを使います。";
 "flow_editor.status_off" = "ウィザードはオフです。来訪者には従来の呼出画面が表示されます。";
 "flow_editor.step_in_use" = "ほかのステップから参照されています: %@";
+"flow_editor.step_kind" = "ステップの種類";
 "flow_editor.step_untitled" = "（タイトルなし）";
 "flow_editor.steps" = "ステップ";
 "flow_editor.steps_hint" = "ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。";
+"flow_editor.summary_options" = "選択肢: %@";
 "flow_editor.tab_overview" = "概要";
 "flow_editor.target_choose" = "選んでください";
+"flow_editor.target_new_call" = "新しい呼び出しステップを作る";
+"flow_editor.target_new_end" = "新しい完了ページを作る";
 "flow_editor.template_confirm" = "現在のステップをテンプレートで置き換えます。";
 "flow_editor.template_default" = "標準のウィザード";
 "flow_editor.template_delivery" = "宅配・置き配";

@@ -86,6 +86,18 @@ class DoorbellCore(context: Context) {
         return value?.takeIf { it.isNotEmpty() }
     }
 
+    /** The resolved visitor flow for [door] (empty = this shell's door); blocks on Core's loop. */
+    fun visitorFlow(door: String = ""): JSONObject? =
+        if (handle == 0L) null else parse(nativeVisitorFlowJson(handle, door))
+
+    /** An editor template ("default", "purposes" or "delivery") in configuration shape. */
+    fun visitorFlowTemplate(name: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeVisitorFlowTemplateJson(handle, name))
+
+    /** Sends one notify step without ringing; the step id is the only input. */
+    fun visitorNotify(door: String, step: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeVisitorNotifyJson(handle, door, step))
+
     fun selectPurposeV2(doorId: String, callId: String, purpose: String): Boolean =
         handle != 0L && nativeSelectPurposeV2(handle, doorId, callId, purpose) == 0
 
@@ -540,6 +552,9 @@ class DoorbellCore(context: Context) {
     private external fun nativeDestroy(handle: Long)
     private external fun nativeSetUiCallback(handle: Long, enabled: Boolean)
     private external fun nativePressV2(handle: Long, doorId: String, purpose: String): String?
+    private external fun nativeVisitorFlowJson(handle: Long, door: String): String?
+    private external fun nativeVisitorFlowTemplateJson(handle: Long, name: String): String?
+    private external fun nativeVisitorNotifyJson(handle: Long, door: String, step: String): String?
     private external fun nativeSelectPurposeV2(
         handle: Long,
         doorId: String,

@@ -1504,6 +1504,11 @@ flow_editor.sim_message: { ja: "呼び出さずに送信するメッセージ: {
 flow_editor.sim_no_answer: { ja: "応答なし", en: "Nobody answers", zh: "无人应答" }
 flow_editor.sim_call_ended: { ja: "通話終了", en: "Call ended", zh: "通话结束" }
 flow_editor.sim_return: { ja: "{s} 秒後に最初のページへ戻ります", en: "Returns to the start after {s} s", zh: "{s} 秒后返回起始页" }
+flow_editor.summary_options: { ja: "選択肢: {count}", en: "Options: {count}", zh: "选项：{count}" }
+flow_editor.target_new_call: { ja: "新しい呼び出しステップを作る", en: "New call step", zh: "新建呼叫步骤" }
+flow_editor.target_new_end: { ja: "新しい完了ページを作る", en: "New end page", zh: "新建结束页" }
+flow_editor.image_place_current: { ja: "画像の位置: {place}", en: "Image placement: {place}", zh: "图片位置：{place}" }
+flow_editor.step_kind: { ja: "ステップの種類", en: "Kind of step", zh: "步骤类型" }
 # ---- Web: panel identities and security protocol v3 (2026-11 review) ----
 panels.tab: { ja: "パネル", en: "Panels", zh: "面板" }
 panels.title: { ja: "パネルの資格情報", en: "Panel credentials", zh: "面板凭据" }

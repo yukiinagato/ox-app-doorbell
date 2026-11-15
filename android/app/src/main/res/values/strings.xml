@@ -949,6 +949,7 @@ Delete it?</string>
     <string name="flow_editor_image_choose">Choose from Assets</string>
     <string name="flow_editor_image_pick">Choose from Assets</string>
     <string name="flow_editor_image_place">Image position</string>
+    <string name="flow_editor_image_place_current">Image placement: %1$s</string>
     <string name="flow_editor_image_upload">Upload an image</string>
     <string name="flow_editor_image_uploading">Uploading…</string>
     <string name="flow_editor_issues">Things to fix</string>
@@ -1002,11 +1003,15 @@ Delete it?</string>
     <string name="flow_editor_status_legacy">The classic call flow stays in use until you customize the wizard.</string>
     <string name="flow_editor_status_off">The wizard is off. Visitors see the classic call screen.</string>
     <string name="flow_editor_step_in_use">Other steps lead here: %1$s</string>
+    <string name="flow_editor_step_kind">Kind of step</string>
     <string name="flow_editor_step_untitled">(no title)</string>
     <string name="flow_editor_steps">Steps</string>
     <string name="flow_editor_steps_hint">Steps are listed from the start page in the order they are reached. Swipe to delete one.</string>
+    <string name="flow_editor_summary_options">Options: %1$s</string>
     <string name="flow_editor_tab_overview">Overview</string>
     <string name="flow_editor_target_choose">Choose a step</string>
+    <string name="flow_editor_target_new_call">New call step</string>
+    <string name="flow_editor_target_new_end">New end page</string>
     <string name="flow_editor_template_confirm">This replaces the current steps with the template.</string>
     <string name="flow_editor_template_default">Built-in wizard</string>
     <string name="flow_editor_template_delivery">Delivery and leave-at-door</string>

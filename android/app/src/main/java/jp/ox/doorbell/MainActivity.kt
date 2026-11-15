@@ -128,6 +128,9 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     private lateinit var speech: ShellSpeech
     private lateinit var purposePanel: VisitorPurposePanel
+    private lateinit var flowPanel: VisitorFlowPanel
+    private lateinit var flowContent: LinearLayout
+    private lateinit var flowDock: LinearLayout
     private lateinit var languageBar: VisitorLanguageBar
 
     private var secretTaps = 0
@@ -143,6 +146,13 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private var resumed = false
     private val audio by lazy(LazyThreadSafetyMode.NONE) { ShellAudio(this) }
     private var callTitleOverride: String? = null
+
+    /** The walker over Core's resolved visitor flow; null shows the classic purpose screen. */
+    private var flowWalker: FlowWalker? = null
+    private val flowGate = ReloadGate()
+    private var flowEndReason = "ended"
+    private var flowBusy = false
+    private val flowIdleTick = Runnable { flowIdleElapsed() }
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
     private var callUiPhase = CallUiPhase.IDLE
     private var uiCallId = ""
@@ -158,7 +168,9 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             val transition = app.callFlow.timeout()
             if (transition.phase == CallUiPhase.IDLE) {
                 clearCallProjection()
-                showIdle(texts.t("calling.no_answer", R.string.calling_no_answer))
+                flowEndReason = "timeout"
+                showIdle(if (flowWalker != null) null
+                         else texts.t("calling.no_answer", R.string.calling_no_answer))
             } else {
                 applyCallProjection(transition)
                 scheduleCallTimeout()
@@ -214,6 +226,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         ui.removeCallbacks(replyTick)
         replyGuard = null
         replyBanner.visibility = View.GONE
+        flowWalker?.apply(FlowEvent.Reply(false))
     }
 
     private fun fitReply() {
@@ -267,6 +280,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (!app.coreOk) showOffline() else restoreCurrentCallUi()
         refreshNodeInfo()
         restoreRequestedCall(intent)
+        fetchFlow()
         ui.postDelayed({ playLaunchSound() }, 350)
     }
 
@@ -293,6 +307,13 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             })
         purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
         languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
+        flowPanel = VisitorFlowPanel(
+            this, flowContent, flowDock, ui,
+            viewportHeightPx = { rootView.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels },
+            onOption = { id -> onFlowOption(id) },
+            onBack = { onFlowBack() },
+            onDone = { onFlowDone() },
+        )
         dashboard = null
         installRoleHome()
         renderAirQuality()
@@ -380,6 +401,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         dashboard?.onResume()
         applyVisitorLayout()
         startRegionInkWatch()
+        fetchFlow()
+        if (flowWalker != null && flowPanel.visible) scheduleFlowTimer()
     }
 
     /**
@@ -519,6 +542,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(airTick)
         ui.removeCallbacks(purposeTimeout)
+        ui.removeCallbacks(flowIdleTick)
         ui.removeCallbacks(homeRefreshTick)
         homeRefreshQueued = false
         homeRefreshWantsFullRender = false
@@ -534,6 +558,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         super.onConfigurationChanged(newConfig)
         applyVisitorLayout()
         buildPurposeButtons()
+        if (flowWalker != null && flowPanel.visible) showIdle()
         dashboard?.onConfigurationChanged()
     }
 
@@ -557,6 +582,11 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     @Deprecated("kiosk 中は戻れない")
     override fun onBackPressed() {
+        val walker = flowWalker
+        if (walker != null && flowPanel.visible && walker.snapshot().back) {
+            onFlowBack()
+            return
+        }
         if (choosingPurpose) {
             if (uiCallId.isNotEmpty()) cancelActiveCall("visitor")
             else {
@@ -588,6 +618,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         purposeHint = findViewById(R.id.purpose_hint)
         purposeAutoHint = findViewById(R.id.purpose_auto_hint)
         purposeGrid = findViewById(R.id.purpose_grid)
+        flowContent = findViewById(R.id.flow_content)
+        flowDock = findViewById(R.id.flow_dock)
         purposeSkipButton = findViewById(R.id.purpose_skip_button)
         purposeCancelButton = findViewById(R.id.purpose_cancel_button)
         langBar = findViewById(R.id.lang_bar)
@@ -958,6 +990,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         }
         if (withConfig) {
             applyConfigCache(config)
+            fetchFlow()
             applyTheme()
             buildPurposeButtons()
             buildLangBar()
@@ -1037,6 +1070,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             "call.end" else "cancel.call", styleConfig, nodeId)
         for (index in 0 until purposeGrid.childCount)
             SemanticUi.apply(purposeGrid.getChildAt(index), "purpose.button", styleConfig, nodeId)
+        if (::flowPanel.isInitialized) flowPanel.applySemantic(styleConfig, nodeId)
         sosSlider.applySemantic(styleConfig, nodeId)
         SemanticUi.apply(offlineTitle, "status.offline", styleConfig, nodeId)
         SemanticUi.apply(offlineBody, "status.offline", styleConfig, nodeId)
@@ -1081,9 +1115,14 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         cfg = config
         texts.setConfig(cfg)
         callFlowMode = CallFlowMode.parse(app.core.dig(cfg, "ui.call_flow")?.toString().orEmpty())
+        configureCallFlow()
+    }
+
+    /** A visitor flow places its call through the purpose-first path whatever ui.call_flow says. */
+    private fun configureCallFlow() {
         val ttlSeconds = (app.core.dig(cfg, "ui.call_ttl_s") as? Number)?.toLong() ?: 60L
         app.callFlow.configure(
-            if (callFlowMode == CallFlowMode.RING_THEN_PURPOSE)
+            if (callFlowMode == CallFlowMode.RING_THEN_PURPOSE && flowWalker == null)
                 "ring_then_purpose" else "purpose_first",
             ttlSeconds,
         )
@@ -1134,7 +1173,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         UiRoles.from(palette, CoreDisplays.callButton(coreDisplay.theme, effectiveBackgroundRgb()))
 
     private fun showsHomePurposes(): Boolean = app.boot.role == "door_station" &&
-        callFlowMode == CallFlowMode.PURPOSE_FIRST && VisitPurposes.enabled(cfg).isNotEmpty()
+        flowWalker == null && callFlowMode == CallFlowMode.PURPOSE_FIRST && VisitPurposes.enabled(cfg).isNotEmpty()
 
     private fun homeCallHint(): String = if (showsHomePurposes())
         texts.t("door.hint_purpose_first", R.string.door_hint_purpose_first)
@@ -1196,6 +1235,230 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         buildPurposeButtons()
         updateLangBarSelection()
         configureSos()
+        flowWalker?.apply(FlowEvent.Language(l))
+        if (flowWalker != null && idleShowing()) showIdle()
+    }
+
+    // ---------- Visitor flow (docs/en/visitor-flow-contract.md) ----------
+
+    /** Any touch counts as input for the flow's idle return. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (flowWalker != null && ::flowPanel.isInitialized && flowPanel.visible) scheduleFlowTimer()
+    }
+
+    private fun idleShowing(): Boolean = !showsDashboard && idleView.visibility == View.VISIBLE &&
+        callingView.visibility != View.VISIBLE && offlineView.visibility != View.VISIBLE &&
+        !choosingPurpose
+
+    /** Reads the resolved document off the main thread; bursts coalesce into one more read. */
+    private fun fetchFlow() {
+        if (app.boot.role != "door_station" || !app.coreOk || homeHandler == null) return
+        if (flowGate.request()) startFlowFetch()
+    }
+
+    private fun startFlowFetch() {
+        val worker = homeHandler
+        if (worker == null) {
+            flowGate.complete()
+            return
+        }
+        val generation = app.runtime.coreGeneration
+        worker.post {
+            val document = try { app.core.visitorFlow("") } catch (e: Exception) {
+                ShellLog.ignored("MainActivity", e)
+                null
+            }
+            ui.post {
+                val again = flowGate.complete()
+                if (!isFinishing && app.runtime.isCurrentGeneration(generation)) applyFlowDocument(document)
+                if (again) startFlowFetch()
+            }
+        }
+    }
+
+    private fun applyFlowDocument(document: JSONObject?) {
+        // An unreadable answer changes nothing; a readable one that is disabled means classic.
+        if (document == null || app.boot.role != "door_station") return
+        val usable = FlowDocuments.usable(document)
+        val current = flowWalker
+        if (usable == null) {
+            if (current == null) return
+            flowWalker = null
+            configureCallFlow()
+            if (idleShowing()) showIdle()
+            return
+        }
+        if (current == null) {
+            flowWalker = FlowWalker(usable, visitorLang)
+        } else if (current.revision != usable.optString("revision")) {
+            current.apply(FlowEvent.FlowChanged(usable))
+        } else {
+            return
+        }
+        configureCallFlow()
+        if (idleShowing()) showIdle()
+    }
+
+    private fun flowNoticeText(code: String): String = when (code) {
+        FlowWalker.NO_ANSWER_NOTICE -> texts.t("calling.no_answer", R.string.calling_no_answer)
+        FlowWalker.PRESS_FAILED_NOTICE -> texts.t("flow.call_failed", R.string.flow_call_failed)
+        else -> ""
+    }
+
+    /** Draws the walker's current page in place of the classic call button and purpose grid. */
+    private fun showFlowPage(hint: String?) {
+        val walker = flowWalker ?: return
+        val snapshot = walker.snapshot()
+        if (snapshot.mode != FlowWalker.MODE_PAGE && snapshot.mode != FlowWalker.MODE_END) {
+            flowPanel.hide()
+            return
+        }
+        try {
+            callSection.visibility = View.GONE
+            touchHint.visibility = View.GONE
+            purposeSection.visibility = View.GONE
+            // The clock gives its room to the page once the visitor is below the start page.
+            idleHeader.visibility = if (snapshot.back && UiKit.window(this).heightDp < 700)
+                View.GONE else View.VISIBLE
+            val shown = snapshot.notice?.let { flowNoticeText(it) }?.takeIf { it.isNotEmpty() } ?: hint
+            visitorStatus.text = shown.orEmpty()
+            visitorStatus.visibility = if (shown.isNullOrEmpty()) View.GONE else View.VISIBLE
+            flowPanel.render(snapshot, texts, visitorRoles(), if (app.safeMode) null else cfg,
+                             nodeId, app.boot.httpPort, app.safeMode)
+            flowPanel.setEnabled(app.coreOk)
+            flowPanel.announce(snapshot.title)
+            scheduleFlowTimer()
+        } catch (e: Exception) {
+            // Any failure while drawing a page degrades to a direct call: a visitor is never stranded.
+            ShellLog.ignored("MainActivity", e)
+            flowWalker = null
+            configureCallFlow()
+            showIdle()
+            ui.post { onCallClick() }
+        }
+    }
+
+    private fun scheduleFlowTimer() {
+        ui.removeCallbacks(flowIdleTick)
+        val walker = flowWalker ?: return
+        val snapshot = walker.snapshot()
+        val seconds = when {
+            snapshot.mode == FlowWalker.MODE_END -> walker.returnSeconds
+            snapshot.mode == FlowWalker.MODE_PAGE && (snapshot.back || snapshot.notice != null) ->
+                walker.idleSeconds
+            else -> return
+        }
+        ui.postDelayed(flowIdleTick, seconds * 1000L)
+    }
+
+    private fun flowIdleElapsed() {
+        val walker = flowWalker ?: return
+        if (!idleShowing()) return
+        walker.apply(if (walker.mode == FlowWalker.MODE_END) FlowEvent.Done else FlowEvent.IdleTimeout)
+        showIdle()
+    }
+
+    private fun onFlowBack() {
+        val walker = flowWalker ?: return
+        if (flowBusy) return
+        playButtonSound()
+        walker.apply(FlowEvent.Back)
+        flowPanel.forgetAnnouncement()
+        showIdle()
+    }
+
+    private fun onFlowDone() {
+        val walker = flowWalker ?: return
+        playButtonSound()
+        walker.apply(FlowEvent.Done)
+        flowPanel.forgetAnnouncement()
+        showIdle()
+    }
+
+    private fun onFlowOption(optionId: String) {
+        val walker = flowWalker ?: return
+        if (flowBusy || app.callFlow.current() != null) return
+        if (!app.coreOk) { showOffline(); return }
+        val label = walker.snapshot().options.firstOrNull { it.id == optionId }?.label.orEmpty()
+        try {
+            when (val target = walker.targetOf(optionId)) {
+                FlowTarget.Nothing -> Unit
+                FlowTarget.Page, FlowTarget.End -> {
+                    playButtonSound()
+                    walker.apply(FlowEvent.Tap(optionId))
+                    flowPanel.forgetAnnouncement()
+                    showIdle()
+                }
+                is FlowTarget.Call -> flowDirectCall(optionId, target.purpose, label)
+                FlowTarget.Direct -> flowDirectCall(optionId, "", "")
+                is FlowTarget.Notify -> flowNotify(optionId, target, label)
+            }
+        } catch (e: Exception) {
+            ShellLog.ignored("MainActivity", e)
+            flowWalker = null
+            configureCallFlow()
+            showIdle()
+            onCallClick()
+        }
+    }
+
+    private fun flowDirectCall(optionId: String, purpose: String, label: String) {
+        val walker = flowWalker ?: return
+        val placed = flowRing(purpose, if (purpose.isEmpty()) "" else label)
+        walker.apply(FlowEvent.Tap(optionId, pressFailed = !placed))
+        if (placed) showCalling(callTitleOverride) else showIdle()
+    }
+
+    /** The existing purpose-first press: begin, then the purpose (or none). False when it failed. */
+    private fun flowRing(purpose: String, label: String): Boolean {
+        val pending = app.callFlow.begin(app.boot.door)
+        if (!pending.accepted || pending.call != null) return false
+        playCallFeedback()
+        playButtonSound()
+        val transition = if (purpose.isEmpty()) app.callFlow.skipPurpose()
+            else app.callFlow.selectPurpose(purpose)
+        if (!transition.accepted || transition.call == null) {
+            stopCallFeedback()
+            app.callFlow.finishLocal()
+            clearCallProjection()
+            return false
+        }
+        applyCallProjection(transition)
+        if (label.isNotEmpty()) callTitleOverride = texts.t("purpose.sent", R.string.purpose_sent, label)
+        return true
+    }
+
+    private fun flowNotify(optionId: String, target: FlowTarget.Notify, label: String) {
+        val worker = homeHandler ?: return
+        playButtonSound()
+        flowBusy = true
+        flowPanel.setEnabled(false)
+        val generation = app.runtime.coreGeneration
+        worker.post {
+            val result = try { app.core.visitorNotify(app.boot.door, target.step) } catch (e: Exception) {
+                ShellLog.ignored("MainActivity", e)
+                null
+            }
+            ui.post {
+                flowBusy = false
+                val walker = flowWalker
+                if (isFinishing || walker == null || !app.runtime.isCurrentGeneration(generation)) return@post
+                // A throttled result is ok: the visitor sees the same page and never learns of the limit.
+                val calls = walker.apply(FlowEvent.Tap(optionId, notifyOk = FlowDocuments.notifyOk(result)))
+                if (calls.any { it is FlowCall.Press }) {
+                    if (flowRing(target.purpose, if (target.purpose.isEmpty()) "" else label)) {
+                        showCalling(callTitleOverride)
+                    } else {
+                        walker.callFailed()
+                        showIdle()
+                    }
+                } else {
+                    flowPanel.forgetAnnouncement()
+                    showIdle()
+                }
+            }
+        }
     }
 
     // ---------- Call state transitions ----------
@@ -1224,6 +1487,11 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         ui.removeCallbacks(callTimeout)
         pulse.clearAnimation()
         offlineView.visibility = View.GONE
+        flowWalker?.let {
+            if (it.mode == FlowWalker.MODE_CALLING) it.apply(FlowEvent.CallEnded(flowEndReason))
+        }
+        flowEndReason = "ended"
+        flowBusy = false
         if (showsDashboard) {
             restoreRoleHome()
             updateCallActionLabel()
@@ -1245,12 +1513,14 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         visitorStatus.text = hint.orEmpty()
         visitorStatus.visibility = if (hint.isNullOrEmpty()) View.GONE else View.VISIBLE
         idleView.scrollTo(0, 0)
+        if (flowWalker != null) showFlowPage(hint) else flowPanel.hide()
         updateCallActionLabel()
     }
 
     private fun showPurposeChooser() {
         dismissReply()
         if (showsDashboard) return
+        flowPanel.hide()
         choosingPurpose = true
         visitorStatus.visibility = View.GONE
         touchHint.visibility = View.GONE
@@ -1279,6 +1549,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private fun showCalling(title: String? = null) {
         dismissReply()
         if (showsDashboard) return
+        flowPanel.hide()
+        ui.removeCallbacks(flowIdleTick)
         choosingPurpose = false
         visitorStatus.visibility = View.GONE
         ui.removeCallbacks(purposeTimeout)
@@ -1305,6 +1577,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private fun showEstablished() {
         dismissReply()
         if (showsDashboard) return
+        flowPanel.hide()
+        ui.removeCallbacks(flowIdleTick)
         choosingPurpose = false
         visitorStatus.visibility = View.GONE
         ui.removeCallbacks(purposeTimeout)
@@ -1396,6 +1670,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     private fun showOffline() {
         dismissReply()
+        flowPanel.hide()
+        ui.removeCallbacks(flowIdleTick)
         visitorStatus.visibility = View.GONE
         if (showsDashboard) {
             visitorShell.visibility = View.VISIBLE
@@ -1457,6 +1733,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                         restoreCurrentCallUi()
                         restoreRequestedCall(intent)
                         maybeStartCamera()
+                        fetchFlow()
                     }
                 } else showOffline()
             }
@@ -1471,6 +1748,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             // matching branch that swallowed the event: the header counters were then never
             // recomputed after startup, and stood at whatever the cluster looked like when the
             // last unrelated event arrived.
+            "visitor_flow_changed" -> fetchFlow()
             "pairing_state", "pairing_revoked" -> refreshMembership()
             "safe_mode" -> {
                 if (ev.optBoolean("active")) {
@@ -1521,6 +1799,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                     replyGuard = ReplyDismissGuard(replyShownAt)
                     replyText.text = ev.optString("text")
                     replyBanner.visibility = View.VISIBLE
+                    flowWalker?.apply(FlowEvent.Reply(true))
                     replyScroll.post { fitReply() }
                     ui.removeCallbacks(replyTick)
                     replyTick.run()

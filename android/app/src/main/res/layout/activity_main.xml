@@ -117,6 +117,16 @@
                         android:orientation="horizontal"
                         android:visibility="gone" />
                     <LinearLayout
+                        android:id="@+id/flow_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:visibility="gone" />
+                    <LinearLayout
                         android:id="@+id/purpose_section"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -290,6 +300,12 @@
                     android:minHeight="72dp"
                     android:gravity="center" />
             </LinearLayout>
+            <LinearLayout
+                android:id="@+id/flow_dock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
             <Button
                 android:id="@+id/purpose_cancel_button"
                 style="@style/Widget.Doorbell.Button.Visitor"

@@ -563,6 +563,48 @@ Java_jp_ox_doorbell_DoorbellCore_nativePressV2(JNIEnv* env, jobject, jlong h,
   return result;
 }
 
+// Visitor flow: the resolved document, an editor template and a notify step. All three marshal to
+// Core's loop and are called off the UI thread; an empty door selects this shell's door.
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeVisitorFlowJson(JNIEnv* env, jobject, jlong h,
+                                                       jstring door_id) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  const std::string door = toUtf8(env, door_id);
+  char* s = db_core_visitor_flow_json(b->core, door.c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeVisitorFlowTemplateJson(JNIEnv* env, jobject, jlong h,
+                                                               jstring name) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  const std::string template_name = toUtf8(env, name);
+  char* s = db_core_visitor_flow_template_json(b->core, template_name.c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeVisitorNotifyJson(JNIEnv* env, jobject, jlong h,
+                                                         jstring door_id, jstring step_id) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  const std::string door = toUtf8(env, door_id);
+  const std::string step = toUtf8(env, step_id);
+  char* s = db_core_visitor_notify_json(b->core, door.c_str(), step.c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeSelectPurposeV2(
     JNIEnv* env, jobject, jlong h, jstring door_id, jstring call_id, jstring purpose) {

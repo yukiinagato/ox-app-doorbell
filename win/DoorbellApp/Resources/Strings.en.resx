@@ -951,6 +951,7 @@ Delete it?</value></data>
   <data name="flow_editor_image_choose" xml:space="preserve"><value>Choose from Assets</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>Choose from Assets</value></data>
   <data name="flow_editor_image_place" xml:space="preserve"><value>Image position</value></data>
+  <data name="flow_editor_image_place_current" xml:space="preserve"><value>Image placement: {0}</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>Upload an image</value></data>
   <data name="flow_editor_image_uploading" xml:space="preserve"><value>Uploading…</value></data>
   <data name="flow_editor_issues" xml:space="preserve"><value>Things to fix</value></data>
@@ -1004,11 +1005,15 @@ Delete it?</value></data>
   <data name="flow_editor_status_legacy" xml:space="preserve"><value>The classic call flow stays in use until you customize the wizard.</value></data>
   <data name="flow_editor_status_off" xml:space="preserve"><value>The wizard is off. Visitors see the classic call screen.</value></data>
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>Other steps lead here: {0}</value></data>
+  <data name="flow_editor_step_kind" xml:space="preserve"><value>Kind of step</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>(no title)</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>Steps</value></data>
   <data name="flow_editor_steps_hint" xml:space="preserve"><value>Steps are listed from the start page in the order they are reached. Swipe to delete one.</value></data>
+  <data name="flow_editor_summary_options" xml:space="preserve"><value>Options: {0}</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>Overview</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>Choose a step</value></data>
+  <data name="flow_editor_target_new_call" xml:space="preserve"><value>New call step</value></data>
+  <data name="flow_editor_target_new_end" xml:space="preserve"><value>New end page</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>This replaces the current steps with the template.</value></data>
   <data name="flow_editor_template_default" xml:space="preserve"><value>Built-in wizard</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>Delivery and leave-at-door</value></data>

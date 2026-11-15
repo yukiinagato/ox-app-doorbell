@@ -944,6 +944,7 @@
 "flow_editor.image_choose" = "从素材库选择";
 "flow_editor.image_pick" = "从素材库选择";
 "flow_editor.image_place" = "图片位置";
+"flow_editor.image_place_current" = "图片位置：%@";
 "flow_editor.image_upload" = "上传图片";
 "flow_editor.image_uploading" = "正在上传…";
 "flow_editor.issues" = "需要修正";
@@ -997,11 +998,15 @@
 "flow_editor.status_legacy" = "在自定义向导之前，仍使用原来的呼叫流程。";
 "flow_editor.status_off" = "向导已关闭，访客看到的是原来的呼叫画面。";
 "flow_editor.step_in_use" = "其他步骤指向此处：%@";
+"flow_editor.step_kind" = "步骤类型";
 "flow_editor.step_untitled" = "（无标题）";
 "flow_editor.steps" = "步骤";
 "flow_editor.steps_hint" = "步骤按从起始页可到达的顺序排列。左滑可删除。";
+"flow_editor.summary_options" = "选项：%@";
 "flow_editor.tab_overview" = "概览";
 "flow_editor.target_choose" = "请选择步骤";
+"flow_editor.target_new_call" = "新建呼叫步骤";
+"flow_editor.target_new_end" = "新建结束页";
 "flow_editor.template_confirm" = "将用模板替换当前步骤。";
 "flow_editor.template_default" = "内置向导";
 "flow_editor.template_delivery" = "快递与放置门口";
