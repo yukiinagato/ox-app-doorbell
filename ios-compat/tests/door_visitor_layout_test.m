@@ -302,7 +302,7 @@ int main(void) { @autoreleasepool {
           if (back) CHECK(!empty(flow.back) && flow.back.size.height >= 44);
           if (back && sosShown) CHECK(!overlap(flow.back, base.sos));
           CHECK(flow.rowHeight >= 72);
-          CHECK(flow.columns == (base.compact ? 1 : 2));
+          CHECK(flow.columns == (secondary > 0 ? MIN(base.compact ? 2 : 3, secondary) : (base.compact ? 2 : 3)));
           for (NSInteger i = 0; i < secondary; i++) {
             CGRect frame = DBDoorVisitorFlowOptionFrame(flow, YES, i, secondary);
             CHECK(frame.size.height >= 72 && frame.origin.y >= flow.primaryHeight);
@@ -311,6 +311,35 @@ int main(void) { @autoreleasepool {
           }
           CGRect primary = DBDoorVisitorFlowPrimaryFrame(flow);
           CHECK(primary.size.height == base.action.size.height && primary.origin.y == 0);
+        }
+      }
+    }
+  }
+  // The card and the options form one centred block, with or without a primary option.
+  for (NSUInteger s = 0; s < sizeof(flowSizes) / sizeof(flowSizes[0]); s++) {
+    CGSize size = flowSizes[s];
+    DBDoorVisitorLayout base = DBDoorVisitorLayoutMake(size, NO, 1);
+    base = DBDoorVisitorLayoutFitContent(base, YES, NO, NO, 0);
+    for (NSInteger count = 1; count <= 12; count += 5) {
+      for (int back = 0; back < 2; back++) {
+        for (int primary = 0; primary < 2; primary++) {
+        DBDoorVisitorFlowLayout flow =
+            DBDoorVisitorFlowLayoutMake(base, 0, primary != 0, count, 0, back != 0);
+        for (CGFloat cardHeight = 0; cardHeight <= 400; cardHeight += 100) {
+          CGRect card, options;
+          DBDoorVisitorFlowComposeBlock(flow, cardHeight, &card, &options);
+          CHECK(inside(options, size) && !overlap(card, options) && !overlap(options, flow.back));
+          CHECK(options.size.height == flow.options.size.height);
+          CHECK(card.origin.y >= flow.zone.origin.y - 0.01 &&
+                CGRectGetMaxY(options) <= CGRectGetMaxY(flow.zone) + 0.01);
+          if (cardHeight > 0 && cardHeight + flow.gap + options.size.height <= flow.zone.size.height) {
+            CHECK(card.size.height == cardHeight);
+            CGFloat above = card.origin.y - flow.zone.origin.y;
+            CGFloat below = CGRectGetMaxY(flow.zone) - CGRectGetMaxY(options);
+            CHECK(fabs(above - below) <= 1.01);
+            CHECK(fabs(options.origin.y - CGRectGetMaxY(card) - flow.gap) < 0.01);
+          }
+        }
         }
       }
     }

@@ -103,3 +103,9 @@ CGRect DBDoorVisitorFlowOptionFrame(DBDoorVisitorFlowLayout flow, BOOL hasPrimar
                                     NSInteger index, NSInteger secondaryCount);
 // Images scale to the content width and take at most 40% of the viewport height.
 CGFloat DBDoorVisitorFlowImageHeight(CGSize image, CGFloat width, CGFloat viewportHeight);
+
+// The page card (cardHeight, zero without content) and the options, primary included, are one
+// block centred in the zone, so nothing floats alone. A block taller than the zone keeps the
+// options at the bottom and fits the card into the room above them.
+void DBDoorVisitorFlowComposeBlock(DBDoorVisitorFlowLayout flow, CGFloat cardHeight, CGRect *card,
+                                   CGRect *options);

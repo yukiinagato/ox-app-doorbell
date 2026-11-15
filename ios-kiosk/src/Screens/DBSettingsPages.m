@@ -629,6 +629,12 @@ static UIImage *DBPanelLinkQr(NSString *link) {
     return [name length] > 21 ? [_flowPages stepPage:[name substringFromIndex:21]]
                               : [_flowPages rootPage];
   }
+  if ([name hasPrefix:@"visitor_flow_try"] && _boot.debugScreenshots) {
+    if (_flowPages == nil) _flowPages = [[DBFlowEditorPages alloc] initWithRouter:_router editor:_editor];
+    NSArray *taps = [name length] > 17
+        ? [[name substringFromIndex:17] componentsSeparatedByString:@","] : @[];
+    return [_flowPages previewPageAfterTaps:taps];
+  }
   if ([name isEqualToString:@"visitor_flow"] || [name hasPrefix:@"visitor_flow:"]) {
     if (_flowPages == nil) _flowPages = [[DBFlowEditorPages alloc] initWithRouter:_router editor:_editor];
     // "visitor_flow:<step id>" is the step page, for the debug start screens.

@@ -6,8 +6,12 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBFlowOrder.h"
 #import "../Core/DBGeneratedStrings.h"
+#import "../Core/DBIconAsset.h"
+#import "../Core/DBPurposeModel.h"
 #import "../Core/DBTexts.h"
+#import "../Core/DBVisitorFlowModel.h"
 #import "DBEditor.h"
 #import "DBRouter.h"
 
@@ -70,6 +74,9 @@ static const NSUInteger kAltLimit = 120;
   DBBootConfig *_boot;
   NSDictionary *_cfg;
   NSDictionary *_preview;
+  DBVisitorFlowModel *_sim;
+  NSString *_simLang;
+  NSString *_simResult;
   UIPopoverController *_popover;
   UIImagePickerController *_picker;
   void (^_pickerDone)(NSString *hash);
@@ -89,6 +96,8 @@ static const NSUInteger kAltLimit = 120;
 
 - (void)close {
   _preview = nil;
+  _sim = nil;
+  _simResult = nil;
   [_popover dismissPopoverAnimated:NO];
   _popover = nil;
   _picker.delegate = nil;
@@ -173,30 +182,34 @@ static const NSUInteger kAltLimit = 120;
   return [NSString stringWithFormat:@"%@: %@", [self kindLabel:kind], name];
 }
 
-// Start page first, then the steps in the order they are reached, then any that nothing reaches.
+// Core's step_order for the stored steps: the administrator's order first, then reading order.
 - (NSArray *)orderedStepIDs {
-  NSDictionary *steps = [self steps];
-  NSMutableArray *order = [NSMutableArray array];
-  NSString *start = DBFString([[self flow] objectForKey:@"start"]);
-  NSMutableArray *queue = [NSMutableArray array];
-  if ([steps objectForKey:start] != nil) [queue addObject:start];
-  while ([queue count] > 0) {
-    NSString *current = [queue objectAtIndex:0];
-    [queue removeObjectAtIndex:0];
-    if ([order containsObject:current]) continue;
-    [order addObject:current];
-    NSDictionary *step = [self step:current];
-    for (NSDictionary *option in DBFArray([step objectForKey:@"options"]))
-      if ([steps objectForKey:DBFString([DBFDict(option) objectForKey:@"to"])] != nil)
-        [queue addObject:[option objectForKey:@"to"]];
-    for (NSString *member in @[ @"to", @"on_unanswered" ]) {
-      NSString *target = DBFString([step objectForKey:member]);
-      if ([steps objectForKey:target] != nil) [queue addObject:target];
-    }
+  return [DBFlowOrder stepOrderForFlow:[self flow]];
+}
+
+// The batch that stores new steps (id to whole step) and the consecutive `order` values the new
+// sequence needs. New steps follow `afterID` in the given order, or the end of the list.
+- (NSArray *)opsForNewSteps:(NSDictionary *)newSteps ids:(NSArray *)newIDs after:(NSString *)afterID {
+  NSMutableDictionary *all = [NSMutableDictionary dictionaryWithDictionary:[self steps]];
+  [all addEntriesFromDictionary:newSteps];
+  NSArray *sequence = [self orderedStepIDs];
+  NSString *previous = afterID;
+  for (NSString *stepID in newIDs) {
+    sequence = [DBFlowOrder sequence:sequence inserting:stepID after:previous];
+    previous = stepID;
   }
-  for (NSString *stepID in [[steps allKeys] sortedArrayUsingSelector:@selector(compare:)])
-    if (![order containsObject:stepID]) [order addObject:stepID];
-  return order;
+  NSMutableDictionary *ordered = [NSMutableDictionary dictionary];
+  for (NSDictionary *write in [DBFlowOrder writesForSequence:sequence steps:all])
+    [ordered setObject:[write objectForKey:@"step"] forKey:[write objectForKey:@"id"]];
+  NSMutableArray *ops = [NSMutableArray array];
+  for (NSString *stepID in newIDs)
+    [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID]
+                         value:[ordered objectForKey:stepID] ?: [newSteps objectForKey:stepID]]];
+  for (NSString *stepID in sequence)
+    if ([newSteps objectForKey:stepID] == nil && [ordered objectForKey:stepID] != nil)
+      [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID]
+                           value:[ordered objectForKey:stepID]]];
+  return ops;
 }
 
 - (NSArray *)stepChoicesOfKind:(NSString *)kind {
@@ -443,6 +456,12 @@ static const NSUInteger kAltLimit = 120;
       [sections addObjectsFromArray:[pages stepsSections]];
     }
 
+    if ([pages canTry]) {
+      DBEditField *tryIt = [pages page:[pages t:@"flow_editor.preview"] detail:nil
+                                 build:^DBEditPage *{ return [weakSelf previewPage]; }];
+      [sections addObject:[DBEditSection title:nil fields:@[ tryIt ]]];
+    }
+
     NSMutableArray *templates = [NSMutableArray array];
     for (NSArray *entry in @[ @[ @"default", @"flow_editor.template_default" ],
                               @[ @"purposes", @"flow_editor.template_purposes" ],
@@ -542,6 +561,17 @@ static const NSUInteger kAltLimit = 120;
     if (index < 0 || index >= (NSInteger)[now count]) return NO;
     return [weakSelf deleteStep:[now objectAtIndex:(NSUInteger)index] editor:editor];
   };
+  // The stock reorder control: the new sequence is stored as consecutive `order` values, every
+  // changed step rewritten whole in one batch.
+  section.onMove = ^BOOL(NSInteger from, NSInteger to) {
+    NSArray *sequence = [DBFlowOrder sequence:[weakSelf orderedStepIDs] movingFrom:from to:to];
+    NSMutableArray *ops = [NSMutableArray array];
+    for (NSDictionary *write in [DBFlowOrder writesForSequence:sequence steps:[weakSelf steps]])
+      [ops addObject:[weakSelf setOp:[@"visitor_flow.steps."
+                                         stringByAppendingString:[write objectForKey:@"id"]]
+                               value:[write objectForKey:@"step"]]];
+    return [weakSelf commit:ops];
+  };
   DBEditField *add = [self action:[self t:@"flow_editor.add_step"] block:^{
     [editor pushPage:[weakSelf addStepPage]];
   }];
@@ -633,37 +663,173 @@ static const NSUInteger kAltLimit = 120;
   NSString *prefix = [kind isEqualToString:@"page"] ? @"s_" : [kind isEqualToString:@"call"] ? @"c_"
       : [kind isEqualToString:@"notify"] ? @"n_" : @"e_";
   NSString *stepID = [self newStepIDWithPrefix:prefix];
-  NSMutableArray *ops = [NSMutableArray array];
+  NSMutableDictionary *created = [NSMutableDictionary dictionary];
+  NSMutableArray *ids = [NSMutableArray arrayWithObject:stepID];
   NSDictionary *thanks = @{ @"kind" : @"end", @"title" : [self textMapForKey:@"core.flow.thanks_title"],
                             @"return_s" : @8 };
   if ([kind isEqualToString:@"end"]) {
-    [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID] value:thanks]];
+    [created setObject:thanks forKey:stepID];
   } else if ([kind isEqualToString:@"call"]) {
-    [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID]
-                         value:@{ @"kind" : @"call" }]];
+    [created setObject:@{ @"kind" : @"call" } forKey:stepID];
   } else if ([kind isEqualToString:@"notify"]) {
     NSString *end = [[[self stepChoicesOfKind:@"end"] firstObject] firstObject];
     if (end == nil) {
       end = [self newStepIDWithPrefix:@"e_"];
-      [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:end] value:thanks]];
+      [created setObject:thanks forKey:end];
+      [ids addObject:end];
     }
-    [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID]
-        value:@{ @"kind" : @"notify", @"message" : [self textMapForKey:@"core.flow.left_message"],
-                 @"to" : end }]];
+    [created setObject:@{ @"kind" : @"notify", @"message" : [self textMapForKey:@"core.flow.left_message"],
+                          @"to" : end } forKey:stepID];
   } else {
     NSString *call = [[[self stepChoicesOfKind:@"call"] firstObject] firstObject];
     if (call == nil) {
       call = [self newStepIDWithPrefix:@"c_"];
-      [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:call]
-                           value:@{ @"kind" : @"call" }]];
+      [created setObject:@{ @"kind" : @"call" } forKey:call];
+      [ids addObject:call];
     }
     NSDictionary *option = @{ @"id" : @"o_1", @"label" : [self textMapForKey:@"core.flow.call"],
                               @"style" : @"primary", @"to" : call };
-    [ops addObject:[self setOp:[@"visitor_flow.steps." stringByAppendingString:stepID]
-        value:@{ @"kind" : @"page", @"title" : [self textMapForKey:@"core.flow.home_title"],
-                 @"options" : @[ option ] }]];
+    [created setObject:@{ @"kind" : @"page", @"title" : [self textMapForKey:@"core.flow.home_title"],
+                          @"options" : @[ option ] } forKey:stepID];
   }
-  return [self commit:ops] ? stepID : nil;
+  return [self commit:[self opsForNewSteps:created ids:ids after:nil]] ? stepID : nil;
+}
+
+#pragma mark - try it
+
+// Walks the stored flow with the same model the door screen uses. Every edit is stored at once, so
+// the stored flow is the draft. A tap shows the Core call it would make and makes none.
+- (BOOL)canTry {
+  return _preview == nil && [DBCoreBridge supportsVisitorFlow];
+}
+
+- (void)setSimLanguage:(NSString *)lang {
+  _simLang = [lang copy];
+  _sim.lang = lang;
+}
+
+- (void)restartAndReload {
+  [self restartSim];
+  [_editor reloadPage];
+}
+
+- (void)restartSim {
+  NSDictionary *document = [_core visitorFlowJson:_boot.door ?: @""];
+  _simResult = nil;
+  if (![document isKindOfClass:[NSDictionary class]]) {
+    _sim = nil;
+    return;
+  }
+  if ([_simLang length] == 0)
+    _simLang = [[self languages] containsObject:[self lang]] ? [self lang]
+                                                              : [[self languages] firstObject];
+  _sim = [[DBVisitorFlowModel alloc] initWithFlow:document lang:_simLang];
+}
+
+- (DBEditPage *)previewPage {
+  return [self previewPageAfterTaps:nil];
+}
+
+- (DBEditPage *)previewPageAfterTaps:(NSArray *)optionIDs {
+  __weak DBFlowEditorPages *weakSelf = self;
+  [self restartSim];
+  for (NSString *optionID in optionIDs) [self simTap:optionID];
+  return [DBEditPage title:[self t:@"flow_editor.preview"] build:^NSArray *{ return [weakSelf simSections]; }];
+}
+
+- (DBEditField *)simInfo:(NSString *)title detail:(NSString *)detail {
+  DBEditField *field = [DBEditField kind:DBEditKindInfo title:title value:detail ?: @""];
+  field.detail = detail;
+  return field;
+}
+
+- (void)simTap:(NSString *)optionID {
+  NSDictionary *plan = [_sim planForTap:optionID];
+  if (plan == nil) return;
+  NSString *action = DBFString([plan objectForKey:@"action"]);
+  _simResult = nil;
+  if ([action isEqualToString:@"press"]) {
+    NSString *purpose = DBFString([plan objectForKey:@"purpose"]);
+    _simResult = [purpose length] > 0
+        ? [_texts t:@"flow_editor.sim_ring", [self purposeLabel:purpose], nil]
+        : [self t:@"flow_editor.sim_ring_any"];
+  } else if ([action isEqualToString:@"notify"]) {
+    NSDictionary *step = DBFDict([DBFDict([_sim.flow objectForKey:@"steps"])
+                                     objectForKey:DBFString([plan objectForKey:@"step"])]);
+    _simResult = [_texts t:@"flow_editor.sim_message", [_sim text:[step objectForKey:@"message"]], nil];
+  }
+  [_sim applyEvent:@{ @"tap" : optionID }];
+  [_editor reloadPage];
+}
+
+- (void)simEvent:(NSDictionary *)event {
+  _simResult = nil;
+  [_sim applyEvent:event];
+  [_editor reloadPage];
+}
+
+- (NSArray *)simSections {
+  __weak DBFlowEditorPages *weakSelf = self;
+  NSMutableArray *sections = [NSMutableArray array];
+  NSMutableArray *languages = [NSMutableArray array];
+  for (NSString *lang in [self languages]) [languages addObject:@[ lang, [DBTexts langDisplayName:lang] ]];
+  DBEditField *language = [self choice:[self t:@"flow_editor.sim_language"] value:_simLang
+      choices:languages change:^BOOL(NSString *value) {
+    [weakSelf setSimLanguage:value];
+    return YES;
+  }];
+  DBEditSection *top = [DBEditSection title:nil fields:@[ language ]];
+  top.footer = [self t:@"flow_editor.sim_hint"];
+  [sections addObject:top];
+  if (_sim == nil) {
+    [sections addObject:[DBEditSection title:nil fields:@[
+        [self simInfo:[self t:@"editor.core_too_old"] detail:nil] ]]];
+    return sections;
+  }
+  if (!_sim.active) {
+    [sections addObject:[DBEditSection title:nil fields:@[
+        [self simInfo:[self t:@"flow_editor.sim_classic"] detail:nil] ]]];
+    return sections;
+  }
+  if ([_simResult length] > 0)
+    [sections addObject:[DBEditSection title:nil fields:@[ [self simInfo:_simResult detail:nil] ]]];
+
+  NSString *mode = _sim.mode;
+  NSDictionary *step = [_sim currentStep];
+  NSString *title = [_sim text:[step objectForKey:@"title"]];
+  NSString *body = [_sim text:[step objectForKey:@"body"]];
+  if ([title length] > 0 || [body length] > 0)
+    [sections addObject:[DBEditSection title:nil fields:@[
+        [self simInfo:[title length] > 0 ? title : body detail:[title length] > 0 ? body : nil] ]]];
+  NSMutableArray *rows = [NSMutableArray array];
+  if ([mode isEqualToString:DBVisitorFlowModePage]) {
+    for (NSDictionary *option in [_sim currentOptions]) {
+      NSString *optionID = DBFString([option objectForKey:@"id"]);
+      DBEditField *row = [self action:DBFString([option objectForKey:@"label"]) block:^{
+        [weakSelf simTap:optionID];
+      }];
+      NSString *name = [DBPurposeModel iconNameForOptionPurpose:DBFString([option objectForKey:@"purpose"])
+                                                           icon:DBFString([option objectForKey:@"icon"])];
+      if (name != nil)
+        row.image = [DBIconAsset tintedImageNamed:name color:[UIColor darkGrayColor]
+                                             size:CGSizeMake(24, 24)];
+      [rows addObject:row];
+    }
+    if ([_sim canGoBack])
+      [rows addObject:[self action:[self t:@"flow.back"] block:^{ [weakSelf simEvent:@{ @"back" : @YES }]; }]];
+  } else if ([mode isEqualToString:DBVisitorFlowModeEnd]) {
+    [rows addObject:[self action:[self t:@"flow.done"] block:^{ [weakSelf simEvent:@{ @"done" : @YES }]; }]];
+  }
+  if ([rows count] > 0) [sections addObject:[DBEditSection title:nil fields:rows]];
+
+  DBEditField *restart = [self action:[self t:@"flow_editor.sim_restart"] block:^{
+    [weakSelf restartAndReload];
+  }];
+  DBEditField *idle = [self action:[self t:@"flow_editor.sim_idle"] block:^{
+    [weakSelf simEvent:@{ @"idle_timeout" : @YES }];
+  }];
+  [sections addObject:[DBEditSection title:nil fields:@[ restart, idle ]]];
+  return sections;
 }
 
 #pragma mark - step page
@@ -682,7 +848,9 @@ static const NSUInteger kAltLimit = 120;
                                        value:[pages kindLabel:kind]];
     DBEditField *idRow = [DBEditField kind:DBEditKindInfo title:[pages t:@"flow_editor.field_id"]
                                      value:stepID];
-    [sections addObject:[DBEditSection title:nil fields:@[ kindRow, idRow ]]];
+    DBEditSection *identity = [DBEditSection title:nil fields:@[ kindRow, idRow ]];
+    identity.footer = [pages t:@"flow_editor.kind_fixed_hint"];
+    [sections addObject:identity];
 
     if ([kind isEqualToString:@"page"] || [kind isEqualToString:@"end"]) {
       [sections addObject:[DBEditSection title:[pages t:@"flow_editor.field_title"]
@@ -733,7 +901,8 @@ static const NSUInteger kAltLimit = 120;
       NSString *prefix = [stepID length] > 2 && [stepID characterAtIndex:1] == '_'
           ? [stepID substringToIndex:2] : @"s_";
       NSString *copyID = [inner newStepIDWithPrefix:prefix];
-      if ([inner writeStep:copyID value:[inner step:stepID]]) {
+      if ([inner commit:[inner opsForNewSteps:@{ copyID : [inner step:stepID] } ids:@[ copyID ]
+                                        after:stepID]]) {
         [editor popPage];
         [editor reloadPage];
         [editor pushPage:[inner stepPage:copyID]];
@@ -1228,17 +1397,28 @@ static NSData *DBFJpegForFlow(UIImage *image) {
                                set:^BOOL(NSString *lang, NSString *text) {
         return [weakSelf setText:text lang:lang member:@"label" step:stepID option:optionID];
       }]]];
-      DBEditField *icon = [DBEditField kind:DBEditKindText
-          title:[pages t:@"flow_editor.option_icon"] value:DBFString([option objectForKey:@"icon"])];
-      icon.placeholder = @"📦";
-      icon.onChange = ^BOOL(id raw) {
-        NSString *text = DBFTrim(DBFString(raw));
+      NSString *shown = DBFString([option objectForKey:@"icon"]);
+      NSString *currentName = [DBPurposeModel iconNameForOptionPurpose:nil icon:shown];
+      NSString *current = @"";
+      NSMutableArray *choices = [NSMutableArray arrayWithObject:@[ @"", [pages t:@"flow_editor.icon_none"] ]];
+      for (NSArray *entry in [DBPurposeModel optionIconChoices]) {
+        UIImage *picture = [DBIconAsset tintedImageNamed:[entry objectAtIndex:2]
+                                                   color:[UIColor darkGrayColor]
+                                                    size:CGSizeMake(24, 24)];
+        [choices addObject:picture != nil
+            ? @[ [entry objectAtIndex:0], [pages t:[entry objectAtIndex:1]], picture ]
+            : @[ [entry objectAtIndex:0], [pages t:[entry objectAtIndex:1]] ]];
+        if ([currentName isEqualToString:[entry objectAtIndex:2]]) current = [entry objectAtIndex:0];
+      }
+      // A stored emoji is shown as the icon this shell maps it to; only a pick rewrites it.
+      DBEditField *icon = [pages choice:[pages t:@"flow_editor.option_icon"] value:current
+          choices:choices change:^BOOL(NSString *value) {
         return [weakSelf editOption:optionID step:stepID
             block:^(NSMutableDictionary *copy, NSMutableArray *siblings) {
           (void)siblings;
-          if ([text length] == 0) [copy removeObjectForKey:@"icon"]; else [copy setObject:text forKey:@"icon"];
+          if ([value length] == 0) [copy removeObjectForKey:@"icon"]; else [copy setObject:value forKey:@"icon"];
         }];
-      };
+      }];
       [sections addObject:[DBEditSection title:nil fields:@[ icon ]]];
     }
 

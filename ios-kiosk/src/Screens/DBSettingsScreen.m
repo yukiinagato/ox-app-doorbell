@@ -525,7 +525,11 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
 }
 
 - (void)debugOpenPages:(NSString *)spec {
-  for (NSString *name in [spec componentsSeparatedByString:@">"]) [self openPage:name];
+  for (NSString *name in [spec componentsSeparatedByString:@">"]) {
+    // "@edit" switches the open list into its edit (reorder and delete) mode.
+    if ([name isEqualToString:@"@edit"]) [_editor debugToggleEditing];
+    else [self openPage:name];
+  }
 }
 
 - (NSString *)roleLabel {

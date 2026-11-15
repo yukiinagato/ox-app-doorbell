@@ -16,6 +16,8 @@
 - (DBEditPage *)stepPage:(NSString *)stepID;
 // Debug start screens only: the editor over the built-in wizard's template, never written.
 - (void)usePreviewTemplate;
+// Debug start screens only: the try-it page after the given option taps.
+- (DBEditPage *)previewPageAfterTaps:(NSArray *)optionIDs;
 // Stops the photo picker and drops any pending upload.
 - (void)close;
 @end

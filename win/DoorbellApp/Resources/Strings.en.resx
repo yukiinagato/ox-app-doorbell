@@ -944,14 +944,22 @@ Delete it?</value></data>
   <data name="flow_editor_field_title" xml:space="preserve"><value>Title</value></data>
   <data name="flow_editor_field_to" xml:space="preserve"><value>Page shown afterwards</value></data>
   <data name="flow_editor_icon_auto" xml:space="preserve"><value>Automatic (from the purpose)</value></data>
+  <data name="flow_editor_icon_bag" xml:space="preserve"><value>Bag</value></data>
+  <data name="flow_editor_icon_bell" xml:space="preserve"><value>Bell</value></data>
+  <data name="flow_editor_icon_box" xml:space="preserve"><value>Package</value></data>
   <data name="flow_editor_icon_briefcase" xml:space="preserve"><value>Briefcase</value></data>
   <data name="flow_editor_icon_current" xml:space="preserve"><value>Current value</value></data>
   <data name="flow_editor_icon_dots" xml:space="preserve"><value>More</value></data>
+  <data name="flow_editor_icon_ellipsis" xml:space="preserve"><value>More</value></data>
+  <data name="flow_editor_icon_envelope" xml:space="preserve"><value>Envelope</value></data>
   <data name="flow_editor_icon_home" xml:space="preserve"><value>House</value></data>
+  <data name="flow_editor_icon_house" xml:space="preserve"><value>House</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>Envelope</value></data>
+  <data name="flow_editor_icon_none" xml:space="preserve"><value>No icon</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>Parcel</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>Pen</value></data>
-  <data name="flow_editor_icon_tool" xml:space="preserve"><value>Wrench</value></data>
+  <data name="flow_editor_icon_person" xml:space="preserve"><value>Person</value></data>
+  <data name="flow_editor_icon_tool" xml:space="preserve"><value>Tool</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>Person</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>Return to the start after inactivity (seconds)</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>Return to start after</value></data>
@@ -968,6 +976,7 @@ Delete it?</value></data>
   <data name="flow_editor_kind" xml:space="preserve"><value>Step type</value></data>
   <data name="flow_editor_kind_call" xml:space="preserve"><value>Call</value></data>
   <data name="flow_editor_kind_end" xml:space="preserve"><value>End page</value></data>
+  <data name="flow_editor_kind_fixed_hint" xml:space="preserve"><value>The kind cannot be changed, because each kind has its own fields and others point to it. Add a step of the other kind and repoint the options.</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>Notify without ringing</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>Page</value></data>
   <data name="flow_editor_make_start" xml:space="preserve"><value>Use as the start page</value></data>
@@ -1019,7 +1028,7 @@ Delete it?</value></data>
   <data name="flow_editor_step_kind" xml:space="preserve"><value>Kind of step</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>(no title)</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>Steps</value></data>
-  <data name="flow_editor_steps_hint" xml:space="preserve"><value>Steps are listed from the start page in the order they are reached. Swipe to delete one.</value></data>
+  <data name="flow_editor_steps_hint" xml:space="preserve"><value>Steps are listed in the order you keep them. Use Edit to drag one up or down, or swipe to delete it.</value></data>
   <data name="flow_editor_summary_options" xml:space="preserve"><value>Options: {0}</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>Overview</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>Choose a step</value></data>

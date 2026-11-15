@@ -237,6 +237,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSTimeInterval _flowEndSince;
   BOOL _flowBusy;
   BOOL _flowDebugHold;
+  // YES once Core has answered the first flow request, with a document or with none. Until then the
+  // screen shows neither the classic call button nor the purposes, so a wizard never flashes the
+  // classic home first.
+  BOOL _flowAnswered;
   NSString *_endReason;
   NSMutableArray *_purposeButtons;
   // A UIView under each stock purpose button on a flat system, or NSNull.
@@ -649,9 +653,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _timeScrim.hidden = CGRectIsEmpty(_titleLabel.frame);
   [_air setSuppressed:!idle || covered || CGRectIsEmpty(_air.label.frame)];
   BOOL flowOn = idle && [self flowShowing];
-  _purposeScroll.hidden = !idle;
-  _touchHint.hidden = !idle || flowOn;
-  _callButton.hidden = !idle || flowOn;
+  BOOL pending = idle && [self flowPending];
+  _purposeScroll.hidden = !idle || pending;
+  _touchHint.hidden = !idle || flowOn || pending;
+  _callButton.hidden = !idle || flowOn || pending;
   _flowPlate.hidden = !(flowOn && _flowHasContent);
   _flowOptionScroll.hidden = !flowOn;
   _flowBackButton.hidden = !(flowOn && [_flow canGoBack]);
@@ -961,6 +966,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
         }
       }
       [screen applyFlowDocument:flowDocument];
+      screen->_flowAnswered = YES;
+      [screen applyFlowVisibility];
       [screen publishMediaSourceStatus];
       [screen applyTheme];
       [screen rebuildPurposes];
@@ -2217,6 +2224,11 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   return _flow != nil && _flow.active;
 }
 
+// A Core that has the wizard has not yet said whether this door uses it.
+- (BOOL)flowPending {
+  return !_flowAnswered && [DBCoreBridge supportsVisitorFlow];
+}
+
 // The page or end page of the flow is what the visitor sees, and nothing else claims the screen.
 - (BOOL)flowShowing {
   return [self flowActive] && _flowState == DBDoorFlowIdle &&
@@ -2358,6 +2370,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
       if (!screen || generation != screen->_flowGeneration ||
           coreGeneration != core.lifecycleGeneration) return;
       [screen applyFlowDocument:document];
+      screen->_flowAnswered = YES;
+      [screen applyFlowVisibility];
     });
   });
 }
@@ -2494,12 +2508,11 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     if (primary) seenPrimary = YES;
     NSString *label = [option objectForKey:@"label"];
     NSString *purpose = [option objectForKey:@"purpose"];
-    NSString *iconName = [purpose length] > 0 ? [DBPurposeModel iconNameForPurpose:purpose] : nil;
-    NSString *glyph = [DBPurposeModel displayIconForConfiguredIcon:[option objectForKey:@"icon"]];
+    // An option never draws an emoji: its purpose or its configured icon picks one of the vendored
+    // icons, above the label like every other option.
+    NSString *iconName = [DBPurposeModel iconNameForOptionPurpose:purpose
+                                                             icon:[option objectForKey:@"icon"]];
     NSString *title = label;
-    // A glyph the administrator typed stands in for an icon this shell has no asset for.
-    if (iconName == nil && [glyph length] > 0)
-      title = [NSString stringWithFormat:@"%@  %@", glyph, label];
     UIButton *button;
     UIView *plate = nil;
     if (primary) {
@@ -2702,10 +2715,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
                         @"无需签收的包裹请放在门口。"),
         @"options" : @[
           @{ @"id" : @"o_leave", @"semantic_id" : @"call.primary", @"style" : @"primary", @"icon" : @"",
-             @"label" : text(@"置き配する", @"Leave it", @"放在门口"), @"to" : @"e_thanks" },
+             @"label" : text(@"置き配する", @"Leave it", @"放在门口"), @"to" : @"s_where" },
           @{ @"id" : @"o_hand", @"semantic_id" : @"purpose.button", @"style" : @"normal", @"icon" : @"",
              @"label" : text(@"手渡し・サイン必要", @"Hand over / signature", @"需当面签收"),
              @"to" : @"c_visit" } ] },
+      @"s_where" : @{ @"kind" : @"page", @"images" : @[],
+        @"title" : text(@"置き場所", @"Where to leave it", @"放置位置"),
+        @"body" : text(@"ドア左の宅配ボックスの上に置いてください。\n\n置いたら下のボタンを押してください。",
+                        @"Place it on the box left of the door.\n\nThen press the button below.",
+                        @"请放在门左侧的箱子上。\n\n放好后请按下方按钮。"),
+        @"options" : @[
+          @{ @"id" : @"o_done", @"semantic_id" : @"call.primary", @"style" : @"primary", @"icon" : @"",
+             @"label" : text(@"置きました", @"I left it", @"已放好"), @"to" : @"e_thanks" } ] },
       @"c_any" : @{ @"kind" : @"call" },
       @"c_visit" : @{ @"kind" : @"call", @"purpose" : @"p_visit" },
       @"e_thanks" : @{ @"kind" : @"end", @"images" : @[], @"return_s" : @8,
@@ -2718,6 +2739,12 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 // its way from Core, so the request waits for it.
 - (void)debugShowFlowStep:(NSString *)step attempt:(int)attempt {
   NSString *target = [step hasPrefix:@":"] ? [step substringFromIndex:1] : step;
+  // "visitor:flow:sample:<step id>" shows the built-in sample document instead of Core's.
+  if ([target hasPrefix:@"sample:"]) {
+    [self applyFlowDocument:[self debugSampleFlow]];
+    [self debugShowFlowStep:[target substringFromIndex:7] attempt:1];
+    return;
+  }
   if (![self flowActive] && ![_boot.role isEqualToString:@"door_station"] && attempt == 0) {
     // An indoor panel has no door of its own: borrow the document of the first door station
     // whose shell renders the flow.
@@ -2855,11 +2882,6 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     id plate = [_flowOptionPlates objectAtIndex:i];
     if ([plate isKindOfClass:[UIView class]]) [(UIView *)plate setFrame:frame];
   }
-  _flowFade.frame = CGRectMake(flow.options.origin.x, CGRectGetMaxY(flow.options) - 28,
-                               flow.columnWidth, 28);
-  [(CALayer *)[_flowFade.layer.sublayers firstObject] setFrame:_flowFade.bounds];
-  [self updateFlowFade];
-
   _flowBackButton.frame = flow.back;
   _flowBackPlate.frame = flow.back;
   _flowBackPlate.layer.cornerRadius = 10;
@@ -2915,10 +2937,21 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   }
   CGFloat natural = MAX(0, y - spacing) + pad;
   CGFloat plateHeight = MIN(natural, room.size.height);
-  _flowPlate.frame = CGRectMake(room.origin.x,
+  CGRect plateFrame = CGRectMake(room.origin.x,
       room.origin.y + floor((room.size.height - plateHeight) / 2), room.size.width, plateHeight);
+  CGRect optionsFrame = flow.options;
+  // The card and the options are one block, centred in the column, so neither floats alone.
+  CGRect card;
+  DBDoorVisitorFlowComposeBlock(flow, _flowHasContent ? natural : 0, &card, &optionsFrame);
+  plateFrame = card;
+  _flowPlate.frame = plateFrame;
   _flowScroll.frame = _flowPlate.bounds;
   _flowScroll.contentSize = CGSizeMake(room.size.width, natural);
+  _flowOptionScroll.frame = optionsFrame;
+  _flowFade.frame = CGRectMake(optionsFrame.origin.x, CGRectGetMaxY(optionsFrame) - 28,
+                               flow.columnWidth, 28);
+  [(CALayer *)[_flowFade.layer.sublayers firstObject] setFrame:_flowFade.bounds];
+  [self updateFlowFade];
 }
 
 - (void)layoutSubviews {

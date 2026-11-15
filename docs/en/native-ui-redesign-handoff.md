@@ -178,7 +178,17 @@ quiet-hours suppress lists, unlock binding, colour picker, SIP TLS, cluster volu
 defaults, other devices' roles, speech, playback policy, raw config, logs, capability and
 UI-element overrides, tvOS search).
 
-### iOS 5 kiosk (0.9.0, build 101; iOS 9 profile 0.8.0, build 424)
+### iOS 5 kiosk (0.9.1, build 102; iOS 9 profile 0.8.1, build 425)
+
+Polish (0.9.1): the flow editor lists steps in Core's `step_order` and reorders them with the
+stock table reorder control (`DBFlowOrder`: consecutive `order` values, changed steps rewritten
+whole in one batch; a new step takes the next order, a duplicate follows its original; the step
+kind stays fixed and the step page says why). Options draw one vendored icon above the label (the
+bound purpose's, otherwise the configured emoji mapped by `DBPurposeModel`; an emoji is never
+drawn) and the editor's icon field is a picker. A page without a primary option centres the card and
+the three-column grid as one block. The door screen shows neither classic call button nor purposes
+until Core has answered the first flow request. The editor has a "Try it" page that walks the stored
+flow with `DBVisitorFlowModel` and names the Core call a tap would make without making it.
 
 Visitor flow (0.9.0): the wizard on the door screen (`DBVisitorFlowModel`, `DBDoorScreen`),
 a flow model with a host test that reads the conformance fixture, and a full flow editor

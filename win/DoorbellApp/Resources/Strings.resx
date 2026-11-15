@@ -944,13 +944,21 @@
   <data name="flow_editor_field_title" xml:space="preserve"><value>タイトル</value></data>
   <data name="flow_editor_field_to" xml:space="preserve"><value>送信後に表示するページ</value></data>
   <data name="flow_editor_icon_auto" xml:space="preserve"><value>自動（用件から）</value></data>
+  <data name="flow_editor_icon_bag" xml:space="preserve"><value>バッグ</value></data>
+  <data name="flow_editor_icon_bell" xml:space="preserve"><value>ベル</value></data>
+  <data name="flow_editor_icon_box" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_briefcase" xml:space="preserve"><value>ビジネス</value></data>
   <data name="flow_editor_icon_current" xml:space="preserve"><value>現在の設定</value></data>
   <data name="flow_editor_icon_dots" xml:space="preserve"><value>その他</value></data>
+  <data name="flow_editor_icon_ellipsis" xml:space="preserve"><value>その他</value></data>
+  <data name="flow_editor_icon_envelope" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_home" xml:space="preserve"><value>家</value></data>
+  <data name="flow_editor_icon_house" xml:space="preserve"><value>家</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>郵便</value></data>
+  <data name="flow_editor_icon_none" xml:space="preserve"><value>アイコンなし</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>ペン</value></data>
+  <data name="flow_editor_icon_person" xml:space="preserve"><value>人</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>無操作で最初に戻るまで（秒）</value></data>
@@ -968,6 +976,7 @@
   <data name="flow_editor_kind" xml:space="preserve"><value>ステップの種類</value></data>
   <data name="flow_editor_kind_call" xml:space="preserve"><value>呼び出し</value></data>
   <data name="flow_editor_kind_end" xml:space="preserve"><value>完了ページ</value></data>
+  <data name="flow_editor_kind_fixed_hint" xml:space="preserve"><value>種類は変更できません。別の種類が必要な場合は、新しいステップを追加し、選択肢の移動先を付け替えてください。</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>お知らせ（呼び出さない）</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>ページ</value></data>
   <data name="flow_editor_make_start" xml:space="preserve"><value>最初のページにする</value></data>
@@ -1019,7 +1028,7 @@
   <data name="flow_editor_step_kind" xml:space="preserve"><value>ステップの種類</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>（タイトルなし）</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>ステップ</value></data>
-  <data name="flow_editor_steps_hint" xml:space="preserve"><value>ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。</value></data>
+  <data name="flow_editor_steps_hint" xml:space="preserve"><value>ステップは保存された順に並びます。「編集」で並べ替え、左へスワイプで削除できます。</value></data>
   <data name="flow_editor_summary_options" xml:space="preserve"><value>選択肢: {0}</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>概要</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>選んでください</value></data>

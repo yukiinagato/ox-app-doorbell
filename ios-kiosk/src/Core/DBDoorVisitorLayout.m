@@ -281,7 +281,10 @@ DBDoorVisitorFlowLayout DBDoorVisitorFlowLayoutMake(DBDoorVisitorLayout layout,
   CGFloat zoneHeight = MAX(0, bottom - top);
   flow.zone = CGRectMake(colX, top, colW, zoneHeight);
 
-  flow.columns = layout.compact ? 1 : 2;
+  // Equal cards: two columns on a phone, three on a tablet, as the purpose grid.
+  flow.columns = layout.compact ? 2 : 3;
+  // A lone card or a pair does not stretch into a wider row than the primary button.
+  if (secondaryCount > 0) flow.columns = MIN(flow.columns, secondaryCount);
   flow.rowHeight = MAX(MAX(72, layout.purposeRowHeight),
                        isfinite(labelRowHeight) ? labelRowHeight : 0);
   flow.primaryHeight = hasPrimary ? layout.action.size.height : 0;
@@ -307,8 +310,10 @@ CGRect DBDoorVisitorFlowOptionFrame(DBDoorVisitorFlowLayout flow, BOOL hasPrimar
   if (index < 0 || index >= secondaryCount) return CGRectZero;
   NSInteger columns = MAX(1, flow.columns);
   CGFloat width = floor((flow.columnWidth - flow.gap * (columns - 1)) / columns);
+  if (columns == 1) width = MIN(width, 440);
   NSInteger inRow = MIN(columns, secondaryCount - (index / columns) * columns);
   CGFloat shift = floor((columns - inRow) * (width + flow.gap) / 2);
+  if (columns == 1) shift = floor((flow.columnWidth - width) / 2);
   CGFloat y = (hasPrimary ? flow.primaryHeight + flow.gap : 0) +
       (index / columns) * (flow.rowHeight + flow.gap);
   return CGRectMake(shift + (index % columns) * (width + flow.gap), y, MAX(0, width),
@@ -318,4 +323,24 @@ CGRect DBDoorVisitorFlowOptionFrame(DBDoorVisitorFlowLayout flow, BOOL hasPrimar
 CGFloat DBDoorVisitorFlowImageHeight(CGSize image, CGFloat width, CGFloat viewportHeight) {
   if (image.width <= 0 || image.height <= 0 || width <= 0) return 0;
   return floor(MIN(width * image.height / image.width, viewportHeight * 0.4));
+}
+
+void DBDoorVisitorFlowComposeBlock(DBDoorVisitorFlowLayout flow, CGFloat cardHeight, CGRect *card,
+                                   CGRect *options) {
+  CGFloat cardH = MAX(0, cardHeight);
+  CGFloat optionsH = flow.options.size.height;
+  CGFloat block = cardH + (cardH > 0 ? flow.gap : 0) + optionsH;
+  if (block > flow.zone.size.height) {
+    // Too tall to centre: the options keep the bottom and the card takes what is left above.
+    cardH = MIN(cardH, flow.content.size.height);
+    if (card) *card = CGRectMake(flow.content.origin.x, flow.content.origin.y +
+                                 floor((flow.content.size.height - cardH) / 2),
+                                 flow.content.size.width, cardH);
+    if (options) *options = flow.options;
+    return;
+  }
+  CGFloat top = flow.zone.origin.y + floor((flow.zone.size.height - block) / 2);
+  if (card) *card = CGRectMake(flow.zone.origin.x, top, flow.zone.size.width, cardH);
+  if (options) *options = CGRectMake(flow.options.origin.x, top + cardH + (cardH > 0 ? flow.gap : 0),
+                                     flow.options.size.width, optionsH);
 }

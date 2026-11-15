@@ -330,6 +330,10 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   [self updateBar];
 }
 
+- (void)debugToggleEditing {
+  [self onEdit];
+}
+
 - (BOOL)hasEditableSection {
   for (DBEditSection *section in _sections)
     if (section.onDelete || section.onMove) return YES;
@@ -684,6 +688,9 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
       id value = [choice objectAtIndex:0];
       DBEditField *row = [DBEditField kind:DBEditKindAction title:[choice objectAtIndex:1]
                                      value:value];
+      // A third member may carry the picture shown beside the row.
+      if ([choice count] > 2 && [[choice objectAtIndex:2] isKindOfClass:[UIImage class]])
+        row.image = [choice objectAtIndex:2];
       row.checked = multi ? ([current isKindOfClass:[NSArray class]] &&
                              [(NSArray *)current containsObject:value])
                           : [value isEqual:current];

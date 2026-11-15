@@ -97,6 +97,8 @@ typedef enum {
 - (void)popPage;
 - (void)closeAllPages;
 - (void)reloadPage;
+// Debug start screens only: the Edit button's action.
+- (void)debugToggleEditing;
 // Single-line prompt shared by pages that need a value before building an entry.
 - (void)promptTitle:(NSString *)title value:(NSString *)value placeholder:(NSString *)placeholder
            keyboard:(UIKeyboardType)keyboard secure:(BOOL)secure

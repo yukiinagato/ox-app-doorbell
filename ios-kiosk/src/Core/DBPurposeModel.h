@@ -35,6 +35,16 @@
 // displayIconForConfiguredIcon: above as the fallback.
 + (NSString *)iconNameForPurpose:(NSString *)purposeId;
 
+// The icon a visitor-flow option shows. A purpose bound to the option decides first; otherwise the
+// configured `icon`, which is usually an emoji or one of the picker names, is mapped onto the same
+// icon set. An empty icon without a purpose has none (nil); anything this shell cannot map is the
+// generic person. An emoji is never drawn.
++ (NSString *)iconNameForOptionPurpose:(NSString *)purposeId icon:(NSString *)icon;
+
+// The icons the flow editor offers: @[ @[ stored emoji, label key, icon name ], ... ]. The stored
+// value is an emoji so every shell maps it onto its own icon set.
++ (NSArray *)optionIconChoices;
+
 // The configuration key the settings toggle writes.
 + (NSString *)enabledKeyForPurpose:(NSString *)purposeId;
 

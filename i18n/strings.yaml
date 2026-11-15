@@ -1421,7 +1421,6 @@ flow_editor.icon_home: { ja: "家", en: "House", zh: "房屋" }
 flow_editor.icon_package: { ja: "荷物", en: "Parcel", zh: "包裹" }
 flow_editor.icon_mail: { ja: "郵便", en: "Envelope", zh: "信封" }
 flow_editor.icon_briefcase: { ja: "ビジネス", en: "Briefcase", zh: "公文包" }
-flow_editor.icon_tool: { ja: "工具", en: "Wrench", zh: "扳手" }
 flow_editor.icon_dots: { ja: "その他", en: "More", zh: "更多" }
 flow_editor.icon_pencil: { ja: "ペン", en: "Pen", zh: "笔" }
 flow_editor.icon_user: { ja: "人", en: "Person", zh: "人物" }
@@ -1450,9 +1449,19 @@ flow_editor.template_delivery: { ja: "宅配・置き配", en: "Delivery and lea
 flow_editor.template_confirm: { ja: "現在のステップをテンプレートで置き換えます。", en: "This replaces the current steps with the template.", zh: "将用模板替换当前步骤。" }
 flow_editor.preview: { ja: "試す", en: "Try it", zh: "试用" }
 flow_editor.template_default: { ja: "標準のウィザード", en: "Built-in wizard", zh: "内置向导" }
+flow_editor.kind_fixed_hint: { ja: "種類は変更できません。別の種類が必要な場合は、新しいステップを追加し、選択肢の移動先を付け替えてください。", en: "The kind cannot be changed, because each kind has its own fields and others point to it. Add a step of the other kind and repoint the options.", zh: "类型无法更改：每种类型的字段不同，且其他步骤指向它。请添加所需类型的新步骤，并改指选项的目标。" }
+flow_editor.icon_none: { ja: "アイコンなし", en: "No icon", zh: "无图标" }
+flow_editor.icon_house: { ja: "家", en: "House", zh: "房屋" }
+flow_editor.icon_box: { ja: "荷物", en: "Package", zh: "包裹" }
+flow_editor.icon_envelope: { ja: "封筒", en: "Envelope", zh: "信封" }
+flow_editor.icon_bag: { ja: "バッグ", en: "Bag", zh: "购物袋" }
+flow_editor.icon_tool: { ja: "工具", en: "Tool", zh: "工具" }
+flow_editor.icon_ellipsis: { ja: "その他", en: "More", zh: "更多" }
+flow_editor.icon_bell: { ja: "ベル", en: "Bell", zh: "铃铛" }
+flow_editor.icon_person: { ja: "人", en: "Person", zh: "人物" }
 flow_editor.field_kind: { ja: "種類", en: "Kind", zh: "类型" }
 flow_editor.field_id: { ja: "ステップ ID", en: "Step ID", zh: "步骤 ID" }
-flow_editor.steps_hint: { ja: "ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。", en: "Steps are listed from the start page in the order they are reached. Swipe to delete one.", zh: "步骤按从起始页可到达的顺序排列。左滑可删除。" }
+flow_editor.steps_hint: { ja: "ステップは保存された順に並びます。「編集」で並べ替え、左へスワイプで削除できます。", en: "Steps are listed in the order you keep them. Use Edit to drag one up or down, or swipe to delete it.", zh: "步骤按您保存的顺序排列。点“编辑”可上下拖动，左滑可删除。" }
 flow_editor.image_place: { ja: "画像の位置", en: "Image position", zh: "图片位置" }
 flow_editor.no_images: { ja: "アセットに画像がありません。写真から追加してください。", en: "There is no image in Assets yet. Add one from a photo.", zh: "素材库中还没有图片，请从照片添加。" }
 flow_editor.max_images: { ja: "1 ページに入れられる画像は 2 枚までです", en: "A page can hold at most two images", zh: "每页最多两张图片" }
