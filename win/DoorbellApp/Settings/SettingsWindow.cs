@@ -179,6 +179,7 @@ namespace DoorbellApp.Settings
                     Icon = Fluent.Icon(category.IconKey),
                     Tag = category.Id,
                     MinHeight = 48,
+                    FontSize = 16,
                 };
                 AutomationLabel(item, label);
                 AutomationId(item, "SettingsCategory_" + category.Id);

@@ -213,9 +213,9 @@
                                    IsBackButtonVisible="Collapsed"
                                    ItemInvoked="OnHomeNavInvoked">
                     <ui:NavigationView.MenuItems>
-                        <ui:NavigationViewItem x:Name="NavHome" MinHeight="48"/>
+                        <ui:NavigationViewItem x:Name="NavHome" MinHeight="48" FontSize="16"/>
                         <!-- History carries the unread missed-call count beside its label. -->
-                        <ui:NavigationViewItem x:Name="NavHistory" MinHeight="48">
+                        <ui:NavigationViewItem x:Name="NavHistory" MinHeight="48" FontSize="16">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock x:Name="NavHistoryLabel" VerticalAlignment="Center"/>
                                 <Border x:Name="NavHistoryBadge" Visibility="Collapsed"
@@ -229,10 +229,10 @@
                                 </Border>
                             </StackPanel>
                         </ui:NavigationViewItem>
-                        <ui:NavigationViewItem x:Name="OpenMonitorButton" MinHeight="48"
+                        <ui:NavigationViewItem x:Name="OpenMonitorButton" MinHeight="48" FontSize="16"
                                                Visibility="Collapsed"/>
                         <ui:NavigationViewItemSeparator/>
-                        <ui:NavigationViewItem x:Name="AdminEntryButton" MinHeight="48"/>
+                        <ui:NavigationViewItem x:Name="AdminEntryButton" MinHeight="48" FontSize="16"/>
                     </ui:NavigationView.MenuItems>
                     <Grid>
                         <Grid x:Name="DashboardPage" Margin="24,16,24,16">
@@ -609,7 +609,7 @@
                                Margin="0,4,0,0" Visibility="Collapsed"/>
                 </StackPanel>
             </Grid>
-            <Grid x:Name="IncomingStage" Grid.Row="1" Margin="24,4,24,0">
+            <Grid x:Name="IncomingStage" Grid.Row="1" Margin="24,4,24,16">
                 <!-- The stage is everything the header and the action zone leave; the picture is
                      aspect-fitted in it and, when zoomed, clipped by the stage, not by itself. -->
                 <Border x:Name="IncomingVideoFrame" CornerRadius="4" Background="#000000"
@@ -713,7 +713,7 @@
                 </Grid>
             </StackPanel>
             </ScrollViewer>
-            <Grid x:Name="InCallStage" Grid.Row="1" Margin="24,4,24,0">
+            <Grid x:Name="InCallStage" Grid.Row="1" Margin="24,4,24,16">
                 <Border x:Name="InCallVideoFrame" CornerRadius="4" Background="#000000"
                         ClipToBounds="True">
                     <app:ZoomPanHost x:Name="InCallZoom">

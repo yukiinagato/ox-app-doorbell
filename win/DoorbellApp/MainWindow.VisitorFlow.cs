@@ -378,10 +378,8 @@ namespace DoorbellApp
             };
             if (option.Primary)
             {
-                // The Call button's look: the same large accent style, capped like CallButton.
+                // The Call button's look: the same large accent style, filling the option zone.
                 button.Style = (Style)FindResource("BigButton");
-                button.MaxWidth = 620;
-                // Stretch inside the cap: the button fills its width and is centred in the zone.
                 button.HorizontalAlignment = HorizontalAlignment.Stretch;
                 button.HorizontalContentAlignment = HorizontalAlignment.Center;
             }

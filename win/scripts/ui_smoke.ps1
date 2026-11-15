@@ -565,6 +565,38 @@ function Test-FlowEditor([string]$look) {
     if (-not (Click-Id 'settings' 'SettingsCategory_flow')) { return }
     foreach ($id in @('FlowEnabled', 'FlowTemplatePurposes', 'FlowTemplateDelivery')) { [void](Assert-Element 'flow editor' $id) }
     Save-Shot ("flow-editor-" + $look)
+    # Applying a template gives the editor explicit steps: the step list with Up/Down, the step
+    # and option dialogs, the Try it preview and the error line under an option.
+    # The second appearance pass finds the steps already there; a template would ask to confirm.
+    if (-not (Test-OnScreen (Find-ById 'FlowAddStep' 500))) {
+        if (-not (Click-Id 'flow editor' 'FlowTemplateDelivery')) { return }
+    }
+    if (-not (Test-OnScreen (Find-ById 'FlowAddStep' 8000))) {
+        # A confirmation or the admin prompt may be up; leave it so the rest of the run is intact.
+        foreach ($id in @('CancelBtn')) { if (Test-OnScreen (Find-ById $id 300)) { [void](Click-Id 'flow editor' $id) } }
+        Add-Check 'flow editor: template gives a step list' $false 'FlowAddStep not on screen'
+        return
+    }
+    foreach ($id in @('FlowAddStep', 'FlowPreview', 'FlowStepEdit', 'FlowStepUp', 'FlowStepDown')) { [void](Assert-Element 'flow editor steps' $id) }
+    Save-Shot ("flow-editor-steps-" + $look)
+    if (Click-Id 'flow editor steps' 'FlowStepEdit') {
+        foreach ($id in @('FlowStepSave', 'FlowStepCancel', 'FlowAddOption')) { [void](Assert-Element 'flow step dialog' $id) }
+        Save-Shot ("flow-step-dialog-" + $look)
+        if (Click-Id 'flow step dialog' 'FlowOptionEdit') {
+            Start-Sleep -Milliseconds 400
+            Save-Shot ("flow-option-dialog-" + $look)
+            [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+            Start-Sleep -Milliseconds 500
+        }
+        [void](Click-Id 'flow step dialog' 'FlowStepCancel')
+        Assert-Gone 'flow step dialog' 'FlowStepSave'
+    }
+    if (Click-Id 'flow editor steps' 'FlowPreview') {
+        [void](Assert-Element 'flow preview' 'FlowPreviewClose')
+        Save-Shot ("flow-preview-" + $look)
+        [void](Click-Id 'flow preview' 'FlowPreviewClose')
+        Assert-Gone 'flow preview' 'FlowPreviewClose'
+    }
 }
 
 function Test-DoorStation {
@@ -614,7 +646,10 @@ function Test-DoorStation {
         }
         # The resident's quick reply covers the screen with its hint and countdown.
         [void](Assert-Command 'reply-sample')
-        foreach ($id in @('ReplyText', 'ReplyHintText', 'ReplyCountText')) { [void](Assert-Element 'reply overlay' $id) }
+        foreach ($id in @('ReplyText', 'ReplyCountText')) { [void](Assert-Element 'reply overlay' $id) }
+        # The dismiss hint stays empty for the first three seconds (the guard), so wait for it.
+        Start-Sleep -Milliseconds 3500
+        [void](Assert-Element 'reply overlay' 'ReplyHintText')
         Save-Shot ("reply-overlay-" + $look)
         [void](Assert-Command 'reply-hide')
         [void](Assert-Command 'incall')
