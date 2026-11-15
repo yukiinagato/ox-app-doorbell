@@ -909,7 +909,10 @@
 "flow_editor.add_image" = "画像を追加";
 "flow_editor.add_option" = "選択肢を追加";
 "flow_editor.add_step" = "ステップを追加";
+"flow_editor.body_hint" = "本文は段落ごとに 1 行です。段落の中で改行するには \\n と入力します。装飾やリンクは使えません。";
+"flow_editor.call_flow_note" = "ウィザードが有効な間は、この設定より優先されます。";
 "flow_editor.call_flow_superseded" = "ウィザードがオンの間は、この設定は使われません。";
+"flow_editor.conflict" = "別の端末が同時にウィザードを編集しました。管理画面の「競合の解決」で内容を選んでから保存してください。";
 "flow_editor.conflict_blocked" = "ウィザードの別の編集が確認待ちです。このページ上部の確認が必要な編集を解決してから、もう一度保存してください。";
 "flow_editor.customize" = "標準をもとに編集";
 "flow_editor.default_note" = "標準のウィザードを使用中です。編集するとこの家の設定として保存されます。";
@@ -921,7 +924,9 @@
 "flow_editor.enabled" = "ウィザードを使う";
 "flow_editor.enabled_hint" = "オフにすると、従来の呼出画面に戻ります。";
 "flow_editor.field_body" = "本文";
+"flow_editor.field_id" = "ステップ ID";
 "flow_editor.field_images" = "画像";
+"flow_editor.field_kind" = "種類";
 "flow_editor.field_message" = "住人に届くメッセージ";
 "flow_editor.field_on_unanswered" = "応答がないときの移動先";
 "flow_editor.field_options" = "選択肢";
@@ -935,6 +940,7 @@
 "flow_editor.image_alt" = "画像の説明（読み上げ用）";
 "flow_editor.image_below" = "本文の下";
 "flow_editor.image_pick" = "アセットから選ぶ";
+"flow_editor.image_place" = "画像の位置";
 "flow_editor.image_upload" = "画像をアップロード";
 "flow_editor.image_uploading" = "アップロード中…";
 "flow_editor.issues" = "修正が必要です";
@@ -943,7 +949,9 @@
 "flow_editor.kind_end" = "完了ページ";
 "flow_editor.kind_notify" = "お知らせ（呼び出さない）";
 "flow_editor.kind_page" = "ページ";
+"flow_editor.max_images" = "1 ページに入れられる画像は 2 枚までです";
 "flow_editor.new_step" = "新しい%@";
+"flow_editor.no_images" = "アセットに画像がありません。写真から追加してください。";
 "flow_editor.on_unanswered_none" = "最初のページに戻る";
 "flow_editor.option_enabled" = "表示する";
 "flow_editor.option_icon" = "アイコン（絵文字）";
@@ -952,6 +960,8 @@
 "flow_editor.option_purpose" = "用件のラベルとアイコンを使う";
 "flow_editor.option_purpose_none" = "使わない（独自のラベル）";
 "flow_editor.option_target" = "押したときの移動先";
+"flow_editor.paragraph" = "段落";
+"flow_editor.paragraph_add" = "段落を追加";
 "flow_editor.preview" = "試す";
 "flow_editor.purpose_none" = "用件なし";
 "flow_editor.require_call" = "必ず呼び出しにたどり着けるようにする";
@@ -981,9 +991,11 @@
 "flow_editor.step_in_use" = "ほかのステップから参照されています: %@";
 "flow_editor.step_untitled" = "（タイトルなし）";
 "flow_editor.steps" = "ステップ";
+"flow_editor.steps_hint" = "ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。";
 "flow_editor.tab_overview" = "概要";
 "flow_editor.target_choose" = "選んでください";
 "flow_editor.template_confirm" = "現在のステップをテンプレートで置き換えます。";
+"flow_editor.template_default" = "標準のウィザード";
 "flow_editor.template_delivery" = "宅配・置き配";
 "flow_editor.template_loaded" = "テンプレートを読み込みました。保存すると反映されます。";
 "flow_editor.template_purposes" = "現在の用件から作成";

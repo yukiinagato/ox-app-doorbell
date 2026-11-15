@@ -674,6 +674,14 @@ static BOOL DBCoreSipBackendCompiled(void) {
     DBSettingsScreen *settings = [self settings];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{ [settings debugPerfProbe]; });
+  } else if ([screen hasPrefix:@"settings:pages:"]) {
+    // "settings:pages:visitor_flow>visitor_flow:<step id>" opens editor pages in that order.
+    [self showSettings];
+    DBSettingsScreen *settings = [self settings];
+    NSString *spec = [[name stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]] substringFromIndex:15];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [settings debugOpenPages:spec]; });
   } else if ([screen hasPrefix:@"settings:"]) {
     [self showSettings];
     NSInteger index = [[screen substringFromIndex:9] integerValue];
@@ -1240,6 +1248,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
     } else {
       [_home showReplyBanner:ev];
     }
+  } else if ([t isEqualToString:@"visitor_flow_changed"]) {
+    if ([_boot.role isEqualToString:@"door_station"]) [_door handleFlowChanged:ev];
   } else if ([t isEqualToString:@"visitor_lang"]) {
     if ([_boot.role isEqualToString:@"door_station"])
       [_door handleVisitorLangEvent:ev];

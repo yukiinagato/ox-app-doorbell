@@ -916,7 +916,10 @@ Delete it?</value></data>
   <data name="flow_editor_add_image" xml:space="preserve"><value>Add image</value></data>
   <data name="flow_editor_add_option" xml:space="preserve"><value>Add option</value></data>
   <data name="flow_editor_add_step" xml:space="preserve"><value>Add step</value></data>
+  <data name="flow_editor_body_hint" xml:space="preserve"><value>Each paragraph is one row. Type \n inside a paragraph for a line break. Formatting and links are not supported.</value></data>
+  <data name="flow_editor_call_flow_note" xml:space="preserve"><value>While the wizard is in use it takes precedence over this setting.</value></data>
   <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>The wizard replaces this setting while it is on.</value></data>
+  <data name="flow_editor_conflict" xml:space="preserve"><value>Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.</value></data>
   <data name="flow_editor_conflict_blocked" xml:space="preserve"><value>Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.</value></data>
   <data name="flow_editor_customize" xml:space="preserve"><value>Customize the built-in wizard</value></data>
   <data name="flow_editor_default_note" xml:space="preserve"><value>The built-in wizard is in use. Editing it saves a copy as this home's own.</value></data>
@@ -928,7 +931,9 @@ Delete it?</value></data>
   <data name="flow_editor_enabled" xml:space="preserve"><value>Use the wizard</value></data>
   <data name="flow_editor_enabled_hint" xml:space="preserve"><value>Turn this off to return to the classic call screen.</value></data>
   <data name="flow_editor_field_body" xml:space="preserve"><value>Body text</value></data>
+  <data name="flow_editor_field_id" xml:space="preserve"><value>Step ID</value></data>
   <data name="flow_editor_field_images" xml:space="preserve"><value>Images</value></data>
+  <data name="flow_editor_field_kind" xml:space="preserve"><value>Kind</value></data>
   <data name="flow_editor_field_message" xml:space="preserve"><value>Message the residents receive</value></data>
   <data name="flow_editor_field_on_unanswered" xml:space="preserve"><value>If nobody answers, go to</value></data>
   <data name="flow_editor_field_options" xml:space="preserve"><value>Options</value></data>
@@ -942,6 +947,7 @@ Delete it?</value></data>
   <data name="flow_editor_image_alt" xml:space="preserve"><value>Image description (for screen readers)</value></data>
   <data name="flow_editor_image_below" xml:space="preserve"><value>Below the text</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>Choose from Assets</value></data>
+  <data name="flow_editor_image_place" xml:space="preserve"><value>Image position</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>Upload an image</value></data>
   <data name="flow_editor_image_uploading" xml:space="preserve"><value>Uploading…</value></data>
   <data name="flow_editor_issues" xml:space="preserve"><value>Things to fix</value></data>
@@ -950,7 +956,9 @@ Delete it?</value></data>
   <data name="flow_editor_kind_end" xml:space="preserve"><value>End page</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>Notify without ringing</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>Page</value></data>
+  <data name="flow_editor_max_images" xml:space="preserve"><value>A page can hold at most two images</value></data>
   <data name="flow_editor_new_step" xml:space="preserve"><value>New {0}</value></data>
+  <data name="flow_editor_no_images" xml:space="preserve"><value>There is no image in Assets yet. Add one from a photo.</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>Return to the start page</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>Shown</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>Icon (emoji)</value></data>
@@ -959,6 +967,8 @@ Delete it?</value></data>
   <data name="flow_editor_option_purpose" xml:space="preserve"><value>Use a visit purpose's label and icon</value></data>
   <data name="flow_editor_option_purpose_none" xml:space="preserve"><value>None (own label)</value></data>
   <data name="flow_editor_option_target" xml:space="preserve"><value>Goes to</value></data>
+  <data name="flow_editor_paragraph" xml:space="preserve"><value>Paragraph</value></data>
+  <data name="flow_editor_paragraph_add" xml:space="preserve"><value>Add paragraph</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>Try it</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>No purpose</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>Always keep a way to ring</value></data>
@@ -988,9 +998,11 @@ Delete it?</value></data>
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>Other steps lead here: {0}</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>(no title)</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>Steps</value></data>
+  <data name="flow_editor_steps_hint" xml:space="preserve"><value>Steps are listed from the start page in the order they are reached. Swipe to delete one.</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>Overview</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>Choose a step</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>This replaces the current steps with the template.</value></data>
+  <data name="flow_editor_template_default" xml:space="preserve"><value>Built-in wizard</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>Delivery and leave-at-door</value></data>
   <data name="flow_editor_template_loaded" xml:space="preserve"><value>Template loaded. Save to apply it.</value></data>
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>Start from the current purposes</value></data>

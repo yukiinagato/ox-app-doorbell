@@ -916,7 +916,10 @@
   <data name="flow_editor_add_image" xml:space="preserve"><value>添加图片</value></data>
   <data name="flow_editor_add_option" xml:space="preserve"><value>添加选项</value></data>
   <data name="flow_editor_add_step" xml:space="preserve"><value>添加步骤</value></data>
+  <data name="flow_editor_body_hint" xml:space="preserve"><value>正文每段一行。段内换行请输入 \n。不支持格式和链接。</value></data>
+  <data name="flow_editor_call_flow_note" xml:space="preserve"><value>向导启用期间，其优先级高于此设置。</value></data>
   <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>向导开启期间，此设置不再生效。</value></data>
+  <data name="flow_editor_conflict" xml:space="preserve"><value>另一台设备同时编辑了向导。请先在管理页面解决冲突再保存。</value></data>
   <data name="flow_editor_conflict_blocked" xml:space="preserve"><value>向导的另一处编辑正在等待处理。请先处理本页顶部需要确认的编辑，然后再保存。</value></data>
   <data name="flow_editor_customize" xml:space="preserve"><value>基于内置向导编辑</value></data>
   <data name="flow_editor_default_note" xml:space="preserve"><value>当前使用内置向导。编辑后将保存为本住宅的设置。</value></data>
@@ -928,7 +931,9 @@
   <data name="flow_editor_enabled" xml:space="preserve"><value>启用向导</value></data>
   <data name="flow_editor_enabled_hint" xml:space="preserve"><value>关闭后恢复为原来的呼叫画面。</value></data>
   <data name="flow_editor_field_body" xml:space="preserve"><value>正文</value></data>
+  <data name="flow_editor_field_id" xml:space="preserve"><value>步骤 ID</value></data>
   <data name="flow_editor_field_images" xml:space="preserve"><value>图片</value></data>
+  <data name="flow_editor_field_kind" xml:space="preserve"><value>类型</value></data>
   <data name="flow_editor_field_message" xml:space="preserve"><value>住户收到的消息</value></data>
   <data name="flow_editor_field_on_unanswered" xml:space="preserve"><value>无人应答时前往</value></data>
   <data name="flow_editor_field_options" xml:space="preserve"><value>选项</value></data>
@@ -942,6 +947,7 @@
   <data name="flow_editor_image_alt" xml:space="preserve"><value>图片说明（用于朗读）</value></data>
   <data name="flow_editor_image_below" xml:space="preserve"><value>正文下方</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>从素材库选择</value></data>
+  <data name="flow_editor_image_place" xml:space="preserve"><value>图片位置</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>上传图片</value></data>
   <data name="flow_editor_image_uploading" xml:space="preserve"><value>正在上传…</value></data>
   <data name="flow_editor_issues" xml:space="preserve"><value>需要修正</value></data>
@@ -950,7 +956,9 @@
   <data name="flow_editor_kind_end" xml:space="preserve"><value>结束页</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>通知（不呼叫）</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>页面</value></data>
+  <data name="flow_editor_max_images" xml:space="preserve"><value>每页最多两张图片</value></data>
   <data name="flow_editor_new_step" xml:space="preserve"><value>新建{0}</value></data>
+  <data name="flow_editor_no_images" xml:space="preserve"><value>素材库中还没有图片，请从照片添加。</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>返回起始页</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>显示</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>图标（表情符号）</value></data>
@@ -959,6 +967,8 @@
   <data name="flow_editor_option_purpose" xml:space="preserve"><value>使用来访目的的标签和图标</value></data>
   <data name="flow_editor_option_purpose_none" xml:space="preserve"><value>不使用（自定义标签）</value></data>
   <data name="flow_editor_option_target" xml:space="preserve"><value>点击后前往</value></data>
+  <data name="flow_editor_paragraph" xml:space="preserve"><value>段落</value></data>
+  <data name="flow_editor_paragraph_add" xml:space="preserve"><value>添加段落</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>试用</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>无目的</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>始终保留呼叫途径</value></data>
@@ -988,9 +998,11 @@
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>其他步骤指向此处：{0}</value></data>
   <data name="flow_editor_step_untitled" xml:space="preserve"><value>（无标题）</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>步骤</value></data>
+  <data name="flow_editor_steps_hint" xml:space="preserve"><value>步骤按从起始页可到达的顺序排列。左滑可删除。</value></data>
   <data name="flow_editor_tab_overview" xml:space="preserve"><value>概览</value></data>
   <data name="flow_editor_target_choose" xml:space="preserve"><value>请选择步骤</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>将用模板替换当前步骤。</value></data>
+  <data name="flow_editor_template_default" xml:space="preserve"><value>内置向导</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>快递与放置门口</value></data>
   <data name="flow_editor_template_loaded" xml:space="preserve"><value>已载入模板，保存后生效。</value></data>
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>根据当前来访目的创建</value></data>

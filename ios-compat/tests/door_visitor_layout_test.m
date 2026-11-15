@@ -281,6 +281,43 @@ int main(void) { @autoreleasepool {
   DBSosSlideModel *cancel = [DBSosSlideModel new];
   CHECK([cancel confirmAccessibilityActivation]); CHECK([cancel cancel]); CHECK(![cancel tick]);
   CHECK(cancel.phase == DBSosPhaseIdle);
+  // The visitor-flow zone: options fixed at the bottom, never past half the screen, never over
+  // SOS, Back or the caption, in every screen class.
+  CGSize flowSizes[] = {{768, 1024}, {1024, 768}, {320, 568}, {375, 667}, {834, 1112}};
+  for (NSUInteger s = 0; s < sizeof(flowSizes) / sizeof(flowSizes[0]); s++) {
+    CGSize size = flowSizes[s];
+    for (int sosShown = 0; sosShown < 2; sosShown++) {
+      for (int back = 0; back < 2; back++) {
+        for (NSInteger secondary = 0; secondary <= 12; secondary += 3) {
+          DBDoorVisitorLayout base = DBDoorVisitorLayoutMake(size, sosShown != 0, 1);
+          base = DBDoorVisitorLayoutFitContent(base, YES, secondary % 2 == 0, NO, 0);
+          DBDoorVisitorFlowLayout flow =
+              DBDoorVisitorFlowLayoutMake(base, 0, YES, secondary, 0, back != 0);
+          CHECK(inside(flow.zone, size) && inside(flow.options, size));
+          CHECK(flow.options.size.height <= floor(size.height * 0.5) + 0.01);
+          CHECK(flow.options.size.height > 0);
+          CHECK(!overlap(flow.options, base.sos) && !overlap(flow.options, base.version));
+          CHECK(!overlap(flow.content, flow.options));
+          CHECK(!overlap(flow.options, flow.back) && !overlap(flow.content, flow.back));
+          if (back) CHECK(!empty(flow.back) && flow.back.size.height >= 44);
+          if (back && sosShown) CHECK(!overlap(flow.back, base.sos));
+          CHECK(flow.rowHeight >= 72);
+          CHECK(flow.columns == (base.compact ? 1 : 2));
+          for (NSInteger i = 0; i < secondary; i++) {
+            CGRect frame = DBDoorVisitorFlowOptionFrame(flow, YES, i, secondary);
+            CHECK(frame.size.height >= 72 && frame.origin.y >= flow.primaryHeight);
+            CHECK(CGRectGetMaxX(frame) <= flow.columnWidth + 0.01);
+            CHECK(CGRectGetMaxY(frame) <= flow.optionsContentHeight + 0.01);
+          }
+          CGRect primary = DBDoorVisitorFlowPrimaryFrame(flow);
+          CHECK(primary.size.height == base.action.size.height && primary.origin.y == 0);
+        }
+      }
+    }
+  }
+  CHECK(DBDoorVisitorFlowImageHeight(CGSizeMake(400, 1200), 600, 1000) == 400);
+  CHECK(DBDoorVisitorFlowImageHeight(CGSizeMake(400, 100), 400, 1000) == 100);
+  CHECK(DBDoorVisitorFlowImageHeight(CGSizeZero, 400, 1000) == 0);
   NSLog(@"Visitor production layout and SOS model: %d checks, %d failures", checks, failures);
   return failures ? 1 : 0;
 } }

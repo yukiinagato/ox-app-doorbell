@@ -16,6 +16,8 @@
 - (void)handleCallEvent:(NSDictionary *)event;
 - (void)handleReplyEvent:(NSDictionary *)event;
 - (void)handleVisitorLangEvent:(NSDictionary *)event;
+// {t:"visitor_flow_changed"}: the resolved visitor flow changed; it is read again.
+- (void)handleFlowChanged:(NSDictionary *)event;
 - (void)handleCallCancelled:(NSDictionary *)event;
 - (void)handleCallAnswered:(NSDictionary *)event;
 - (void)handleCallEnded:(NSDictionary *)event;
@@ -29,7 +31,8 @@
 - (void)suspendMediaForBackground;
 - (void)resumeMediaAfterBackground;
 
-// Debug start screens "visitor:calling|connected|reply|noanswer" put the page in that state.
+// Debug start screens "visitor:calling|connected|reply|noanswer" put the page in that state, and
+// "visitor:flow[:<step id>]" shows the visitor flow's start page or that step.
 - (void)debugShowState:(NSString *)state;
 
 @end

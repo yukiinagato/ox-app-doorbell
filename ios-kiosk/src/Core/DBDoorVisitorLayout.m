@@ -244,3 +244,78 @@ CGFloat DBDoorVisitorPurposeGridHeight(DBDoorVisitorLayout layout, NSInteger cou
   NSInteger rows = (count + columns - 1) / columns;
   return rows * DBDoorVisitorPurposeRow(layout, rowHeight) + (rows - 1) * layout.gap;
 }
+
+DBDoorVisitorFlowLayout DBDoorVisitorFlowLayoutMake(DBDoorVisitorLayout layout,
+                                                    CGFloat headerHeight, BOOL hasPrimary,
+                                                    NSInteger secondaryCount,
+                                                    CGFloat labelRowHeight, BOOL showsBack) {
+  DBDoorVisitorFlowLayout flow;
+  memset(&flow, 0, sizeof(flow));
+  BOOL column = layout.title.size.width > 0 || layout.title.size.height > 0;
+  CGFloat gap = layout.gap;
+  CGFloat colX = layout.status.origin.x;
+  CGFloat colW = layout.status.size.width;
+  flow.columnX = colX;
+  flow.columnWidth = colW;
+  flow.gap = gap;
+  CGFloat top;
+  if (column) {
+    top = layout.notice.size.height > 0 ? CGRectGetMaxY(layout.notice) + gap
+                                        : layout.content.origin.y;
+  } else {
+    top = CGRectGetMaxY(layout.topBar) + gap;
+  }
+  if (headerHeight > 0) top += headerHeight + gap;
+  CGFloat bottom = CGRectGetMinY(layout.version) - (column ? 8 : gap);
+  BOOL sos = layout.sos.size.height > 0;
+  if (sos) bottom = CGRectGetMinY(layout.sos) - gap;
+  if (showsBack) {
+    CGFloat width = MIN(132, colW);
+    if (sos) {
+      flow.back = CGRectMake(colX + colW - width, layout.sos.origin.y, width, layout.sos.size.height);
+    } else {
+      flow.back = CGRectMake(colX + colW - width, bottom - 48, width, 48);
+      bottom = CGRectGetMinY(flow.back) - gap;
+    }
+  }
+  CGFloat zoneHeight = MAX(0, bottom - top);
+  flow.zone = CGRectMake(colX, top, colW, zoneHeight);
+
+  flow.columns = layout.compact ? 1 : 2;
+  flow.rowHeight = MAX(MAX(72, layout.purposeRowHeight),
+                       isfinite(labelRowHeight) ? labelRowHeight : 0);
+  flow.primaryHeight = hasPrimary ? layout.action.size.height : 0;
+  CGFloat height = flow.primaryHeight;
+  if (secondaryCount > 0) {
+    NSInteger rows = (secondaryCount + flow.columns - 1) / flow.columns;
+    height += (hasPrimary ? gap : 0) + rows * flow.rowHeight + (rows - 1) * gap;
+  }
+  flow.optionsContentHeight = height;
+  CGFloat viewport = MIN(height, MIN(floor(layout.size.height * 0.5), MAX(0, zoneHeight - 44)));
+  flow.options = CGRectMake(colX, bottom - viewport, colW, viewport);
+  flow.content = CGRectMake(colX, top, colW, MAX(0, CGRectGetMinY(flow.options) - gap - top));
+  return flow;
+}
+
+CGRect DBDoorVisitorFlowPrimaryFrame(DBDoorVisitorFlowLayout flow) {
+  CGFloat width = MIN(flow.columnWidth, 440);
+  return CGRectMake(floor((flow.columnWidth - width) / 2), 0, width, flow.primaryHeight);
+}
+
+CGRect DBDoorVisitorFlowOptionFrame(DBDoorVisitorFlowLayout flow, BOOL hasPrimary,
+                                    NSInteger index, NSInteger secondaryCount) {
+  if (index < 0 || index >= secondaryCount) return CGRectZero;
+  NSInteger columns = MAX(1, flow.columns);
+  CGFloat width = floor((flow.columnWidth - flow.gap * (columns - 1)) / columns);
+  NSInteger inRow = MIN(columns, secondaryCount - (index / columns) * columns);
+  CGFloat shift = floor((columns - inRow) * (width + flow.gap) / 2);
+  CGFloat y = (hasPrimary ? flow.primaryHeight + flow.gap : 0) +
+      (index / columns) * (flow.rowHeight + flow.gap);
+  return CGRectMake(shift + (index % columns) * (width + flow.gap), y, MAX(0, width),
+                    flow.rowHeight);
+}
+
+CGFloat DBDoorVisitorFlowImageHeight(CGSize image, CGFloat width, CGFloat viewportHeight) {
+  if (image.width <= 0 || image.height <= 0 || width <= 0) return 0;
+  return floor(MIN(width * image.height / image.width, viewportHeight * 0.4));
+}

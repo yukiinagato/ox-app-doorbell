@@ -524,6 +524,10 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   [_editor pushPage:page];
 }
 
+- (void)debugOpenPages:(NSString *)spec {
+  for (NSString *name in [spec componentsSeparatedByString:@">"]) [self openPage:name];
+}
+
 - (NSString *)roleLabel {
   return [_texts ts:([_boot.role isEqualToString:@"door_station"] ? @"settings.role_door"
                                                                  : @"settings.role_indoor")];
@@ -1137,6 +1141,8 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
                               [DBPurposeModel enabledKeyForPurpose:purpose], enabled ? 1 : 0])];
   }
   [rows addObject:[self pageRow:[_texts ts:@"editor.purposes_edit"] value:nil page:@"purposes"]];
+  [rows addObject:DBGroupStart([self pageRow:[_texts ts:@"flow_editor.title"] value:nil
+                                        page:@"visitor_flow"])];
   return rows;
 }
 
@@ -1312,11 +1318,20 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
 
 - (NSArray *)callRows {
   NSMutableArray *rows = [NSMutableArray array];
-  [rows addObject:[self choiceRow:[_texts ts:@"prefs.call_flow"] key:@"ui.call_flow"
-                              def:@"purpose_first"
-                          choices:@[ @[ @"purpose_first", [_texts ts:@"prefs.flow_purpose_first"] ],
-                                     @[ @"ring_then_purpose",
-                                        [_texts ts:@"prefs.flow_ring_then_purpose"] ] ]]];
+  // Explicit visitor-flow steps supersede ui.call_flow, so the choice is shown but not offered.
+  NSDictionary *flowSteps = [DBConfigUtil dig:_cfg path:@"visitor_flow.steps"];
+  BOOL flowInUse = [flowSteps isKindOfClass:[NSDictionary class]] && [flowSteps count] > 0 &&
+      [DBConfigUtil boolVal:_cfg path:@"visitor_flow.enabled" def:YES];
+  if (flowInUse) {
+    [rows addObject:DBRow([_texts ts:@"prefs.call_flow"], [_texts ts:@"flow_editor.call_flow_note"],
+                          @"readonly", nil)];
+  } else {
+    [rows addObject:[self choiceRow:[_texts ts:@"prefs.call_flow"] key:@"ui.call_flow"
+                                def:@"purpose_first"
+                            choices:@[ @[ @"purpose_first", [_texts ts:@"prefs.flow_purpose_first"] ],
+                                       @[ @"ring_then_purpose",
+                                          [_texts ts:@"prefs.flow_ring_then_purpose"] ] ]]];
+  }
   NSString *seconds = [_texts ts:@"prefs.unit_seconds"];
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.call_ttl"] key:@"ui.call_ttl_s" def:60
                                min:10 max:300 step:10 unit:seconds]];

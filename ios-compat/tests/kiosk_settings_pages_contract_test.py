@@ -41,6 +41,8 @@ PAGE_IDS = [
     # Added for parity with the web admin.
     "web_push", "assets", "speech", "playback_policy", "capabilities", "ui_elements",
     "raw_config", "logs", "other_devices", "cluster_security",
+    # The visitor-flow wizard editor.
+    "visitor_flow",
 ]
 
 # Core routes without a C export. /api/test/telegram predates the parity work.

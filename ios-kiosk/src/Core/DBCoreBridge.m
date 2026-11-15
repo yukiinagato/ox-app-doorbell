@@ -1588,6 +1588,42 @@ static void *DBCoreSymbol(const char *name) {
   return symbol;
 }
 
++ (BOOL)supportsVisitorFlow {
+  return YES;
+}
+
+- (NSDictionary *)visitorFlowJson:(NSString *)door {
+  NSString *identifier = [door copy] ?: @"";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:db_core_visitor_flow_json(self->_core, [identifier UTF8String])];
+  });
+  return out;
+}
+
+- (NSDictionary *)visitorFlowTemplateJson:(NSString *)name {
+  NSString *identifier = [name length] ? [name copy] : @"default";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_visitor_flow_template_json(self->_core, [identifier UTF8String])];
+  });
+  return out;
+}
+
+- (NSDictionary *)visitorNotify:(NSString *)door step:(NSString *)stepID {
+  if ([stepID length] == 0) return nil;
+  NSString *doorID = [door copy] ?: @"";
+  NSString *step = [stepID copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_visitor_notify_json(self->_core, [doorID UTF8String],
+                                                       [step UTF8String])];
+  });
+  return out;
+}
+
 // ---- Pairing PIN minting (spec §5.4) ----
 //
 // Minting the join PIN must not open the 「まとめて追加」 window, so it uses a

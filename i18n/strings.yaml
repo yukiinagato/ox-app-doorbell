@@ -1438,6 +1438,18 @@ flow_editor.template_purposes: { ja: "現在の用件から作成", en: "Start f
 flow_editor.template_delivery: { ja: "宅配・置き配", en: "Delivery and leave-at-door", zh: "快递与放置门口" }
 flow_editor.template_confirm: { ja: "現在のステップをテンプレートで置き換えます。", en: "This replaces the current steps with the template.", zh: "将用模板替换当前步骤。" }
 flow_editor.preview: { ja: "試す", en: "Try it", zh: "试用" }
+flow_editor.conflict: { ja: "別の端末が同時にウィザードを編集しました。管理画面の「競合の解決」で内容を選んでから保存してください。", en: "Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.", zh: "另一台设备同时编辑了向导。请先在管理页面解决冲突再保存。" }
+flow_editor.template_default: { ja: "標準のウィザード", en: "Built-in wizard", zh: "内置向导" }
+flow_editor.field_kind: { ja: "種類", en: "Kind", zh: "类型" }
+flow_editor.field_id: { ja: "ステップ ID", en: "Step ID", zh: "步骤 ID" }
+flow_editor.steps_hint: { ja: "ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。", en: "Steps are listed from the start page in the order they are reached. Swipe to delete one.", zh: "步骤按从起始页可到达的顺序排列。左滑可删除。" }
+flow_editor.image_place: { ja: "画像の位置", en: "Image position", zh: "图片位置" }
+flow_editor.no_images: { ja: "アセットに画像がありません。写真から追加してください。", en: "There is no image in Assets yet. Add one from a photo.", zh: "素材库中还没有图片，请从照片添加。" }
+flow_editor.max_images: { ja: "1 ページに入れられる画像は 2 枚までです", en: "A page can hold at most two images", zh: "每页最多两张图片" }
+flow_editor.paragraph: { ja: "段落", en: "Paragraph", zh: "段落" }
+flow_editor.paragraph_add: { ja: "段落を追加", en: "Add paragraph", zh: "添加段落" }
+flow_editor.body_hint: { ja: "本文は段落ごとに 1 行です。段落の中で改行するには \\n と入力します。装飾やリンクは使えません。", en: "Each paragraph is one row. Type \\n inside a paragraph for a line break. Formatting and links are not supported.", zh: "正文每段一行。段内换行请输入 \\n。不支持格式和链接。" }
+flow_editor.call_flow_note: { ja: "ウィザードが有効な間は、この設定より優先されます。", en: "While the wizard is in use it takes precedence over this setting.", zh: "向导启用期间，其优先级高于此设置。" }
 visitor_flow.invalid: { ja: "ウィザードを保存できません ({detail})", en: "The wizard could not be saved ({detail})", zh: "无法保存向导（{detail}）" }
 visitor_flow.too_many_steps: { ja: "ステップは 32 個までです", en: "A wizard can have at most 32 steps", zh: "最多 32 个步骤" }
 visitor_flow.too_many_options: { ja: "1 ページの選択肢は 12 個までです", en: "A page can have at most 12 options", zh: "每页最多 12 个选项" }

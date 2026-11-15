@@ -909,7 +909,10 @@
 "flow_editor.add_image" = "Add image";
 "flow_editor.add_option" = "Add option";
 "flow_editor.add_step" = "Add step";
+"flow_editor.body_hint" = "Each paragraph is one row. Type \\n inside a paragraph for a line break. Formatting and links are not supported.";
+"flow_editor.call_flow_note" = "While the wizard is in use it takes precedence over this setting.";
 "flow_editor.call_flow_superseded" = "The wizard replaces this setting while it is on.";
+"flow_editor.conflict" = "Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.";
 "flow_editor.conflict_blocked" = "Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.";
 "flow_editor.customize" = "Customize the built-in wizard";
 "flow_editor.default_note" = "The built-in wizard is in use. Editing it saves a copy as this home's own.";
@@ -921,7 +924,9 @@
 "flow_editor.enabled" = "Use the wizard";
 "flow_editor.enabled_hint" = "Turn this off to return to the classic call screen.";
 "flow_editor.field_body" = "Body text";
+"flow_editor.field_id" = "Step ID";
 "flow_editor.field_images" = "Images";
+"flow_editor.field_kind" = "Kind";
 "flow_editor.field_message" = "Message the residents receive";
 "flow_editor.field_on_unanswered" = "If nobody answers, go to";
 "flow_editor.field_options" = "Options";
@@ -935,6 +940,7 @@
 "flow_editor.image_alt" = "Image description (for screen readers)";
 "flow_editor.image_below" = "Below the text";
 "flow_editor.image_pick" = "Choose from Assets";
+"flow_editor.image_place" = "Image position";
 "flow_editor.image_upload" = "Upload an image";
 "flow_editor.image_uploading" = "Uploading…";
 "flow_editor.issues" = "Things to fix";
@@ -943,7 +949,9 @@
 "flow_editor.kind_end" = "End page";
 "flow_editor.kind_notify" = "Notify without ringing";
 "flow_editor.kind_page" = "Page";
+"flow_editor.max_images" = "A page can hold at most two images";
 "flow_editor.new_step" = "New %@";
+"flow_editor.no_images" = "There is no image in Assets yet. Add one from a photo.";
 "flow_editor.on_unanswered_none" = "Return to the start page";
 "flow_editor.option_enabled" = "Shown";
 "flow_editor.option_icon" = "Icon (emoji)";
@@ -952,6 +960,8 @@
 "flow_editor.option_purpose" = "Use a visit purpose's label and icon";
 "flow_editor.option_purpose_none" = "None (own label)";
 "flow_editor.option_target" = "Goes to";
+"flow_editor.paragraph" = "Paragraph";
+"flow_editor.paragraph_add" = "Add paragraph";
 "flow_editor.preview" = "Try it";
 "flow_editor.purpose_none" = "No purpose";
 "flow_editor.require_call" = "Always keep a way to ring";
@@ -981,9 +991,11 @@
 "flow_editor.step_in_use" = "Other steps lead here: %@";
 "flow_editor.step_untitled" = "(no title)";
 "flow_editor.steps" = "Steps";
+"flow_editor.steps_hint" = "Steps are listed from the start page in the order they are reached. Swipe to delete one.";
 "flow_editor.tab_overview" = "Overview";
 "flow_editor.target_choose" = "Choose a step";
 "flow_editor.template_confirm" = "This replaces the current steps with the template.";
+"flow_editor.template_default" = "Built-in wizard";
 "flow_editor.template_delivery" = "Delivery and leave-at-door";
 "flow_editor.template_loaded" = "Template loaded. Save to apply it.";
 "flow_editor.template_purposes" = "Start from the current purposes";

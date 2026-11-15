@@ -914,7 +914,10 @@
     <string name="flow_editor_add_image">画像を追加</string>
     <string name="flow_editor_add_option">選択肢を追加</string>
     <string name="flow_editor_add_step">ステップを追加</string>
+    <string name="flow_editor_body_hint">本文は段落ごとに 1 行です。段落の中で改行するには \n と入力します。装飾やリンクは使えません。</string>
+    <string name="flow_editor_call_flow_note">ウィザードが有効な間は、この設定より優先されます。</string>
     <string name="flow_editor_call_flow_superseded">ウィザードがオンの間は、この設定は使われません。</string>
+    <string name="flow_editor_conflict">別の端末が同時にウィザードを編集しました。管理画面の「競合の解決」で内容を選んでから保存してください。</string>
     <string name="flow_editor_conflict_blocked">ウィザードの別の編集が確認待ちです。このページ上部の確認が必要な編集を解決してから、もう一度保存してください。</string>
     <string name="flow_editor_customize">標準をもとに編集</string>
     <string name="flow_editor_default_note">標準のウィザードを使用中です。編集するとこの家の設定として保存されます。</string>
@@ -926,7 +929,9 @@
     <string name="flow_editor_enabled">ウィザードを使う</string>
     <string name="flow_editor_enabled_hint">オフにすると、従来の呼出画面に戻ります。</string>
     <string name="flow_editor_field_body">本文</string>
+    <string name="flow_editor_field_id">ステップ ID</string>
     <string name="flow_editor_field_images">画像</string>
+    <string name="flow_editor_field_kind">種類</string>
     <string name="flow_editor_field_message">住人に届くメッセージ</string>
     <string name="flow_editor_field_on_unanswered">応答がないときの移動先</string>
     <string name="flow_editor_field_options">選択肢</string>
@@ -940,6 +945,7 @@
     <string name="flow_editor_image_alt">画像の説明（読み上げ用）</string>
     <string name="flow_editor_image_below">本文の下</string>
     <string name="flow_editor_image_pick">アセットから選ぶ</string>
+    <string name="flow_editor_image_place">画像の位置</string>
     <string name="flow_editor_image_upload">画像をアップロード</string>
     <string name="flow_editor_image_uploading">アップロード中…</string>
     <string name="flow_editor_issues">修正が必要です</string>
@@ -948,7 +954,9 @@
     <string name="flow_editor_kind_end">完了ページ</string>
     <string name="flow_editor_kind_notify">お知らせ（呼び出さない）</string>
     <string name="flow_editor_kind_page">ページ</string>
+    <string name="flow_editor_max_images">1 ページに入れられる画像は 2 枚までです</string>
     <string name="flow_editor_new_step">新しい%1$s</string>
+    <string name="flow_editor_no_images">アセットに画像がありません。写真から追加してください。</string>
     <string name="flow_editor_on_unanswered_none">最初のページに戻る</string>
     <string name="flow_editor_option_enabled">表示する</string>
     <string name="flow_editor_option_icon">アイコン（絵文字）</string>
@@ -957,6 +965,8 @@
     <string name="flow_editor_option_purpose">用件のラベルとアイコンを使う</string>
     <string name="flow_editor_option_purpose_none">使わない（独自のラベル）</string>
     <string name="flow_editor_option_target">押したときの移動先</string>
+    <string name="flow_editor_paragraph">段落</string>
+    <string name="flow_editor_paragraph_add">段落を追加</string>
     <string name="flow_editor_preview">試す</string>
     <string name="flow_editor_purpose_none">用件なし</string>
     <string name="flow_editor_require_call">必ず呼び出しにたどり着けるようにする</string>
@@ -986,9 +996,11 @@
     <string name="flow_editor_step_in_use">ほかのステップから参照されています: %1$s</string>
     <string name="flow_editor_step_untitled">（タイトルなし）</string>
     <string name="flow_editor_steps">ステップ</string>
+    <string name="flow_editor_steps_hint">ステップは最初のページから辿れる順に並びます。左へスワイプで削除できます。</string>
     <string name="flow_editor_tab_overview">概要</string>
     <string name="flow_editor_target_choose">選んでください</string>
     <string name="flow_editor_template_confirm">現在のステップをテンプレートで置き換えます。</string>
+    <string name="flow_editor_template_default">標準のウィザード</string>
     <string name="flow_editor_template_delivery">宅配・置き配</string>
     <string name="flow_editor_template_loaded">テンプレートを読み込みました。保存すると反映されます。</string>
     <string name="flow_editor_template_purposes">現在の用件から作成</string>

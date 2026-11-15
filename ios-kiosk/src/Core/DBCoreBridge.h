@@ -92,6 +92,16 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 // The PM2.5 reading this node shows on its home screen (db_core_air_quality_json), or nil
 // while Core is not running.
 - (NSDictionary *)airQualityJson;
+// The visitor flow (docs/en/visitor-flow-contract.md). Each call waits on Core's loop, so call
+// them off the main thread. door of nil or empty is this shell's door.
+// Always YES: the exports are linked in. It stays a class method so a shell can gate on it.
++ (BOOL)supportsVisitorFlow;
+- (NSDictionary *)visitorFlowJson:(NSString *)door;
+// The editor templates "default", "purposes" and "delivery": {"ok":true,"flow":{...}}.
+- (NSDictionary *)visitorFlowTemplateJson:(NSString *)name;
+// Sends the resident message of one notify step. The visitor side passes a step id and nothing
+// else; the result is {"ok":..., "throttled":...} or {"ok":false,"err":...}.
+- (NSDictionary *)visitorNotify:(NSString *)door step:(NSString *)stepID;
 // Bluetooth sensor hosting (db_core_air_sensor_*). Each one waits on Core's loop, so call them off
 // the main thread.
 - (NSDictionary *)airSensorPlan;

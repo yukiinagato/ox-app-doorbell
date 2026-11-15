@@ -14,6 +14,7 @@
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBQrCode.h"
 #import "DBEditor.h"
+#import "DBFlowEditorPages.h"
 #import "DBRouter.h"
 
 static NSArray *kDBLangs(void) { return @[ @"ja", @"en", @"zh" ]; }
@@ -105,6 +106,7 @@ static UIImage *DBPanelLinkQr(NSString *link) {
   NSMutableDictionary *_thumbnails;  // asset hash -> UIImage, main thread only
   AVAudioPlayer *_player;
   NSString *_playingHash;
+  DBFlowEditorPages *_flowPages;
 }
 @synthesize nodeId = _nodeId;
 
@@ -127,6 +129,8 @@ static UIImage *DBPanelLinkQr(NSString *link) {
   _recorder = nil;
   [self stopPlayback];
   _thumbnails = nil;
+  [_flowPages close];
+  _flowPages = nil;
 }
 
 - (NSString *)t:(NSString *)key {
@@ -619,6 +623,18 @@ static UIImage *DBPanelLinkQr(NSString *link) {
 - (DBEditPage *)pageNamed:(NSString *)name {
   if ([name isEqualToString:@"quick_replies"]) return [self quickRepliesPage];
   if ([name isEqualToString:@"purposes"]) return [self purposesPage];
+  if ([name hasPrefix:@"visitor_flow_preview"] && _boot.debugScreenshots) {
+    if (_flowPages == nil) _flowPages = [[DBFlowEditorPages alloc] initWithRouter:_router editor:_editor];
+    [_flowPages usePreviewTemplate];
+    return [name length] > 21 ? [_flowPages stepPage:[name substringFromIndex:21]]
+                              : [_flowPages rootPage];
+  }
+  if ([name isEqualToString:@"visitor_flow"] || [name hasPrefix:@"visitor_flow:"]) {
+    if (_flowPages == nil) _flowPages = [[DBFlowEditorPages alloc] initWithRouter:_router editor:_editor];
+    // "visitor_flow:<step id>" is the step page, for the debug start screens.
+    return [name length] > 13 ? [_flowPages stepPage:[name substringFromIndex:13]]
+                              : [_flowPages rootPage];
+  }
   if ([name isEqualToString:@"notice_presets"]) return [self noticePresetsPage];
   if ([name isEqualToString:@"quiet_hours"]) return [self quietHoursPage];
   if ([name isEqualToString:@"ntp_servers"])

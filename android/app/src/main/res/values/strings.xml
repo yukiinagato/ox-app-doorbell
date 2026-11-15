@@ -914,7 +914,10 @@ Delete it?</string>
     <string name="flow_editor_add_image">Add image</string>
     <string name="flow_editor_add_option">Add option</string>
     <string name="flow_editor_add_step">Add step</string>
+    <string name="flow_editor_body_hint">Each paragraph is one row. Type \n inside a paragraph for a line break. Formatting and links are not supported.</string>
+    <string name="flow_editor_call_flow_note">While the wizard is in use it takes precedence over this setting.</string>
     <string name="flow_editor_call_flow_superseded">The wizard replaces this setting while it is on.</string>
+    <string name="flow_editor_conflict">Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.</string>
     <string name="flow_editor_conflict_blocked">Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.</string>
     <string name="flow_editor_customize">Customize the built-in wizard</string>
     <string name="flow_editor_default_note">The built-in wizard is in use. Editing it saves a copy as this home\'s own.</string>
@@ -926,7 +929,9 @@ Delete it?</string>
     <string name="flow_editor_enabled">Use the wizard</string>
     <string name="flow_editor_enabled_hint">Turn this off to return to the classic call screen.</string>
     <string name="flow_editor_field_body">Body text</string>
+    <string name="flow_editor_field_id">Step ID</string>
     <string name="flow_editor_field_images">Images</string>
+    <string name="flow_editor_field_kind">Kind</string>
     <string name="flow_editor_field_message">Message the residents receive</string>
     <string name="flow_editor_field_on_unanswered">If nobody answers, go to</string>
     <string name="flow_editor_field_options">Options</string>
@@ -940,6 +945,7 @@ Delete it?</string>
     <string name="flow_editor_image_alt">Image description (for screen readers)</string>
     <string name="flow_editor_image_below">Below the text</string>
     <string name="flow_editor_image_pick">Choose from Assets</string>
+    <string name="flow_editor_image_place">Image position</string>
     <string name="flow_editor_image_upload">Upload an image</string>
     <string name="flow_editor_image_uploading">Uploading…</string>
     <string name="flow_editor_issues">Things to fix</string>
@@ -948,7 +954,9 @@ Delete it?</string>
     <string name="flow_editor_kind_end">End page</string>
     <string name="flow_editor_kind_notify">Notify without ringing</string>
     <string name="flow_editor_kind_page">Page</string>
+    <string name="flow_editor_max_images">A page can hold at most two images</string>
     <string name="flow_editor_new_step">New %1$s</string>
+    <string name="flow_editor_no_images">There is no image in Assets yet. Add one from a photo.</string>
     <string name="flow_editor_on_unanswered_none">Return to the start page</string>
     <string name="flow_editor_option_enabled">Shown</string>
     <string name="flow_editor_option_icon">Icon (emoji)</string>
@@ -957,6 +965,8 @@ Delete it?</string>
     <string name="flow_editor_option_purpose">Use a visit purpose\'s label and icon</string>
     <string name="flow_editor_option_purpose_none">None (own label)</string>
     <string name="flow_editor_option_target">Goes to</string>
+    <string name="flow_editor_paragraph">Paragraph</string>
+    <string name="flow_editor_paragraph_add">Add paragraph</string>
     <string name="flow_editor_preview">Try it</string>
     <string name="flow_editor_purpose_none">No purpose</string>
     <string name="flow_editor_require_call">Always keep a way to ring</string>
@@ -986,9 +996,11 @@ Delete it?</string>
     <string name="flow_editor_step_in_use">Other steps lead here: %1$s</string>
     <string name="flow_editor_step_untitled">(no title)</string>
     <string name="flow_editor_steps">Steps</string>
+    <string name="flow_editor_steps_hint">Steps are listed from the start page in the order they are reached. Swipe to delete one.</string>
     <string name="flow_editor_tab_overview">Overview</string>
     <string name="flow_editor_target_choose">Choose a step</string>
     <string name="flow_editor_template_confirm">This replaces the current steps with the template.</string>
+    <string name="flow_editor_template_default">Built-in wizard</string>
     <string name="flow_editor_template_delivery">Delivery and leave-at-door</string>
     <string name="flow_editor_template_loaded">Template loaded. Save to apply it.</string>
     <string name="flow_editor_template_purposes">Start from the current purposes</string>

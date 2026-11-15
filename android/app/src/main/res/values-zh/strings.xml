@@ -914,7 +914,10 @@
     <string name="flow_editor_add_image">添加图片</string>
     <string name="flow_editor_add_option">添加选项</string>
     <string name="flow_editor_add_step">添加步骤</string>
+    <string name="flow_editor_body_hint">正文每段一行。段内换行请输入 \n。不支持格式和链接。</string>
+    <string name="flow_editor_call_flow_note">向导启用期间，其优先级高于此设置。</string>
     <string name="flow_editor_call_flow_superseded">向导开启期间，此设置不再生效。</string>
+    <string name="flow_editor_conflict">另一台设备同时编辑了向导。请先在管理页面解决冲突再保存。</string>
     <string name="flow_editor_conflict_blocked">向导的另一处编辑正在等待处理。请先处理本页顶部需要确认的编辑，然后再保存。</string>
     <string name="flow_editor_customize">基于内置向导编辑</string>
     <string name="flow_editor_default_note">当前使用内置向导。编辑后将保存为本住宅的设置。</string>
@@ -926,7 +929,9 @@
     <string name="flow_editor_enabled">启用向导</string>
     <string name="flow_editor_enabled_hint">关闭后恢复为原来的呼叫画面。</string>
     <string name="flow_editor_field_body">正文</string>
+    <string name="flow_editor_field_id">步骤 ID</string>
     <string name="flow_editor_field_images">图片</string>
+    <string name="flow_editor_field_kind">类型</string>
     <string name="flow_editor_field_message">住户收到的消息</string>
     <string name="flow_editor_field_on_unanswered">无人应答时前往</string>
     <string name="flow_editor_field_options">选项</string>
@@ -940,6 +945,7 @@
     <string name="flow_editor_image_alt">图片说明（用于朗读）</string>
     <string name="flow_editor_image_below">正文下方</string>
     <string name="flow_editor_image_pick">从素材库选择</string>
+    <string name="flow_editor_image_place">图片位置</string>
     <string name="flow_editor_image_upload">上传图片</string>
     <string name="flow_editor_image_uploading">正在上传…</string>
     <string name="flow_editor_issues">需要修正</string>
@@ -948,7 +954,9 @@
     <string name="flow_editor_kind_end">结束页</string>
     <string name="flow_editor_kind_notify">通知（不呼叫）</string>
     <string name="flow_editor_kind_page">页面</string>
+    <string name="flow_editor_max_images">每页最多两张图片</string>
     <string name="flow_editor_new_step">新建%1$s</string>
+    <string name="flow_editor_no_images">素材库中还没有图片，请从照片添加。</string>
     <string name="flow_editor_on_unanswered_none">返回起始页</string>
     <string name="flow_editor_option_enabled">显示</string>
     <string name="flow_editor_option_icon">图标（表情符号）</string>
@@ -957,6 +965,8 @@
     <string name="flow_editor_option_purpose">使用来访目的的标签和图标</string>
     <string name="flow_editor_option_purpose_none">不使用（自定义标签）</string>
     <string name="flow_editor_option_target">点击后前往</string>
+    <string name="flow_editor_paragraph">段落</string>
+    <string name="flow_editor_paragraph_add">添加段落</string>
     <string name="flow_editor_preview">试用</string>
     <string name="flow_editor_purpose_none">无目的</string>
     <string name="flow_editor_require_call">始终保留呼叫途径</string>
@@ -986,9 +996,11 @@
     <string name="flow_editor_step_in_use">其他步骤指向此处：%1$s</string>
     <string name="flow_editor_step_untitled">（无标题）</string>
     <string name="flow_editor_steps">步骤</string>
+    <string name="flow_editor_steps_hint">步骤按从起始页可到达的顺序排列。左滑可删除。</string>
     <string name="flow_editor_tab_overview">概览</string>
     <string name="flow_editor_target_choose">请选择步骤</string>
     <string name="flow_editor_template_confirm">将用模板替换当前步骤。</string>
+    <string name="flow_editor_template_default">内置向导</string>
     <string name="flow_editor_template_delivery">快递与放置门口</string>
     <string name="flow_editor_template_loaded">已载入模板，保存后生效。</string>
     <string name="flow_editor_template_purposes">根据当前来访目的创建</string>

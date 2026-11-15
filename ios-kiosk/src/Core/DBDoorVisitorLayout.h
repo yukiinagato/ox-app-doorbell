@@ -71,3 +71,35 @@ DBDoorVisitorLayout DBDoorVisitorLayoutFitContent(DBDoorVisitorLayout layout, BO
 CGRect DBDoorVisitorPurposeFrame(DBDoorVisitorLayout layout, NSInteger index, CGFloat rowHeight);
 CGFloat DBDoorVisitorPurposeGridHeight(DBDoorVisitorLayout layout, NSInteger count,
                                        CGFloat rowHeight);
+
+// The visitor-flow zone (docs/en/visitor-flow-contract.md, section 7): the page's title, images and
+// text scroll in `content`, and the options sit in `options`, fixed above the bottom row and never
+// scrolled off screen. Back takes the trailing end of the bottom row, which SOS holds at the
+// leading end. Rectangles are in screen coordinates except the option frames, which are in the
+// coordinates of the options viewport's scrolling content.
+typedef struct {
+  CGRect zone;
+  CGRect content;
+  CGRect options;
+  CGRect back;
+  CGFloat optionsContentHeight;
+  CGFloat primaryHeight;
+  CGFloat rowHeight;
+  CGFloat gap;
+  NSInteger columns;
+  CGFloat columnX;
+  CGFloat columnWidth;
+} DBDoorVisitorFlowLayout;
+
+// headerHeight is the room the pairing reminder takes at the top of the zone. labelRowHeight is
+// the height the longest secondary label needs; the screen class minimum (at least 72 pt) still
+// applies. The options viewport is at most half of the screen.
+DBDoorVisitorFlowLayout DBDoorVisitorFlowLayoutMake(DBDoorVisitorLayout layout,
+                                                    CGFloat headerHeight, BOOL hasPrimary,
+                                                    NSInteger secondaryCount,
+                                                    CGFloat labelRowHeight, BOOL showsBack);
+CGRect DBDoorVisitorFlowPrimaryFrame(DBDoorVisitorFlowLayout flow);
+CGRect DBDoorVisitorFlowOptionFrame(DBDoorVisitorFlowLayout flow, BOOL hasPrimary,
+                                    NSInteger index, NSInteger secondaryCount);
+// Images scale to the content width and take at most 40% of the viewport height.
+CGFloat DBDoorVisitorFlowImageHeight(CGSize image, CGFloat width, CGFloat viewportHeight);

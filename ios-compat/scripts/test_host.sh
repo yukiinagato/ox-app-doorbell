@@ -235,6 +235,13 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/kiosk_settings_pages_test.m" \
   -framework Foundation -o "$OUT/kiosk_settings_pages_test"
 
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBVisitorFlowModel.m" \
+  "$REPO_ROOT/ios-compat/tests/visitor_flow_model_test.m" \
+  -framework Foundation -o "$OUT/visitor_flow_model_test"
+DB_REPO_ROOT="$REPO_ROOT" "$OUT/visitor_flow_model_test"
+
 "$OUT/kiosk_settings_pages_test"
 "$OUT/minisip_uas_loopback"
 bash "$SCRIPT_DIR/test_chime_host.sh"

@@ -10,6 +10,8 @@
 
 // Opens one category by position; the debug start screen "settings:N" uses it.
 - (void)selectCategory:(NSInteger)index;
+// Debug start screen "settings:pages:a>b": pushes the named editor pages in order.
+- (void)debugOpenPages:(NSString *)spec;
 // Debug builds only: times page open, category switches and writes into Documents/settingsperf.txt.
 - (void)debugPerfProbe;
 

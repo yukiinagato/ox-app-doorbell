@@ -252,6 +252,10 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"runtime_recovery_v1" : @YES,
     @"helper_policy_v1" : @YES,
     @"frosted_glass_radius_v1" : @YES,
+    // The door screen renders the resolved visitor flow; the manifest above keeps call.primary,
+    // purpose.button and cancel.call, which the contract requires of such a shell.
+    @"visitor_flow_v1" : [NSNumber numberWithBool:[boot.role isEqualToString:@"door_station"] &&
+                                                  [DBCoreBridge supportsVisitorFlow]],
   };
   NSMutableDictionary *capabilities = [@{
     // A local route is not proof of Internet or broker reachability. Operational

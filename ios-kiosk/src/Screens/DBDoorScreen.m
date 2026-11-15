@@ -14,6 +14,7 @@
 #import "../Core/DBIconAsset.h"
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBDoorVisitorLayout.h"
+#import "../Core/DBVisitorFlowModel.h"
 #import "../Core/DBTextFit.h"
 #import "../Core/DBLatestWins.h"
 #import "../Core/DBReplyDismissal.h"
@@ -26,6 +27,8 @@
 #import "DBRouter.h"
 #import "DBSosPanel.h"
 #import "DBWidgets.h"
+#import <ImageIO/ImageIO.h>
+#import <QuartzCore/QuartzCore.h>
 #import <math.h>
 
 static CGFloat DBDoorStyleNumber(NSDictionary *style, NSString *key, CGFloat fallback,
@@ -94,6 +97,31 @@ static UIFont *DBDoorFittingFont(NSString *text, CGFloat size, CGFloat minimum, 
   return font;
 }
 
+// A flow image decoded at no more than maxPixel on its long side, so the A4 never holds a
+// full-size photograph. Runs off the main thread.
+static UIImage *DBFlowDecodeImage(NSString *path, CGFloat maxPixel) {
+  if ([path length] == 0) return nil;
+  CGImageSourceRef source = CGImageSourceCreateWithURL(
+      (__bridge CFURLRef)[NSURL fileURLWithPath:path], NULL);
+  if (source == NULL) return nil;
+  NSDictionary *options = @{
+    (id)kCGImageSourceCreateThumbnailFromImageAlways : (__bridge id)kCFBooleanTrue,
+    (id)kCGImageSourceThumbnailMaxPixelSize : [NSNumber numberWithFloat:(float)maxPixel],
+    (id)kCGImageSourceCreateThumbnailWithTransform : (__bridge id)kCFBooleanTrue,
+    (id)kCGImageSourceShouldCache : (__bridge id)kCFBooleanFalse,
+  };
+  CGImageRef decoded = CGImageSourceCreateThumbnailAtIndex(source, 0,
+                                                           (__bridge CFDictionaryRef)options);
+  CFRelease(source);
+  if (decoded == NULL) return nil;
+  UIImage *image = [UIImage imageWithCGImage:decoded];
+  CGImageRelease(decoded);
+  return image;
+}
+
+static const CGFloat kFlowImageMaxPixel = 1024;
+
+
 typedef enum {
   DBDoorFlowIdle = 0,
   DBDoorFlowCalling,
@@ -106,7 +134,8 @@ typedef enum {
   DBDoorPurposeAlertActiveCall
 } DBDoorPurposeAlertMode;
 
-@interface DBDoorScreen () <UIAlertViewDelegate, UIActionSheetDelegate, DBSosSliderDelegate>
+@interface DBDoorScreen () <UIAlertViewDelegate, UIActionSheetDelegate, DBSosSliderDelegate,
+                            UIScrollViewDelegate>
 - (BOOL)beginCallWithPurpose:(NSString *)purpose;
 - (void)presentPurposeAlertForActiveCall:(BOOL)activeCall;
 - (void)dismissPurposeAlert;
@@ -178,6 +207,37 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   UILabel *_mediaBadge;
   UIButton *_callButton;
   UIScrollView *_purposeScroll;
+  // The visitor flow (docs/en/visitor-flow-contract.md): the page card, the fixed option zone,
+  // and Back. All of it is hidden while the classic screen or a call is showing.
+  DBVisitorFlowModel *_flow;
+  NSString *_flowRevision;
+  NSInteger _flowGeneration;
+  UIView *_flowPlate;
+  UIScrollView *_flowScroll;
+  UILabel *_flowNotice;
+  UILabel *_flowTitle;
+  UILabel *_flowBody;
+  NSMutableArray *_flowImageViews;
+  NSMutableArray *_flowImageAlts;
+  NSArray *_flowImageInfos;
+  NSMutableDictionary *_flowImageCache;
+  NSMutableSet *_flowImageLoading;
+  UIScrollView *_flowOptionScroll;
+  UIView *_flowFade;
+  NSMutableArray *_flowOptionButtons;
+  NSMutableArray *_flowOptionPlates;
+  NSArray *_flowOptionModels;
+  BOOL _flowFilled;
+  BOOL _flowHasContent;
+  UIView *_flowBackPlate;
+  UIButton *_flowBackButton;
+  NSString *_flowRenderedPage;
+  NSString *_flowRenderedMode;
+  NSTimeInterval _flowLastInput;
+  NSTimeInterval _flowEndSince;
+  BOOL _flowBusy;
+  BOOL _flowDebugHold;
+  NSString *_endReason;
   NSMutableArray *_purposeButtons;
   // A UIView under each stock purpose button on a flat system, or NSNull.
   NSMutableArray *_purposePlates;
@@ -425,6 +485,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _purposeScroll.backgroundColor = [UIColor clearColor];
   _purposeScroll.accessibilityIdentifier = @"door_secondary_content";
   [self addSubview:_purposeScroll];
+  [self buildFlowViews];
 
   // A door station that was set up without pairing keeps a persistent, tappable reminder
   // instead of silently running unpaired.
@@ -587,9 +648,15 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _dateLabel.hidden = !idle || covered;
   _timeScrim.hidden = CGRectIsEmpty(_titleLabel.frame);
   [_air setSuppressed:!idle || covered || CGRectIsEmpty(_air.label.frame)];
+  BOOL flowOn = idle && [self flowShowing];
   _purposeScroll.hidden = !idle;
-  _touchHint.hidden = !idle;
-  _callButton.hidden = !idle;
+  _touchHint.hidden = !idle || flowOn;
+  _callButton.hidden = !idle || flowOn;
+  _flowPlate.hidden = !(flowOn && _flowHasContent);
+  _flowOptionScroll.hidden = !flowOn;
+  _flowBackButton.hidden = !(flowOn && [_flow canGoBack]);
+  _flowBackPlate.hidden = _flowBackButton.hidden;
+  if (!flowOn) _flowFade.hidden = YES;
   _cancelButton.hidden = idle;
   _callPlate.hidden = idle;
   // The indicator runs only while a call is ringing on a visible screen, and never in safe
@@ -632,6 +699,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 // database is needed and the clock follows the cluster zone and NTP offset.
 - (void)updateClock {
   [self updateReplyCaptions];
+  [self flowTick];
   NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
@@ -850,6 +918,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     DBCallTimingSnapshot *timingSnapshot = [core callTimingSnapshot];
     NSDictionary *status = timingSnapshot.document;
     NSDictionary *pairing = [core pairingInfo];
+    NSDictionary *flowDocument = [DBCoreBridge supportsVisitorFlow]
+        ? [core visitorFlowJson:@""] : nil;
     dispatch_async(dispatch_get_main_queue(), ^{
       DBDoorScreen *screen = weakSelf;
       if (!screen || generation != screen->_snapshotGeneration ||
@@ -890,6 +960,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
           break;
         }
       }
+      [screen applyFlowDocument:flowDocument];
       [screen publishMediaSourceStatus];
       [screen applyTheme];
       [screen rebuildPurposes];
@@ -1224,7 +1295,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 }
 
 - (BOOL)showsHomePurposes {
-  return [[self callFlowMode] isEqualToString:@"purpose_first"] && [_purposeIds count] > 0;
+  return ![self flowActive] && [[self callFlowMode] isEqualToString:@"purpose_first"] &&
+      [_purposeIds count] > 0;
 }
 
 - (void)applyStrings {
@@ -1249,6 +1321,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
   [self updateLanguageSelection];
 
+  [_flowBackButton setTitle:[_texts ts:@"flow.back"] forState:UIControlStateNormal];
+  _flowBackButton.accessibilityLabel = _flowBackButton.currentTitle;
   _mediaBadge.accessibilityValue = [_mediaSource.sourceRef length]
       ? [NSString stringWithFormat:@"source_ref=%@", _mediaSource.sourceRef] : @"";
   if (_core.h264CameraActive) {
@@ -1324,6 +1398,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   }
   DBApplyDoorButtonStyle(_emergencyCancel, [self styleForSemanticID:@"sos.cancel"],
                          white, neutral, 10);
+  [self applyFlowStyles];
 }
 
 - (void)rebuildPurposes {
@@ -1445,6 +1520,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [_texts setLang:value];
   // The cards keep their views and icons; only their labels change with the language.
   if (![self retitlePurposesInPlace]) [self rebuildPurposes];
+  if (_flow != nil) {
+    _flow.lang = value;
+    [self flowStateChanged];
+  }
   [self updateLanguageSelection];
   [self applyStrings];
   [self applySemanticStyles];
@@ -1485,7 +1564,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
 - (void)showIdleWithHint:(NSString *)hint {
   [self dismissPurposeAlert];
-  if (_flowState != DBDoorFlowIdle) _cancelActionGeneration++;
+  if (_flowState != DBDoorFlowIdle) {
+    _cancelActionGeneration++;
+    [self flowCallEnded];
+  }
   _flowState = DBDoorFlowIdle;
   _activeCallID = nil;
   _activeStageRevision = 0;
@@ -1496,6 +1578,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [_callTiming reset];
   _callTimingChecking = NO;
   [_feedbackAudio stop];
+  [self renderFlow];
   [self applyFlowVisibility];
   _purposeAlertMode = DBDoorPurposeAlertNone;
   _purposeAlertIDs = nil;
@@ -1513,6 +1596,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 }
 
 - (void)restoreIdleHint {
+  if ([self flowShowing]) return;
   _touchHint.text = [_texts ts:[self showsHomePurposes] ? @"door.hint_purpose_first" : @"door.hint_call"];
 }
 
@@ -1785,6 +1869,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   DBCallTimingReading *reading = [_callTiming observeSnapshot:snapshot callID:_activeCallID
       door:_boot.door now:DBCallMonotonicTime()];
   if (reading.disposition == DBCallTimingAbsent) {
+    _endReason = @"timeout";
     [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
     return;
   }
@@ -1844,6 +1929,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _replyPlate.accessibilityLabel = [_texts ts:@"ui.close"];
   _replyPlate.accessibilityValue = _replyText.text;
   _replyShown = YES;
+  [_flow applyEvent:@{ @"reply" : @YES }];
   _replyDismissal = DBReplyDismissalBegin(DBCallMonotonicTime());
   [_replyTimer invalidate];
   NSTimeInterval ttl = [[event objectForKey:@"ttl_s"] doubleValue];
@@ -1867,6 +1953,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     NSString *sample = [state length] > 6 ? [state substringFromIndex:6]
         : @"少々お待ちください。すぐに参ります。";
     [self handleReplyEvent:@{ @"text" : sample, @"ttl_s" : @300 }];
+  } else if ([state hasPrefix:@"flow"]) {
+    // "flow" shows the start page; "flow:<step id>" shows that page or end page.
+    [self debugShowFlowStep:[state length] > 5 ? [state substringFromIndex:5] : @"" attempt:0];
   } else if ([state isEqualToString:@"noanswer"]) {
     [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
   }
@@ -1923,6 +2012,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
 - (void)hideReplyBanner {
   _replyShown = NO;
+  [_flow applyEvent:@{ @"reply" : @NO }];
   [_replyAudio stop];
   [self applyFlowVisibility];
   [self setNeedsLayout];
@@ -1960,6 +2050,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   if ([callID length] == 0 || [_activeCallID length] == 0 ||
       ![callID isEqualToString:_activeCallID]) return;
   [_router sipListenerHangup];
+  // A missed call is a cancellation with reason "timeout"; the flow may branch on it.
+  _endReason = [DBConfigUtil evStr:event key:@"reason"];
   [self showIdleWithHint:nil];
 }
 
@@ -2117,6 +2209,716 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   if (!_rtspSuspendedForMemoryPressure) [self configureRTSPSource];
   [self configureLocalPreview];
   [self publishMediaSourceStatus];
+}
+
+#pragma mark - visitor flow
+
+- (BOOL)flowActive {
+  return _flow != nil && _flow.active;
+}
+
+// The page or end page of the flow is what the visitor sees, and nothing else claims the screen.
+- (BOOL)flowShowing {
+  return [self flowActive] && _flowState == DBDoorFlowIdle &&
+      ([_flow.mode isEqualToString:DBVisitorFlowModePage] ||
+       [_flow.mode isEqualToString:DBVisitorFlowModeEnd]);
+}
+
+- (void)buildFlowViews {
+  _flowImageViews = [[NSMutableArray alloc] init];
+  _flowImageAlts = [[NSMutableArray alloc] init];
+  _flowImageCache = [[NSMutableDictionary alloc] init];
+  _flowImageLoading = [[NSMutableSet alloc] init];
+  _flowOptionButtons = [[NSMutableArray alloc] init];
+  _flowOptionPlates = [[NSMutableArray alloc] init];
+
+  _flowPlate = DBDoorPlate();
+  _flowPlate.hidden = YES;
+  [self addSubview:_flowPlate];
+  _flowScroll = [[UIScrollView alloc] init];
+  _flowScroll.backgroundColor = [UIColor clearColor];
+  _flowScroll.delegate = self;
+  _flowScroll.accessibilityIdentifier = @"flow_text";
+  [_flowPlate addSubview:_flowScroll];
+  _flowNotice = [self plateLabelWithFont:[UIFont boldSystemFontOfSize:20]];
+  _flowNotice.textColor = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
+  _flowNotice.textAlignment = NSTextAlignmentCenter;
+  _flowNotice.accessibilityIdentifier = @"flow_notice";
+  [_flowScroll addSubview:_flowNotice];
+  _flowTitle = [self plateLabelWithFont:[UIFont boldSystemFontOfSize:34]];
+  _flowTitle.textAlignment = NSTextAlignmentCenter;
+  _flowTitle.accessibilityIdentifier = @"flow_title";
+  [_flowScroll addSubview:_flowTitle];
+  _flowBody = [self plateLabelWithFont:[UIFont systemFontOfSize:24]];
+  _flowBody.accessibilityIdentifier = @"flow_body";
+  [_flowScroll addSubview:_flowBody];
+
+  _flowOptionScroll = [[UIScrollView alloc] init];
+  _flowOptionScroll.backgroundColor = [UIColor clearColor];
+  _flowOptionScroll.delegate = self;
+  _flowOptionScroll.hidden = YES;
+  _flowOptionScroll.accessibilityIdentifier = @"flow_options";
+  [self addSubview:_flowOptionScroll];
+  _flowFade = [[UIView alloc] init];
+  _flowFade.userInteractionEnabled = NO;
+  _flowFade.hidden = YES;
+  CAGradientLayer *gradient = [CAGradientLayer layer];
+  gradient.colors = [NSArray arrayWithObjects:
+      (id)[UIColor colorWithWhite:0 alpha:0].CGColor,
+      (id)[UIColor colorWithWhite:0 alpha:0.5f].CGColor, nil];
+  [_flowFade.layer addSublayer:gradient];
+  [self addSubview:_flowFade];
+
+  if (DBChromeIsFlat()) {
+    _flowBackPlate = DBDoorPlate();
+    _flowBackPlate.hidden = YES;
+    [self addSubview:_flowBackPlate];
+  }
+  _flowBackButton = DBChromeButton(@"", 20);
+  _flowBackButton.accessibilityIdentifier = @"flow_back";
+  _flowBackButton.hidden = YES;
+  [_flowBackButton addTarget:self action:@selector(onFlowBack)
+            forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_flowBackButton];
+}
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+  if (event.type == UIEventTypeTouches) _flowLastInput = DBCallMonotonicTime();
+  return [super hitTest:point withEvent:event];
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+  _flowLastInput = DBCallMonotonicTime();
+  if (scrollView == _flowOptionScroll) [self updateFlowFade];
+}
+
+- (void)updateFlowFade {
+  BOOL more = _flowOptionScroll.contentSize.height - _flowOptionScroll.contentOffset.y >
+      _flowOptionScroll.bounds.size.height + 4;
+  _flowFade.hidden = !(more && !_flowOptionScroll.hidden);
+}
+
+// Every path the document references, so the decoded cache keeps only what a page can show.
+- (NSSet *)flowImagePathsInDocument:(NSDictionary *)document {
+  NSMutableSet *paths = [NSMutableSet set];
+  id steps = [document objectForKey:@"steps"];
+  if (![steps isKindOfClass:[NSDictionary class]]) return paths;
+  for (id step in [(NSDictionary *)steps allValues]) {
+    id images = [step isKindOfClass:[NSDictionary class]] ? [step objectForKey:@"images"] : nil;
+    if (![images isKindOfClass:[NSArray class]]) continue;
+    for (id image in (NSArray *)images) {
+      id path = [image isKindOfClass:[NSDictionary class]] ? [image objectForKey:@"path"] : nil;
+      if ([path isKindOfClass:[NSString class]] && [path length] > 0) [paths addObject:path];
+    }
+  }
+  return paths;
+}
+
+- (void)applyFlowDocument:(NSDictionary *)document {
+  // A Core that is slow or older than the flow leaves what is on screen alone.
+  if (![document isKindOfClass:[NSDictionary class]]) return;
+  // A debug screen on an indoor panel shows a borrowed document and keeps it.
+  if (_flowDebugHold && ![_boot.role isEqualToString:@"door_station"]) return;
+  NSString *revision = [document objectForKey:@"revision"];
+  if (![revision isKindOfClass:[NSString class]]) revision = @"";
+  if (_flow == nil) {
+    _flow = [[DBVisitorFlowModel alloc] initWithFlow:document lang:_visitorLang];
+  } else if ([revision length] > 0 && [revision isEqualToString:_flowRevision ?: @""]) {
+    // The same document: a refresh for another reason must not rebuild the page.
+    return;
+  } else {
+    _flow.lang = _visitorLang;
+    [_flow applyEvent:@{ @"flow_changed" : document }];
+  }
+  _flowRevision = [revision copy];
+  NSSet *live = [self flowImagePathsInDocument:document];
+  for (NSString *path in [_flowImageCache allKeys])
+    if (![live containsObject:path]) [_flowImageCache removeObjectForKey:path];
+  [self flowStateChanged];
+}
+
+// Core announced a changed document; several events in a row cost one read.
+- (void)handleFlowChanged:(NSDictionary *)event {
+  (void)event;
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshFlow)
+                                             object:nil];
+  [self performSelector:@selector(refreshFlow) withObject:nil afterDelay:0.15];
+}
+
+- (void)refreshFlow {
+  if (![DBCoreBridge supportsVisitorFlow]) return;
+  NSInteger generation = ++_flowGeneration;
+  DBCoreBridge *core = _core;
+  NSUInteger coreGeneration = core.lifecycleGeneration;
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *document = [core visitorFlowJson:@""];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen || generation != screen->_flowGeneration ||
+          coreGeneration != core.lifecycleGeneration) return;
+      [screen applyFlowDocument:document];
+    });
+  });
+}
+
+- (void)flowStateChanged {
+  [self renderFlow];
+  [self applyFlowVisibility];
+  [self setNeedsLayout];
+}
+
+- (NSArray *)flowDisplayOptions {
+  if ([_flow.mode isEqualToString:DBVisitorFlowModeEnd])
+    return @[ @{ @"id" : @"__done", @"semantic_id" : @"call.primary",
+                 @"label" : [_texts ts:@"flow.done"], @"icon" : @"", @"style" : @"primary",
+                 @"to" : @"", @"purpose" : @"" } ];
+  return [_flow currentOptions];
+}
+
+- (void)renderFlow {
+  if (![self flowActive]) {
+    _flowHasContent = NO;
+    return;
+  }
+  NSString *page = [_flow currentStepID];
+  NSString *mode = _flow.mode;
+  BOOL changed = ![page ?: @"" isEqualToString:_flowRenderedPage ?: @""] ||
+      ![mode isEqualToString:_flowRenderedMode ?: @""];
+  if (changed) {
+    _flowLastInput = DBCallMonotonicTime();
+    if ([mode isEqualToString:DBVisitorFlowModeEnd]) _flowEndSince = _flowLastInput;
+  }
+  _flowRenderedPage = [page copy];
+  _flowRenderedMode = [mode copy];
+  if (![self flowShowing]) return;
+
+  NSDictionary *step = [_flow currentStep];
+  NSString *title = [_flow text:[step objectForKey:@"title"]];
+  NSString *body = [_flow text:[step objectForKey:@"body"]];
+  NSString *notice = [_flow.notice length] > 0 ? [_texts ts:_flow.notice] : nil;
+  _flowTitle.text = title ?: @"";
+  _flowBody.text = body ?: @"";
+  _flowNotice.text = notice ?: @"";
+  _flowTitle.hidden = [title length] == 0;
+  _flowBody.hidden = [body length] == 0;
+  _flowNotice.hidden = [notice length] == 0;
+  [self renderFlowImages:[step objectForKey:@"images"]];
+  _flowHasContent = [title length] > 0 || [body length] > 0 || [notice length] > 0 ||
+      [_flowImageViews count] > 0;
+  [self rebuildFlowOptions];
+  if (changed) {
+    _flowScroll.contentOffset = CGPointZero;
+    _flowOptionScroll.contentOffset = CGPointZero;
+    if (self.window != nil && UIAccessibilityIsVoiceOverRunning())
+      UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
+                                      [title length] > 0 ? (id)_flowTitle : (id)_flowPlate);
+  }
+}
+
+- (void)renderFlowImages:(id)raw {
+  for (UIView *view in _flowImageViews) [view removeFromSuperview];
+  for (UIView *view in _flowImageAlts) [view removeFromSuperview];
+  [_flowImageViews removeAllObjects];
+  [_flowImageAlts removeAllObjects];
+  NSMutableArray *infos = [NSMutableArray array];
+  NSArray *images = [raw isKindOfClass:[NSArray class]] ? raw : @[];
+  for (id entry in images) {
+    if (![entry isKindOfClass:[NSDictionary class]] || [infos count] >= 2) continue;
+    NSDictionary *image = entry;
+    id rawPath = [image objectForKey:@"path"];
+    NSString *path = [rawPath isKindOfClass:[NSString class]] ? rawPath : @"";
+    NSString *alt = [_flow text:[image objectForKey:@"alt"]] ?: @"";
+    BOOL below = [[image objectForKey:@"place"] isEqual:@"below"];
+    UIImageView *view = [[UIImageView alloc] init];
+    view.contentMode = UIViewContentModeScaleAspectFit;
+    view.clipsToBounds = YES;
+    view.isAccessibilityElement = YES;
+    view.accessibilityLabel = alt;
+    view.accessibilityTraits = UIAccessibilityTraitImage;
+    view.accessibilityIdentifier = @"flow_image";
+    UILabel *placeholder = [self plateLabelWithFont:[UIFont systemFontOfSize:17]];
+    placeholder.text = alt;
+    placeholder.textAlignment = NSTextAlignmentCenter;
+    placeholder.textColor = [UIColor grayColor];
+    id cached = [path length] > 0 ? [_flowImageCache objectForKey:path] : nil;
+    if ([cached isKindOfClass:[UIImage class]]) {
+      view.image = cached;
+      placeholder.hidden = YES;
+    } else if ([path length] > 0 && cached == nil) {
+      [self loadFlowImage:path];
+    }
+    [_flowScroll addSubview:view];
+    [_flowScroll addSubview:placeholder];
+    [_flowImageViews addObject:view];
+    [_flowImageAlts addObject:placeholder];
+    [infos addObject:@{ @"below" : @(below) }];
+  }
+  _flowImageInfos = infos;
+}
+
+// Decoded off the main thread at a capped size; a file that cannot be decoded leaves its
+// description on screen and is not retried until the document changes.
+- (void)loadFlowImage:(NSString *)path {
+  if ([_flowImageLoading containsObject:path]) return;
+  [_flowImageLoading addObject:path];
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+    UIImage *image = DBFlowDecodeImage(path, kFlowImageMaxPixel);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen) return;
+      [screen->_flowImageLoading removeObject:path];
+      if ([screen->_flowImageCache count] >= 6) [screen->_flowImageCache removeAllObjects];
+      [screen->_flowImageCache setObject:image ?: (id)[NSNull null] forKey:path];
+      [screen flowStateChanged];
+    });
+  });
+}
+
+- (void)rebuildFlowOptions {
+  for (UIView *view in _flowOptionButtons) [view removeFromSuperview];
+  for (id plate in _flowOptionPlates)
+    if ([plate isKindOfClass:[UIView class]]) [(UIView *)plate removeFromSuperview];
+  [_flowOptionButtons removeAllObjects];
+  [_flowOptionPlates removeAllObjects];
+  NSArray *options = [self flowDisplayOptions];
+  _flowOptionModels = options;
+  NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
+  _flowFilled = DBDoorStyleNeedsFill(purposeStyle);
+  UIColor *ink = DBDoorStyleColor(purposeStyle, @"foreground", [UIColor blackColor]);
+  BOOL seenPrimary = NO;
+  for (NSUInteger i = 0; i < [options count]; i++) {
+    NSDictionary *option = [options objectAtIndex:i];
+    BOOL primary = !seenPrimary && [[option objectForKey:@"style"] isEqual:@"primary"];
+    if (primary) seenPrimary = YES;
+    NSString *label = [option objectForKey:@"label"];
+    NSString *purpose = [option objectForKey:@"purpose"];
+    NSString *iconName = [purpose length] > 0 ? [DBPurposeModel iconNameForPurpose:purpose] : nil;
+    NSString *glyph = [DBPurposeModel displayIconForConfiguredIcon:[option objectForKey:@"icon"]];
+    NSString *title = label;
+    // A glyph the administrator typed stands in for an icon this shell has no asset for.
+    if (iconName == nil && [glyph length] > 0)
+      title = [NSString stringWithFormat:@"%@  %@", glyph, label];
+    UIButton *button;
+    UIView *plate = nil;
+    if (primary) {
+      button = [self filledButton];
+      button.titleLabel.numberOfLines = 3;
+    } else {
+      button = _flowFilled ? [self filledButton] : DBChromeButton(title, 22);
+      button.titleLabel.numberOfLines = 2;
+    }
+    [button setTitle:title forState:UIControlStateNormal];
+    button.titleLabel.adjustsFontSizeToFitWidth = NO;
+    button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    button.titleLabel.textAlignment = NSTextAlignmentCenter;
+    button.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
+    UIImage *asset = nil;
+    if (!primary && iconName != nil) {
+      asset = _flowFilled ? [DBIconAsset tintedImageNamed:iconName color:ink
+                                                     size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)]
+                          : [DBIconAsset imageNamed:iconName];
+    }
+    if (asset != nil) {
+      UIImageView *icon = [[UIImageView alloc] initWithImage:asset];
+      icon.tag = kPurposeIconTag;
+      if (!_flowFilled && [asset respondsToSelector:@selector(imageWithRenderingMode:)])
+        icon.image = [asset imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      [button addSubview:icon];
+      button.titleEdgeInsets = UIEdgeInsetsMake(kPurposeIconSide + 6, 0, 0, 0);
+    }
+    button.tag = (NSInteger)i;
+    NSString *identifier = [option objectForKey:@"id"];
+    button.accessibilityIdentifier = [identifier isEqualToString:@"__done"] ? @"flow_done"
+        : (primary ? @"door_call" : ([purpose length] > 0
+               ? [@"purpose_" stringByAppendingString:purpose]
+               : [@"flow_option_" stringByAppendingString:identifier ?: @""]));
+    button.accessibilityLabel = label;
+    [button addTarget:self action:@selector(onFlowOption:)
+        forControlEvents:UIControlEventTouchUpInside];
+    if (DBChromeIsFlat() && !primary && !_flowFilled) {
+      plate = DBDoorPlate();
+      [_flowOptionScroll addSubview:plate];
+    }
+    [_flowOptionScroll addSubview:button];
+    [_flowOptionButtons addObject:button];
+    [_flowOptionPlates addObject:(plate ?: (id)[NSNull null])];
+  }
+  [self applyFlowStyles];
+}
+
+// The primary option wears the Call button's look; the rest are the stock purpose buttons.
+- (void)applyFlowStyles {
+  if (![self flowActive]) return;
+  NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
+  if (DBDoorStyleNeedsFill(purposeStyle) != _flowFilled && [self flowShowing]) {
+    [self renderFlow];
+    [self setNeedsLayout];
+    return;
+  }
+  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
+  UIColor *white = [UIColor whiteColor];
+  UIColor *green = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
+  BOOL seenPrimary = NO;
+  for (NSUInteger i = 0; i < [_flowOptionButtons count] && i < [_flowOptionModels count]; i++) {
+    UIButton *button = [_flowOptionButtons objectAtIndex:i];
+    BOOL primary = !seenPrimary &&
+        [[[_flowOptionModels objectAtIndex:i] objectForKey:@"style"] isEqual:@"primary"];
+    if (primary) {
+      seenPrimary = YES;
+      DBApplyDoorButtonStyle(button, callStyle, white, green, 10);
+      if (_palette != nil && [callStyle objectForKey:@"background"] == nil) {
+        button.backgroundColor = _palette.accent;
+        [button setTitleColor:_palette.accentInk forState:UIControlStateNormal];
+      }
+    } else if (_flowFilled) {
+      DBApplyDoorButtonStyle(button, purposeStyle, [UIColor blackColor], white, 10);
+    }
+  }
+}
+
+#pragma mark - visitor flow input
+
+- (void)onFlowBack {
+  if (![self flowShowing]) return;
+  [_flow applyEvent:@{ @"back" : @YES }];
+  _flowLastInput = DBCallMonotonicTime();
+  [self flowStateChanged];
+}
+
+- (void)onFlowOption:(UIButton *)sender {
+  if (_flowBusy || ![self flowShowing]) return;
+  if (sender.tag < 0 || sender.tag >= (NSInteger)[_flowOptionModels count]) return;
+  NSString *optionID = [[_flowOptionModels objectAtIndex:(NSUInteger)sender.tag]
+      objectForKey:@"id"];
+  _flowLastInput = DBCallMonotonicTime();
+  if ([_flow.mode isEqualToString:DBVisitorFlowModeEnd]) {
+    [_flow applyEvent:@{ @"done" : @YES }];
+    [self flowStateChanged];
+    return;
+  }
+  NSDictionary *plan = [_flow planForTap:optionID];
+  if (plan == nil) return;
+  if ([[plan objectForKey:@"action"] isEqualToString:@"notify"]) {
+    // Core's loop answers; the visitor sees the next page whatever it says, and a failure rings.
+    _flowBusy = YES;
+    NSString *stepID = [plan objectForKey:@"step"];
+    NSString *door = _boot.door ?: @"";
+    DBCoreBridge *core = _core;
+    __weak DBDoorScreen *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSDictionary *result = [core visitorNotify:door step:stepID];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        DBDoorScreen *screen = weakSelf;
+        if (!screen) return;
+        screen->_flowBusy = NO;
+        NSArray *calls = [screen->_flow applyEvent:@{
+            @"tap" : optionID, @"notify_result" : result ?: @{ @"ok" : @NO } }];
+        [screen flowPerformCalls:calls];
+        [screen flowStateChanged];
+      });
+    });
+    return;
+  }
+  NSArray *calls = [_flow applyEvent:@{ @"tap" : optionID }];
+  [self flowPerformCalls:calls];
+  [self flowStateChanged];
+}
+
+// The notify call is already made; every press goes through the existing call path.
+- (void)flowPerformCalls:(NSArray *)calls {
+  for (NSDictionary *call in calls) {
+    NSString *purpose = [call objectForKey:@"press"];
+    if (purpose == nil) continue;
+    if (![self beginCallWithPurpose:purpose]) {
+      [_flow applyEvent:@{ @"press_failed" : @YES }];
+      continue;
+    }
+    NSString *title = nil;
+    if ([purpose length] > 0) {
+      NSDictionary *entry = [DBConfigUtil dig:_cfg
+          path:[NSString stringWithFormat:@"visit_purposes.%@", purpose]];
+      title = [_texts t:@"purpose.sent",
+               [DBConfigUtil labelOf:entry lang:_visitorLang fallback:purpose], nil];
+    }
+    [self showCallingWithTitle:title];
+  }
+}
+
+- (void)flowCallEnded {
+  NSString *reason = _endReason ?: @"ended";
+  _endReason = nil;
+  if (![self flowActive]) return;
+  if ([_flow.mode isEqualToString:DBVisitorFlowModeCalling])
+    [_flow applyEvent:@{ @"call_ended" : reason }];
+  else
+    // A call this screen did not start (a replicated press): the visitor lands on the start page.
+    [_flow applyEvent:@{ @"idle_timeout" : @YES }];
+  _flowRenderedMode = nil;
+}
+
+// Once a second: the idle return on a page and the automatic return from an end page.
+- (void)flowTick {
+  if (![self flowShowing] || _flowDebugHold || _replyShown) return;
+  NSTimeInterval now = DBCallMonotonicTime();
+  if ([_flow.mode isEqualToString:DBVisitorFlowModeEnd]) {
+    if (now - _flowEndSince < [_flow returnSeconds]) return;
+    [_flow applyEvent:@{ @"end_timeout" : @YES }];
+  } else {
+    BOOL needed = [_flow canGoBack] || [_flow.notice length] > 0;
+    if (!needed || now - _flowLastInput < [_flow idleSeconds]) return;
+    [_flow applyEvent:@{ @"idle_timeout" : @YES }];
+  }
+  [self flowStateChanged];
+}
+
+// A small resolved document in the contract's shape, for debug start screens on a panel that has
+// no flow of its own.
+- (NSDictionary *)debugSampleFlow {
+  NSDictionary *(^text)(NSString *, NSString *, NSString *) =
+      ^NSDictionary *(NSString *ja, NSString *en, NSString *zh) {
+    return @{ @"ja" : ja, @"en" : en, @"zh" : zh };
+  };
+  return @{
+    @"schema_version" : @1, @"enabled" : @YES, @"source" : @"default", @"revision" : @"debug",
+    @"start" : @"s_home", @"idle_s" : @45, @"require_call" : @YES, @"issues" : @[],
+    @"steps" : @{
+      @"s_home" : @{ @"kind" : @"page", @"images" : @[],
+        @"title" : text(@"ご用件をお選びください", @"How can we help?", @"请选择来访目的"),
+        @"options" : @[
+          @{ @"id" : @"o_call", @"semantic_id" : @"call.primary", @"style" : @"primary", @"icon" : @"",
+             @"label" : text(@"呼び出す", @"Call", @"呼叫"), @"to" : @"c_any" },
+          @{ @"id" : @"o_visit", @"semantic_id" : @"purpose.button", @"style" : @"normal",
+             @"purpose" : @"p_visit", @"icon" : @"",
+             @"label" : text(@"訪問", @"Visit", @"访客"), @"to" : @"c_visit" },
+          @{ @"id" : @"o_delivery", @"semantic_id" : @"purpose.button", @"style" : @"normal",
+             @"purpose" : @"p_delivery", @"icon" : @"",
+             @"label" : text(@"宅配便", @"Delivery", @"快递"), @"to" : @"s_parcel" } ] },
+      @"s_parcel" : @{ @"kind" : @"page", @"images" : @[],
+        @"title" : text(@"置き配できますか？", @"Can you leave it at the door?", @"可以放在门口吗？"),
+        @"body" : text(@"サイン不要のお荷物は玄関前に置いてください。",
+                        @"If no signature is needed, please leave the parcel by the door.",
+                        @"无需签收的包裹请放在门口。"),
+        @"options" : @[
+          @{ @"id" : @"o_leave", @"semantic_id" : @"call.primary", @"style" : @"primary", @"icon" : @"",
+             @"label" : text(@"置き配する", @"Leave it", @"放在门口"), @"to" : @"e_thanks" },
+          @{ @"id" : @"o_hand", @"semantic_id" : @"purpose.button", @"style" : @"normal", @"icon" : @"",
+             @"label" : text(@"手渡し・サイン必要", @"Hand over / signature", @"需当面签收"),
+             @"to" : @"c_visit" } ] },
+      @"c_any" : @{ @"kind" : @"call" },
+      @"c_visit" : @{ @"kind" : @"call", @"purpose" : @"p_visit" },
+      @"e_thanks" : @{ @"kind" : @"end", @"images" : @[], @"return_s" : @8,
+        @"title" : text(@"ありがとうございました", @"Thank you", @"谢谢") },
+    },
+  };
+}
+
+// Debug start screens "visitor:flow" and "visitor:flow:<step id>". The document may still be on
+// its way from Core, so the request waits for it.
+- (void)debugShowFlowStep:(NSString *)step attempt:(int)attempt {
+  NSString *target = [step hasPrefix:@":"] ? [step substringFromIndex:1] : step;
+  if (![self flowActive] && ![_boot.role isEqualToString:@"door_station"] && attempt == 0) {
+    // An indoor panel has no door of its own: borrow the document of the first door station
+    // whose shell renders the flow.
+    NSMutableArray *doors = [NSMutableArray array];
+    NSDictionary *devices = [DBConfigUtil dig:_cfg path:@"devices"];
+    if ([devices isKindOfClass:[NSDictionary class]])
+      for (NSString *key in [[devices allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+        NSDictionary *entry = [devices objectForKey:key];
+        id door = [entry isKindOfClass:[NSDictionary class]] ? [entry objectForKey:@"door"] : nil;
+        if ([[entry objectForKey:@"role"] isEqual:@"door_station"] &&
+            [door isKindOfClass:[NSString class]] && [door length] > 0) [doors addObject:door];
+      }
+    DBCoreBridge *core = _core;
+    __weak DBDoorScreen *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSDictionary *document = nil;
+      for (NSString *door in doors) {
+        document = [core visitorFlowJson:door];
+        if ([[document objectForKey:@"enabled"] boolValue]) break;
+      }
+      dispatch_async(dispatch_get_main_queue(), ^{
+        // Without a door station that renders the flow, the panel shows a sample document.
+        [weakSelf applyFlowDocument:[[document objectForKey:@"enabled"] boolValue]
+            ? document : [weakSelf debugSampleFlow]];
+        [weakSelf debugShowFlowStep:step attempt:1];
+      });
+    });
+    return;
+  }
+  if (![self flowActive]) {
+    if (attempt < 8) {
+      __weak DBDoorScreen *weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                     dispatch_get_main_queue(), ^{
+        [weakSelf debugShowFlowStep:step attempt:attempt + 1];
+      });
+    }
+    return;
+  }
+  if ([target length] == 0) target = [_flow.flow objectForKey:@"start"];
+  _flowDebugHold = YES;
+  if ([_flow jumpToStep:target]) [self flowStateChanged];
+}
+
+// The flow zone: the page card above the fixed option zone, Back in the bottom row.
+- (void)layoutFlowWithLayout:(DBDoorVisitorLayout)layout {
+  if (![self flowActive]) return;
+  BOOL compact = layout.compact;
+  CGFloat gap = layout.gap;
+  NSArray *models = _flowOptionModels ?: @[];
+  NSMutableArray *secondary = [NSMutableArray array];
+  NSInteger primaryIndex = -1;
+  for (NSUInteger i = 0; i < [models count]; i++) {
+    if (primaryIndex < 0 && [[[models objectAtIndex:i] objectForKey:@"style"] isEqual:@"primary"])
+      primaryIndex = (NSInteger)i;
+    else [secondary addObject:[NSNumber numberWithUnsignedInteger:i]];
+  }
+  BOOL hasPrimary = primaryIndex >= 0;
+  NSInteger count = (NSInteger)[secondary count];
+
+  CGFloat header = 0;
+  if (!_pairBanner.hidden) header += compact ? 44 : 56;
+  if (!_mediaBadge.hidden) header += (header > 0 ? gap : 0) + 40;
+  DBDoorVisitorFlowLayout probe = DBDoorVisitorFlowLayoutMake(layout, 0, hasPrimary, count, 0, YES);
+  CGFloat cellWidth = DBDoorVisitorFlowOptionFrame(probe, hasPrimary, 0, MAX(1, count)).size.width;
+  NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
+  CGFloat fontSize = (compact ? 18 : 22) *
+      DBDoorStyleNumber(purposeStyle, @"font_scale", 1, 0.75, 2);
+  UIFont *font = DBDoorFont(fontSize, _flowFilled || !DBChromeIsFlat());
+  CGFloat rowText = 0;
+  for (NSNumber *index in secondary) {
+    UIButton *button = [_flowOptionButtons objectAtIndex:[index unsignedIntegerValue]];
+    CGSize text = [button.currentTitle sizeWithFont:font
+        constrainedToSize:CGSizeMake(MAX(44, cellWidth - 16), 1000)
+        lineBreakMode:NSLineBreakByWordWrapping];
+    rowText = MAX(rowText, MIN(text.height, font.lineHeight * 2) + 24 +
+                  ([button viewWithTag:kPurposeIconTag] != nil ? kPurposeIconSide + 6 : 0));
+  }
+  DBDoorVisitorFlowLayout flow =
+      DBDoorVisitorFlowLayoutMake(layout, header, hasPrimary, count, rowText, YES);
+
+  // The pairing reminder and the diagnostics line keep their place above the page.
+  _purposeScroll.frame = CGRectMake(flow.columnX, probe.zone.origin.y, flow.columnWidth, header);
+  CGFloat pairHeight = _pairBanner.hidden ? 0 : (compact ? 44 : 56);
+  _pairBanner.frame = CGRectMake(0, 0, flow.columnWidth, pairHeight);
+  _pairPlate.frame = _pairBanner.frame;
+  _mediaBadge.frame = CGRectMake(0, pairHeight > 0 ? pairHeight + gap : 0, flow.columnWidth,
+                                 _mediaBadge.hidden ? 0 : 40);
+  _purposeScroll.contentSize = CGSizeMake(flow.columnWidth, header);
+
+  // Options: fixed above the bottom row; they scroll inside their own viewport when they exceed
+  // half of the screen.
+  _flowOptionScroll.frame = flow.options;
+  _flowOptionScroll.contentSize = CGSizeMake(flow.columnWidth, flow.optionsContentHeight);
+  for (NSUInteger i = 0; i < [_flowOptionButtons count] && i < [models count]; i++) {
+    UIButton *button = [_flowOptionButtons objectAtIndex:i];
+    if ((NSInteger)i == primaryIndex) {
+      CGRect frame = DBDoorVisitorFlowPrimaryFrame(flow);
+      button.frame = frame;
+      NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
+      NSString *kind = [_flow kindOfStep:[[models objectAtIndex:i] objectForKey:@"to"]];
+      BOOL bell = [kind isEqualToString:@"call"];
+      CGFloat bellSide = compact ? 28 : 40;
+      if (bell) {
+        UIColor *callInk = [button titleColorForState:UIControlStateNormal] ?: [UIColor blackColor];
+        [button setImage:[DBIconAsset tintedImageNamed:@"f7:bell_fill" color:callInk
+                                                   size:CGSizeMake(bellSide, bellSide)]
+                forState:UIControlStateNormal];
+        button.titleEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 0);
+      } else {
+        [button setImage:nil forState:UIControlStateNormal];
+        button.titleEdgeInsets = UIEdgeInsetsZero;
+      }
+      CGSize room = CGSizeMake(frame.size.width - 24 - (bell ? bellSide + 12 : 0),
+                               frame.size.height - 16);
+      button.titleLabel.font = DBDoorFittingFont(button.currentTitle ?: @"",
+          (compact ? 24 : 40) * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2),
+          16, YES, room);
+      continue;
+    }
+    NSInteger slot = (NSInteger)[secondary indexOfObject:[NSNumber numberWithUnsignedInteger:i]];
+    CGRect frame = DBDoorVisitorFlowOptionFrame(flow, hasPrimary, slot, count);
+    button.frame = frame;
+    button.titleLabel.font = font;
+    UIView *icon = [button viewWithTag:kPurposeIconTag];
+    if (icon != nil) {
+      CGSize text = [button.currentTitle sizeWithFont:font
+          constrainedToSize:CGSizeMake(MAX(44, frame.size.width - 16), 1000)
+          lineBreakMode:NSLineBreakByWordWrapping];
+      CGFloat block = kPurposeIconSide + 6 + MIN(text.height, font.lineHeight * 2);
+      icon.frame = CGRectMake(floor((frame.size.width - kPurposeIconSide) / 2),
+                              floor((frame.size.height - block) / 2), kPurposeIconSide,
+                              kPurposeIconSide);
+    }
+    id plate = [_flowOptionPlates objectAtIndex:i];
+    if ([plate isKindOfClass:[UIView class]]) [(UIView *)plate setFrame:frame];
+  }
+  _flowFade.frame = CGRectMake(flow.options.origin.x, CGRectGetMaxY(flow.options) - 28,
+                               flow.columnWidth, 28);
+  [(CALayer *)[_flowFade.layer.sublayers firstObject] setFrame:_flowFade.bounds];
+  [self updateFlowFade];
+
+  _flowBackButton.frame = flow.back;
+  _flowBackPlate.frame = flow.back;
+  _flowBackPlate.layer.cornerRadius = 10;
+
+  // The page card: notice, title, images above, text, images below. It scrolls when it is taller
+  // than the room above the options, and sits centred in that room otherwise.
+  CGRect room = flow.content;
+  CGFloat pad = compact ? 12 : 20;
+  CGFloat inner = MAX(0, room.size.width - pad * 2);
+  CGFloat spacing = compact ? 8 : 14;
+  CGFloat y = pad;
+  _flowNotice.font = [UIFont boldSystemFontOfSize:compact ? 17 : 22];
+  _flowTitle.font = [UIFont boldSystemFontOfSize:compact ? 26 : 36];
+  _flowBody.font = [UIFont systemFontOfSize:compact ? 19 : 26];
+  UILabel *labels[2] = { _flowNotice, _flowTitle };
+  for (int i = 0; i < 2; i++) {
+    UILabel *label = labels[i];
+    if (label.hidden) continue;
+    CGFloat height = ceil([label.text sizeWithFont:label.font
+        constrainedToSize:CGSizeMake(inner, 100000)
+        lineBreakMode:NSLineBreakByWordWrapping].height);
+    label.frame = CGRectMake(pad, y, inner, height);
+    y += height + spacing;
+  }
+  for (int pass = 0; pass < 2; pass++) {
+    if (pass == 1 && !_flowBody.hidden) {
+      CGFloat height = ceil([_flowBody.text sizeWithFont:_flowBody.font
+          constrainedToSize:CGSizeMake(inner, 100000)
+          lineBreakMode:NSLineBreakByWordWrapping].height);
+      _flowBody.frame = CGRectMake(pad, y, inner, height);
+      y += height + spacing;
+    }
+    for (NSUInteger i = 0; i < [_flowImageViews count] && i < [_flowImageInfos count]; i++) {
+      BOOL below = [[[_flowImageInfos objectAtIndex:i] objectForKey:@"below"] boolValue];
+      if (below != (pass == 1)) continue;
+      UIImageView *view = [_flowImageViews objectAtIndex:i];
+      UILabel *alt = [_flowImageAlts objectAtIndex:i];
+      CGFloat height;
+      CGFloat width = inner;
+      if (view.image != nil) {
+        height = DBDoorVisitorFlowImageHeight(view.image.size, inner, layout.size.height);
+        width = MIN(inner, height * view.image.size.width / MAX(1, view.image.size.height));
+      } else {
+        height = [alt.text length] > 0
+            ? ceil([alt.text sizeWithFont:alt.font constrainedToSize:CGSizeMake(inner, 1000)
+                            lineBreakMode:NSLineBreakByWordWrapping].height) + 24
+            : 0;
+      }
+      view.frame = CGRectMake(pad + floor((inner - width) / 2), y, width, view.image ? height : 0);
+      alt.frame = CGRectMake(pad, y, inner, view.image ? 0 : height);
+      y += height + spacing;
+    }
+  }
+  CGFloat natural = MAX(0, y - spacing) + pad;
+  CGFloat plateHeight = MIN(natural, room.size.height);
+  _flowPlate.frame = CGRectMake(room.origin.x,
+      room.origin.y + floor((room.size.height - plateHeight) / 2), room.size.width, plateHeight);
+  _flowScroll.frame = _flowPlate.bounds;
+  _flowScroll.contentSize = CGSizeMake(room.size.width, natural);
 }
 
 - (void)layoutSubviews {
@@ -2299,6 +3101,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _callingLabel.font = DBDoorFittingFont(_callingLabel.text ?: @"", compact ? 24 : 40, 14, YES,
                                          statusFrame.size);
 
+  [self layoutFlowWithLayout:layout];
   [self applyRegionInk];
 
   _emergencyOverlay.frame = self.bounds;
