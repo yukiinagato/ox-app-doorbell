@@ -916,11 +916,12 @@
     <string name="flow_editor_add_step">ステップを追加</string>
     <string name="flow_editor_body_hint">本文は段落ごとに 1 行です。段落の中で改行するには \n と入力します。装飾やリンクは使えません。</string>
     <string name="flow_editor_call_flow_note">ウィザードが有効な間は、この設定より優先されます。</string>
-    <string name="flow_editor_call_flow_superseded">ウィザードがオンの間は、この設定は使われません。</string>
-    <string name="flow_editor_conflict">別の端末が同時にウィザードを編集しました。管理画面の「競合の解決」で内容を選んでから保存してください。</string>
+    <string name="flow_editor_call_flow_superseded">ウィザードのステップが設定されているため、この設定は使われません。ウィザードで編集してください。</string>
+    <string name="flow_editor_conflict">同時に行われた変更の解決が必要です。ブラウザの管理画面で「同時に行われた変更を確認」を開いて解決してから、もう一度編集してください。</string>
     <string name="flow_editor_conflict_blocked">ウィザードの別の編集が確認待ちです。このページ上部の確認が必要な編集を解決してから、もう一度保存してください。</string>
     <string name="flow_editor_customize">標準をもとに編集</string>
     <string name="flow_editor_default_note">標準のウィザードを使用中です。編集するとこの家の設定として保存されます。</string>
+    <string name="flow_editor_delete_option">選択肢を削除</string>
     <string name="flow_editor_delete_step">ステップを削除</string>
     <string name="flow_editor_door_start">このドアの最初のページ</string>
     <string name="flow_editor_door_start_inherit">共通の最初のページを使う</string>
@@ -941,9 +942,11 @@
     <string name="flow_editor_field_title">タイトル</string>
     <string name="flow_editor_field_to">送信後に表示するページ</string>
     <string name="flow_editor_idle_s">無操作で最初に戻るまで（秒）</string>
+    <string name="flow_editor_idle_short">最初に戻るまで</string>
     <string name="flow_editor_image_above">本文の上</string>
     <string name="flow_editor_image_alt">画像の説明（読み上げ用）</string>
     <string name="flow_editor_image_below">本文の下</string>
+    <string name="flow_editor_image_choose">アセットから選ぶ</string>
     <string name="flow_editor_image_pick">アセットから選ぶ</string>
     <string name="flow_editor_image_place">画像の位置</string>
     <string name="flow_editor_image_upload">画像をアップロード</string>
@@ -954,7 +957,11 @@
     <string name="flow_editor_kind_end">完了ページ</string>
     <string name="flow_editor_kind_notify">お知らせ（呼び出さない）</string>
     <string name="flow_editor_kind_page">ページ</string>
+    <string name="flow_editor_make_start">最初のページにする</string>
     <string name="flow_editor_max_images">1 ページに入れられる画像は 2 枚までです</string>
+    <string name="flow_editor_new_message">来訪者からのお知らせです</string>
+    <string name="flow_editor_new_option_label">次へ</string>
+    <string name="flow_editor_new_page_title">新しいページ</string>
     <string name="flow_editor_new_step">新しい%1$s</string>
     <string name="flow_editor_no_images">アセットに画像がありません。写真から追加してください。</string>
     <string name="flow_editor_on_unanswered_none">最初のページに戻る</string>
@@ -969,6 +976,7 @@
     <string name="flow_editor_paragraph_add">段落を追加</string>
     <string name="flow_editor_preview">試す</string>
     <string name="flow_editor_purpose_none">用件なし</string>
+    <string name="flow_editor_remove_image">画像を外す</string>
     <string name="flow_editor_require_call">必ず呼び出しにたどり着けるようにする</string>
     <string name="flow_editor_require_call_off_warning">オフにすると、呼び出しのできないドアを作れます。来訪者が住人を呼べなくなることがあります。</string>
     <string name="flow_editor_reset_default">標準に戻す</string>

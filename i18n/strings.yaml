@@ -1451,13 +1451,13 @@ flow_editor.body_hint: { ja: "本文は段落ごとに 1 行です。段落の�
 flow_editor.call_flow_note: { ja: "ウィザードが有効な間は、この設定より優先されます。", en: "While the wizard is in use it takes precedence over this setting.", zh: "向导启用期间，其优先级高于此设置。" }
 flow_editor.call_flow_superseded: { ja: "ウィザードのステップが設定されているため、この設定は使われません。ウィザードで編集してください。", en: "Wizard steps are in use, so this setting is ignored. Edit the wizard instead.", zh: "已设置向导步骤，此设置不再生效，请在向导中编辑。" }
 flow_editor.conflict: { ja: "同時に行われた変更の解決が必要です。ブラウザの管理画面で「同時に行われた変更を確認」を開いて解決してから、もう一度編集してください。", en: "Concurrent changes must be resolved first. Open Admin in a browser, use Review concurrent changes, then edit again.", zh: "需要先解决同时发生的修改。请在浏览器管理页使用“检查同时发生的修改”处理后再编辑。" }
+flow_editor.idle_short: { ja: "最初に戻るまで", en: "Return to start after", zh: "返回起始页前等待" }
 flow_editor.new_page_title: { ja: "新しいページ", en: "New page", zh: "新页面" }
 flow_editor.new_option_label: { ja: "次へ", en: "Continue", zh: "继续" }
 flow_editor.new_message: { ja: "来訪者からのお知らせです", en: "A visitor sent a notification", zh: "访客发来通知" }
 flow_editor.delete_option: { ja: "選択肢を削除", en: "Delete option", zh: "删除选项" }
 flow_editor.make_start: { ja: "最初のページにする", en: "Use as the start page", zh: "设为起始页" }
 flow_editor.remove_image: { ja: "画像を外す", en: "Remove image", zh: "移除图片" }
-flow_editor.image_upload: { ja: "写真を選んでアップロード", en: "Choose a photo to upload", zh: "选择照片上传" }
 flow_editor.image_choose: { ja: "アセットから選ぶ", en: "Choose from Assets", zh: "从素材库选择" }
 visitor_flow.invalid: { ja: "ウィザードを保存できません ({detail})", en: "The wizard could not be saved ({detail})", zh: "无法保存向导（{detail}）" }
 visitor_flow.too_many_steps: { ja: "ステップは 32 個までです", en: "A wizard can have at most 32 steps", zh: "最多 32 个步骤" }
@@ -1482,7 +1482,6 @@ flow_editor.edit: { ja: "ウィザードを編集", en: "Edit the wizard", zh: "
 flow_editor.status_custom: { ja: "独自のウィザードを使用中です（{n} ステップ）。", en: "Using your own wizard ({n} steps).", zh: "正在使用自定义向导（{n} 个步骤）。" }
 flow_editor.status_off: { ja: "ウィザードはオフです。来訪者には従来の呼出画面が表示されます。", en: "The wizard is off. Visitors see the classic call screen.", zh: "向导已关闭，访客看到的是原来的呼叫画面。" }
 flow_editor.status_legacy: { ja: "ウィザードを編集するまで、従来の呼出フローを使います。", en: "The classic call flow stays in use until you customize the wizard.", zh: "在自定义向导之前，仍使用原来的呼叫流程。" }
-flow_editor.call_flow_superseded: { ja: "ウィザードがオンの間は、この設定は使われません。", en: "The wizard replaces this setting while it is on.", zh: "向导开启期间，此设置不再生效。" }
 flow_editor.kind: { ja: "ステップの種類", en: "Step type", zh: "步骤类型" }
 flow_editor.step_untitled: { ja: "（タイトルなし）", en: "(no title)", zh: "（无标题）" }
 flow_editor.set_start: { ja: "最初のページにする", en: "Make this the start page", zh: "设为起始页" }

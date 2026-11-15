@@ -335,8 +335,14 @@ final class VisitorScreenView: UIView {
         airQuality.font = IOSAvailability.visitorFont(size: wide ? 18 : 14, weight: .medium,
                                                       traits: traitCollection)
         noticeLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 18, traits: traitCollection)
+        let noticeRow = UIStackView(arrangedSubviews: [noticeLabel, noticeExpand])
+        noticeRow.axis = .horizontal
+        noticeRow.spacing = 8
+        noticeRow.alignment = .center
+        noticeColumn.addArrangedSubview(noticeRow)
+        noticeColumn.addArrangedSubview(cameraWarning)
         noticeColumn.isHidden = noticeText.isEmpty && cameraWarning.isHidden
-        noticeColumn.arrangedSubviews.first?.isHidden = noticeText.isEmpty
+        noticeRow.isHidden = noticeText.isEmpty
         let header: UIStackView
         if wide {
             clockLabel.textAlignment = .right

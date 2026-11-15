@@ -916,11 +916,12 @@ Delete it?</string>
     <string name="flow_editor_add_step">Add step</string>
     <string name="flow_editor_body_hint">Each paragraph is one row. Type \n inside a paragraph for a line break. Formatting and links are not supported.</string>
     <string name="flow_editor_call_flow_note">While the wizard is in use it takes precedence over this setting.</string>
-    <string name="flow_editor_call_flow_superseded">The wizard replaces this setting while it is on.</string>
-    <string name="flow_editor_conflict">Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.</string>
+    <string name="flow_editor_call_flow_superseded">Wizard steps are in use, so this setting is ignored. Edit the wizard instead.</string>
+    <string name="flow_editor_conflict">Concurrent changes must be resolved first. Open Admin in a browser, use Review concurrent changes, then edit again.</string>
     <string name="flow_editor_conflict_blocked">Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.</string>
     <string name="flow_editor_customize">Customize the built-in wizard</string>
     <string name="flow_editor_default_note">The built-in wizard is in use. Editing it saves a copy as this home\'s own.</string>
+    <string name="flow_editor_delete_option">Delete option</string>
     <string name="flow_editor_delete_step">Delete step</string>
     <string name="flow_editor_door_start">Start page for this door</string>
     <string name="flow_editor_door_start_inherit">Use the shared start page</string>
@@ -941,9 +942,11 @@ Delete it?</string>
     <string name="flow_editor_field_title">Title</string>
     <string name="flow_editor_field_to">Page shown afterwards</string>
     <string name="flow_editor_idle_s">Return to the start after inactivity (seconds)</string>
+    <string name="flow_editor_idle_short">Return to start after</string>
     <string name="flow_editor_image_above">Above the text</string>
     <string name="flow_editor_image_alt">Image description (for screen readers)</string>
     <string name="flow_editor_image_below">Below the text</string>
+    <string name="flow_editor_image_choose">Choose from Assets</string>
     <string name="flow_editor_image_pick">Choose from Assets</string>
     <string name="flow_editor_image_place">Image position</string>
     <string name="flow_editor_image_upload">Upload an image</string>
@@ -954,7 +957,11 @@ Delete it?</string>
     <string name="flow_editor_kind_end">End page</string>
     <string name="flow_editor_kind_notify">Notify without ringing</string>
     <string name="flow_editor_kind_page">Page</string>
+    <string name="flow_editor_make_start">Use as the start page</string>
     <string name="flow_editor_max_images">A page can hold at most two images</string>
+    <string name="flow_editor_new_message">A visitor sent a notification</string>
+    <string name="flow_editor_new_option_label">Continue</string>
+    <string name="flow_editor_new_page_title">New page</string>
     <string name="flow_editor_new_step">New %1$s</string>
     <string name="flow_editor_no_images">There is no image in Assets yet. Add one from a photo.</string>
     <string name="flow_editor_on_unanswered_none">Return to the start page</string>
@@ -969,6 +976,7 @@ Delete it?</string>
     <string name="flow_editor_paragraph_add">Add paragraph</string>
     <string name="flow_editor_preview">Try it</string>
     <string name="flow_editor_purpose_none">No purpose</string>
+    <string name="flow_editor_remove_image">Remove image</string>
     <string name="flow_editor_require_call">Always keep a way to ring</string>
     <string name="flow_editor_require_call_off_warning">When this is off a door can have no way to ring. Visitors may be unable to reach anyone.</string>
     <string name="flow_editor_reset_default">Reset to the built-in wizard</string>

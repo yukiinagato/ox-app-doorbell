@@ -82,7 +82,7 @@ struct VisitorFlowPages {
                 .write([.set("visitor_flow.start", value.stringValue ?? "")])
             })
         }
-        wizard.append(SettingItem("flow_idle", t("flow_editor.idle_s"),
+        wizard.append(SettingItem("flow_idle", t("flow_editor.idle_short"),
                                   .stepper(value: editor.idleSeconds, minimum: 15, maximum: 300, step: 5,
                                            unit: t("prefs.unit_seconds"))) { value in
             .write([.set("visitor_flow.idle_s", SettingValidation.clamp(value.intValue ?? 45, 15, 300))])
@@ -178,7 +178,7 @@ struct VisitorFlowPages {
             sections.append(imagesSection(id, step))
             let seconds = (step["return_s"] as? NSNumber)?.intValue ?? 8
             sections.append(SettingSection([
-                SettingItem("\(id)_return_s", t("flow_editor.field_return_s"),
+                SettingItem("\(id)_return_s", t("flow_editor.idle_short"),
                             .stepper(value: min(60, max(3, seconds)), minimum: 3, maximum: 60, step: 1,
                                      unit: t("prefs.unit_seconds"))) { value in
                     .write(self.editor.update(id) { $0["return_s"] = SettingValidation.clamp(value.intValue ?? 8, 3, 60) })

@@ -918,11 +918,12 @@ Delete it?</value></data>
   <data name="flow_editor_add_step" xml:space="preserve"><value>Add step</value></data>
   <data name="flow_editor_body_hint" xml:space="preserve"><value>Each paragraph is one row. Type \n inside a paragraph for a line break. Formatting and links are not supported.</value></data>
   <data name="flow_editor_call_flow_note" xml:space="preserve"><value>While the wizard is in use it takes precedence over this setting.</value></data>
-  <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>The wizard replaces this setting while it is on.</value></data>
-  <data name="flow_editor_conflict" xml:space="preserve"><value>Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.</value></data>
+  <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>Wizard steps are in use, so this setting is ignored. Edit the wizard instead.</value></data>
+  <data name="flow_editor_conflict" xml:space="preserve"><value>Concurrent changes must be resolved first. Open Admin in a browser, use Review concurrent changes, then edit again.</value></data>
   <data name="flow_editor_conflict_blocked" xml:space="preserve"><value>Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.</value></data>
   <data name="flow_editor_customize" xml:space="preserve"><value>Customize the built-in wizard</value></data>
   <data name="flow_editor_default_note" xml:space="preserve"><value>The built-in wizard is in use. Editing it saves a copy as this home's own.</value></data>
+  <data name="flow_editor_delete_option" xml:space="preserve"><value>Delete option</value></data>
   <data name="flow_editor_delete_step" xml:space="preserve"><value>Delete step</value></data>
   <data name="flow_editor_door_start" xml:space="preserve"><value>Start page for this door</value></data>
   <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>Use the shared start page</value></data>
@@ -943,9 +944,11 @@ Delete it?</value></data>
   <data name="flow_editor_field_title" xml:space="preserve"><value>Title</value></data>
   <data name="flow_editor_field_to" xml:space="preserve"><value>Page shown afterwards</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>Return to the start after inactivity (seconds)</value></data>
+  <data name="flow_editor_idle_short" xml:space="preserve"><value>Return to start after</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>Above the text</value></data>
   <data name="flow_editor_image_alt" xml:space="preserve"><value>Image description (for screen readers)</value></data>
   <data name="flow_editor_image_below" xml:space="preserve"><value>Below the text</value></data>
+  <data name="flow_editor_image_choose" xml:space="preserve"><value>Choose from Assets</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>Choose from Assets</value></data>
   <data name="flow_editor_image_place" xml:space="preserve"><value>Image position</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>Upload an image</value></data>
@@ -956,7 +959,11 @@ Delete it?</value></data>
   <data name="flow_editor_kind_end" xml:space="preserve"><value>End page</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>Notify without ringing</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>Page</value></data>
+  <data name="flow_editor_make_start" xml:space="preserve"><value>Use as the start page</value></data>
   <data name="flow_editor_max_images" xml:space="preserve"><value>A page can hold at most two images</value></data>
+  <data name="flow_editor_new_message" xml:space="preserve"><value>A visitor sent a notification</value></data>
+  <data name="flow_editor_new_option_label" xml:space="preserve"><value>Continue</value></data>
+  <data name="flow_editor_new_page_title" xml:space="preserve"><value>New page</value></data>
   <data name="flow_editor_new_step" xml:space="preserve"><value>New {0}</value></data>
   <data name="flow_editor_no_images" xml:space="preserve"><value>There is no image in Assets yet. Add one from a photo.</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>Return to the start page</value></data>
@@ -971,6 +978,7 @@ Delete it?</value></data>
   <data name="flow_editor_paragraph_add" xml:space="preserve"><value>Add paragraph</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>Try it</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>No purpose</value></data>
+  <data name="flow_editor_remove_image" xml:space="preserve"><value>Remove image</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>Always keep a way to ring</value></data>
   <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>When this is off a door can have no way to ring. Visitors may be unable to reach anyone.</value></data>
   <data name="flow_editor_reset_default" xml:space="preserve"><value>Reset to the built-in wizard</value></data>

@@ -1054,6 +1054,8 @@ final class MainViewController: UIViewController {
         if flowRevision == nil, boot.role == "door_station", visitorScreen != nil, core.isRunning,
            let document = core.visitorFlow(door: boot.door) {
             applyFlowDocument(document)
+        } else if flowRevision == nil {
+            fetchVisitorFlow()
         }
         buildPurposeButtons()
         buildLangBar()
@@ -2295,6 +2297,12 @@ final class MainViewController: UIViewController {
     }
 
     private func applyFlowDocument(_ document: [String: Any]) {
+        if boot.debugScreenshots, let data = try? JSONSerialization.data(withJSONObject: document) {
+            try? data.write(to: URL(fileURLWithPath: BootConfig.dataDir() + "/visitor-flow.json"))
+            if let caps = core.capabilities(), let c = try? JSONSerialization.data(withJSONObject: caps) {
+                try? c.write(to: URL(fileURLWithPath: BootConfig.dataDir() + "/visitor-caps.json"))
+            }
+        }
         let revision = (document["revision"] as? String ?? "") +
             (document["enabled"] as? Bool == true ? "+" : "-")
         guard revision != flowRevision else { return }
@@ -2459,8 +2467,9 @@ final class MainViewController: UIViewController {
         present(dialog, animated: true)
     }
 
-    private func showSettings() {
-        guard presentedViewController == nil else { return }
+    @discardableResult
+    private func showSettings() -> SettingsViewController? {
+        guard presentedViewController == nil else { return nil }
         let settings = SettingsViewController(core: core, boot: boot, texts: texts)
         defer {
             // An indoor panel shows settings in its Settings tab; a door station, which has no
@@ -2474,6 +2483,7 @@ final class MainViewController: UIViewController {
         // and it is remembered, so re-asserting the override on the next activation does not
         // silently undo the administrator's choice.
         settings.onExitKiosk = { ScreenAwake.want(false) }
+        return settings
     }
 
     private func openCallHistory() {
@@ -2707,8 +2717,25 @@ final class MainViewController: UIViewController {
         case "sos": showEmergency(visual: true)
         case "saver": enterScreensaver()
         case "purpose": showPurposeChoice(afterRing: false)
+        case "flow_refresh":
+            flowRevision = nil
+            fetchVisitorFlow()
+        case let template where template.hasPrefix("flow_template:"):
+            let name = String(template.dropFirst("flow_template:".count))
+            let editor = VisitorFlowEditor(config: core.config(), languages: [])
+            if let flow = core.visitorFlowTemplate(name)?["flow"] as? [String: Any] {
+                ConfigWriter(core: core, httpPort: boot.httpPort)
+                    .apply(editor.templateOperations(flow)) { _ in }
+            }
+        case "create_cluster":
+            _ = core.createCluster()
+            refreshNodeInfo()
         default:
             if name.hasPrefix("flow:") { showFlowStep(String(name.dropFirst("flow:".count))) }
+            if name.hasPrefix("settings:"), let settings = showSettings() {
+                let path = String(name.dropFirst("settings:".count)).split(separator: ",").map(String.init)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { settings.openForCapture(path: path) }
+            }
         }
     }
 

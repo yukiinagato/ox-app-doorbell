@@ -107,6 +107,28 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
 
     private static let handlerKey = "settings"
 
+    /// Verification aid behind the screenshot hook: shows the page a drill-down path names.
+    func openForCapture(path: [String]) {
+        guard let list = categoryList, !path.isEmpty else { return }
+        var stack: [UIViewController] = []
+        for end in 1...path.count {
+            let prefix = Array(path.prefix(end))
+            let catalog = self.catalog()
+            if catalog.page(path: prefix) != nil {
+                stack.append(SettingsPageController(host: self, path: prefix))
+            } else if catalog.list(path: prefix) != nil {
+                stack.append(SettingsListController(host: self, path: prefix))
+            }
+        }
+        if usesSplit, let split = children.first as? UISplitViewController,
+           let detail = split.viewControllers.last as? UINavigationController {
+            list.select(path[0])
+            detail.setViewControllers(stack, animated: false)
+        } else {
+            list.navigationController?.setViewControllers([list] + stack, animated: false)
+        }
+    }
+
     /// An iPad in compact multitasking shows the category list first, never an orphan detail.
     func splitViewController(_ splitViewController: UISplitViewController,
                              collapseSecondary secondaryViewController: UIViewController,

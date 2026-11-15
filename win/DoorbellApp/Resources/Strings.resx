@@ -918,11 +918,12 @@
   <data name="flow_editor_add_step" xml:space="preserve"><value>ステップを追加</value></data>
   <data name="flow_editor_body_hint" xml:space="preserve"><value>本文は段落ごとに 1 行です。段落の中で改行するには \n と入力します。装飾やリンクは使えません。</value></data>
   <data name="flow_editor_call_flow_note" xml:space="preserve"><value>ウィザードが有効な間は、この設定より優先されます。</value></data>
-  <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>ウィザードがオンの間は、この設定は使われません。</value></data>
-  <data name="flow_editor_conflict" xml:space="preserve"><value>別の端末が同時にウィザードを編集しました。管理画面の「競合の解決」で内容を選んでから保存してください。</value></data>
+  <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>ウィザードのステップが設定されているため、この設定は使われません。ウィザードで編集してください。</value></data>
+  <data name="flow_editor_conflict" xml:space="preserve"><value>同時に行われた変更の解決が必要です。ブラウザの管理画面で「同時に行われた変更を確認」を開いて解決してから、もう一度編集してください。</value></data>
   <data name="flow_editor_conflict_blocked" xml:space="preserve"><value>ウィザードの別の編集が確認待ちです。このページ上部の確認が必要な編集を解決してから、もう一度保存してください。</value></data>
   <data name="flow_editor_customize" xml:space="preserve"><value>標準をもとに編集</value></data>
   <data name="flow_editor_default_note" xml:space="preserve"><value>標準のウィザードを使用中です。編集するとこの家の設定として保存されます。</value></data>
+  <data name="flow_editor_delete_option" xml:space="preserve"><value>選択肢を削除</value></data>
   <data name="flow_editor_delete_step" xml:space="preserve"><value>ステップを削除</value></data>
   <data name="flow_editor_door_start" xml:space="preserve"><value>このドアの最初のページ</value></data>
   <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>共通の最初のページを使う</value></data>
@@ -943,9 +944,11 @@
   <data name="flow_editor_field_title" xml:space="preserve"><value>タイトル</value></data>
   <data name="flow_editor_field_to" xml:space="preserve"><value>送信後に表示するページ</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>無操作で最初に戻るまで（秒）</value></data>
+  <data name="flow_editor_idle_short" xml:space="preserve"><value>最初に戻るまで</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>本文の上</value></data>
   <data name="flow_editor_image_alt" xml:space="preserve"><value>画像の説明（読み上げ用）</value></data>
   <data name="flow_editor_image_below" xml:space="preserve"><value>本文の下</value></data>
+  <data name="flow_editor_image_choose" xml:space="preserve"><value>アセットから選ぶ</value></data>
   <data name="flow_editor_image_pick" xml:space="preserve"><value>アセットから選ぶ</value></data>
   <data name="flow_editor_image_place" xml:space="preserve"><value>画像の位置</value></data>
   <data name="flow_editor_image_upload" xml:space="preserve"><value>画像をアップロード</value></data>
@@ -956,7 +959,11 @@
   <data name="flow_editor_kind_end" xml:space="preserve"><value>完了ページ</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>お知らせ（呼び出さない）</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>ページ</value></data>
+  <data name="flow_editor_make_start" xml:space="preserve"><value>最初のページにする</value></data>
   <data name="flow_editor_max_images" xml:space="preserve"><value>1 ページに入れられる画像は 2 枚までです</value></data>
+  <data name="flow_editor_new_message" xml:space="preserve"><value>来訪者からのお知らせです</value></data>
+  <data name="flow_editor_new_option_label" xml:space="preserve"><value>次へ</value></data>
+  <data name="flow_editor_new_page_title" xml:space="preserve"><value>新しいページ</value></data>
   <data name="flow_editor_new_step" xml:space="preserve"><value>新しい{0}</value></data>
   <data name="flow_editor_no_images" xml:space="preserve"><value>アセットに画像がありません。写真から追加してください。</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>最初のページに戻る</value></data>
@@ -971,6 +978,7 @@
   <data name="flow_editor_paragraph_add" xml:space="preserve"><value>段落を追加</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>試す</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>用件なし</value></data>
+  <data name="flow_editor_remove_image" xml:space="preserve"><value>画像を外す</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>必ず呼び出しにたどり着けるようにする</value></data>
   <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>オフにすると、呼び出しのできないドアを作れます。来訪者が住人を呼べなくなることがあります。</value></data>
   <data name="flow_editor_reset_default" xml:space="preserve"><value>標準に戻す</value></data>

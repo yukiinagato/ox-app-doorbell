@@ -911,11 +911,12 @@
 "flow_editor.add_step" = "添加步骤";
 "flow_editor.body_hint" = "正文每段一行。段内换行请输入 \\n。不支持格式和链接。";
 "flow_editor.call_flow_note" = "向导启用期间，其优先级高于此设置。";
-"flow_editor.call_flow_superseded" = "向导开启期间，此设置不再生效。";
-"flow_editor.conflict" = "另一台设备同时编辑了向导。请先在管理页面解决冲突再保存。";
+"flow_editor.call_flow_superseded" = "已设置向导步骤，此设置不再生效，请在向导中编辑。";
+"flow_editor.conflict" = "需要先解决同时发生的修改。请在浏览器管理页使用“检查同时发生的修改”处理后再编辑。";
 "flow_editor.conflict_blocked" = "向导的另一处编辑正在等待处理。请先处理本页顶部需要确认的编辑，然后再保存。";
 "flow_editor.customize" = "基于内置向导编辑";
 "flow_editor.default_note" = "当前使用内置向导。编辑后将保存为本住宅的设置。";
+"flow_editor.delete_option" = "删除选项";
 "flow_editor.delete_step" = "删除步骤";
 "flow_editor.door_start" = "此门的起始页";
 "flow_editor.door_start_inherit" = "使用共用起始页";
@@ -936,9 +937,11 @@
 "flow_editor.field_title" = "标题";
 "flow_editor.field_to" = "发送后显示的页面";
 "flow_editor.idle_s" = "无操作返回起始页（秒）";
+"flow_editor.idle_short" = "返回起始页前等待";
 "flow_editor.image_above" = "正文上方";
 "flow_editor.image_alt" = "图片说明（用于朗读）";
 "flow_editor.image_below" = "正文下方";
+"flow_editor.image_choose" = "从素材库选择";
 "flow_editor.image_pick" = "从素材库选择";
 "flow_editor.image_place" = "图片位置";
 "flow_editor.image_upload" = "上传图片";
@@ -949,7 +952,11 @@
 "flow_editor.kind_end" = "结束页";
 "flow_editor.kind_notify" = "通知（不呼叫）";
 "flow_editor.kind_page" = "页面";
+"flow_editor.make_start" = "设为起始页";
 "flow_editor.max_images" = "每页最多两张图片";
+"flow_editor.new_message" = "访客发来通知";
+"flow_editor.new_option_label" = "继续";
+"flow_editor.new_page_title" = "新页面";
 "flow_editor.new_step" = "新建%@";
 "flow_editor.no_images" = "素材库中还没有图片，请从照片添加。";
 "flow_editor.on_unanswered_none" = "返回起始页";
@@ -964,6 +971,7 @@
 "flow_editor.paragraph_add" = "添加段落";
 "flow_editor.preview" = "试用";
 "flow_editor.purpose_none" = "无目的";
+"flow_editor.remove_image" = "移除图片";
 "flow_editor.require_call" = "始终保留呼叫途径";
 "flow_editor.require_call_off_warning" = "关闭后，门口机可能无法呼叫，访客可能联系不到住户。";
 "flow_editor.reset_default" = "恢复内置向导";

@@ -911,11 +911,12 @@
 "flow_editor.add_step" = "Add step";
 "flow_editor.body_hint" = "Each paragraph is one row. Type \\n inside a paragraph for a line break. Formatting and links are not supported.";
 "flow_editor.call_flow_note" = "While the wizard is in use it takes precedence over this setting.";
-"flow_editor.call_flow_superseded" = "The wizard replaces this setting while it is on.";
-"flow_editor.conflict" = "Another device edited the wizard at the same time. Resolve the conflict in Admin before saving.";
+"flow_editor.call_flow_superseded" = "Wizard steps are in use, so this setting is ignored. Edit the wizard instead.";
+"flow_editor.conflict" = "Concurrent changes must be resolved first. Open Admin in a browser, use Review concurrent changes, then edit again.";
 "flow_editor.conflict_blocked" = "Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.";
 "flow_editor.customize" = "Customize the built-in wizard";
 "flow_editor.default_note" = "The built-in wizard is in use. Editing it saves a copy as this home's own.";
+"flow_editor.delete_option" = "Delete option";
 "flow_editor.delete_step" = "Delete step";
 "flow_editor.door_start" = "Start page for this door";
 "flow_editor.door_start_inherit" = "Use the shared start page";
@@ -936,9 +937,11 @@
 "flow_editor.field_title" = "Title";
 "flow_editor.field_to" = "Page shown afterwards";
 "flow_editor.idle_s" = "Return to the start after inactivity (seconds)";
+"flow_editor.idle_short" = "Return to start after";
 "flow_editor.image_above" = "Above the text";
 "flow_editor.image_alt" = "Image description (for screen readers)";
 "flow_editor.image_below" = "Below the text";
+"flow_editor.image_choose" = "Choose from Assets";
 "flow_editor.image_pick" = "Choose from Assets";
 "flow_editor.image_place" = "Image position";
 "flow_editor.image_upload" = "Upload an image";
@@ -949,7 +952,11 @@
 "flow_editor.kind_end" = "End page";
 "flow_editor.kind_notify" = "Notify without ringing";
 "flow_editor.kind_page" = "Page";
+"flow_editor.make_start" = "Use as the start page";
 "flow_editor.max_images" = "A page can hold at most two images";
+"flow_editor.new_message" = "A visitor sent a notification";
+"flow_editor.new_option_label" = "Continue";
+"flow_editor.new_page_title" = "New page";
 "flow_editor.new_step" = "New %@";
 "flow_editor.no_images" = "There is no image in Assets yet. Add one from a photo.";
 "flow_editor.on_unanswered_none" = "Return to the start page";
@@ -964,6 +971,7 @@
 "flow_editor.paragraph_add" = "Add paragraph";
 "flow_editor.preview" = "Try it";
 "flow_editor.purpose_none" = "No purpose";
+"flow_editor.remove_image" = "Remove image";
 "flow_editor.require_call" = "Always keep a way to ring";
 "flow_editor.require_call_off_warning" = "When this is off a door can have no way to ring. Visitors may be unable to reach anyone.";
 "flow_editor.reset_default" = "Reset to the built-in wizard";

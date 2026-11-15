@@ -151,4 +151,75 @@ final class VisitorFlowTests: XCTestCase {
         walker.pressFinished(success: true)
         XCTAssertEqual(walker.mode, .calling)
     }
+
+    // MARK: Layout of the page renderer
+
+    private func page(options: Int, body: String = "") -> VisitorFlowPage {
+        let list = (0..<options).map { index in
+            VisitorFlowOption(id: "o\(index)", semanticId: index == 0 ? "call.primary" : "purpose.button",
+                              label: "Option number \(index)", icon: "", isPrimary: index == 0, purpose: "")
+        }
+        return VisitorFlowPage(id: "s", kind: "page", title: "Title", body: body, images: [],
+                               options: list, canGoBack: true, showsDone: false)
+    }
+
+    private func laidOut(width: CGFloat, height: CGFloat, page: VisitorFlowPage) -> VisitorFlowView {
+        let view = VisitorFlowView(texts: Texts())
+        view.translatesAutoresizingMaskIntoConstraints = true
+        view.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        view.viewportHeight = height
+        view.render(page, notice: nil)
+        for _ in 0..<3 {
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+        }
+        return view
+    }
+
+    func testOptionsUseOneColumnOnAPhoneAndTwoOnAWideScreen() {
+        let phone = laidOut(width: 390, height: 700, page: page(options: 3))
+        XCTAssertEqual(phone.columnsForTesting, 1)
+        let buttons = phone.optionButtonsForTesting
+        XCTAssertEqual(Set(buttons.map { $0.convert($0.bounds, to: phone).minX }).count, 1)
+        let wide = laidOut(width: 820, height: 1000, page: page(options: 3))
+        XCTAssertEqual(wide.columnsForTesting, 2)
+        let secondRow = wide.optionButtonsForTesting.dropFirst().map { $0.convert($0.bounds, to: wide).minY }
+        XCTAssertEqual(Set(secondRow).count, 1, "the two normal options share a row")
+    }
+
+    func testEveryOptionIsAtLeastTheVisitorTouchMinimum() {
+        let view = laidOut(width: 390, height: 700, page: page(options: 4))
+        for button in view.optionButtonsForTesting {
+            XCTAssertGreaterThanOrEqual(button.bounds.height, 72)
+        }
+    }
+
+    func testOptionZoneNeverExceedsHalfTheViewportAndScrollsInternally() {
+        let view = laidOut(width: 390, height: 700, page: page(options: 12))
+        let zone = view.optionZoneForTesting
+        XCTAssertLessThanOrEqual(zone.bounds.height, 350.5)
+        XCTAssertTrue(zone.isScrollEnabled)
+        XCTAssertGreaterThan(zone.contentSize.height, zone.bounds.height)
+        let frame = zone.convert(zone.bounds, to: view)
+        XCTAssertLessThanOrEqual(frame.maxY, view.bounds.height + 0.5)
+    }
+
+    func testOptionZoneStaysAtTheBottomWhileTheContentScrolls() {
+        let long = (0..<60).map { "Line \($0)" }.joined(separator: "\n")
+        let view = laidOut(width: 390, height: 700, page: page(options: 2, body: long))
+        let zone = view.optionZoneForTesting
+        let content = view.contentZoneForTesting
+        XCTAssertGreaterThan(content.contentSize.height, content.bounds.height)
+        XCTAssertFalse(zone.isScrollEnabled)
+        XCTAssertLessThanOrEqual(zone.convert(zone.bounds, to: view).maxY, view.bounds.height + 0.5)
+        XCTAssertGreaterThan(zone.convert(zone.bounds, to: view).minY, content.convert(content.bounds, to: view).minY)
+    }
+
+    func testTapOnAnOptionReportsItsId() {
+        let view = laidOut(width: 390, height: 700, page: page(options: 2))
+        var tapped = ""
+        view.onOption = { tapped = $0 }
+        view.optionButtonsForTesting[1].sendActions(for: .touchUpInside)
+        XCTAssertEqual(tapped, "o1")
+    }
 }

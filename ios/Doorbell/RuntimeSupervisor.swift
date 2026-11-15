@@ -80,6 +80,7 @@ final class RuntimeSupervisor {
             #endif
             noteMainThreadResponsive()
             publishCapabilities()
+            if supportsUiManifest { publishUiManifest() }
             publishRuntime()
             return
         }
@@ -512,8 +513,7 @@ final class RuntimeSupervisor {
         #else
         let ids = ["call.primary", "cancel.call", "call.end", "purpose.button",
                    "sos.trigger", "sos.cancel", "ring.title", "ring.action",
-                   "reply.button", "monitor.close", "status.offline",
-                   "flow.back", "flow.text", "flow.done"]
+                   "reply.button", "monitor.close", "status.offline"]
         let minimumTouch = 44
         #endif
         let safety = Set(["cancel.call", "call.end", "sos.trigger", "sos.cancel"])

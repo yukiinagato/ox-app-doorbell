@@ -144,6 +144,8 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         backButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
         doneButton.setTitle(texts.t("flow.done"), for: .normal)
         doneButton.titleLabel?.numberOfLines = 0
+        doneButton.titleLabel?.font = IOSAvailability.visitorFont(size: 28, weight: .semibold,
+                                                                  traits: traitCollection)
         doneButton.titleLabel?.textAlignment = .center
         doneButton.accessibilityIdentifier = "flow_done"
         doneButton.layer.cornerRadius = 18
@@ -403,6 +405,13 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         body("flow.done", doneButton)
         body("flow.text", bodyLabel)
     }
+
+    #if DEBUG
+    var optionZoneForTesting: UIScrollView { return optionScroll }
+    var contentZoneForTesting: UIScrollView { return contentScroll }
+    var optionButtonsForTesting: [UIButton] { return optionButtons.map { $0.button } }
+    var columnsForTesting: Int { return columns }
+    #endif
 
     // MARK: - Layout
 
