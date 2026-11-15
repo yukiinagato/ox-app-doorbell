@@ -118,6 +118,9 @@ namespace DoorbellApp
                 case "p_visit": return "IconHome";
                 case "p_delivery": return "IconPackage";
                 case "p_mail": return "IconMail";
+                case "p_sales": return "IconBriefcase";
+                case "p_utility": return "IconWrench";
+                case "p_other": return "IconQuestionCircle";
                 default: return null;
             }
         }

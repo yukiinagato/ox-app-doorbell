@@ -341,6 +341,12 @@ namespace DoorbellApp.Settings
         private RepeatButton StepButton(bool up, string name)
         {
             var icon = Fluent.Icon("IconChevronDown");
+            if (icon != null)
+            {
+                // A PathIcon stretches to its host, so the glyph is given a size of its own.
+                icon.Width = 16;
+                icon.Height = 16;
+            }
             if (icon != null && up)
             {
                 icon.RenderTransformOrigin = new Point(0.5, 0.5);
