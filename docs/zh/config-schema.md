@@ -892,7 +892,7 @@ iOS、iOS 5 兼容版、Android 和 Windows 原生门口机遵循上述流程。
 一半的步骤。对不同步骤的并发编辑会合并；对同一步骤的并发编辑按整个步骤后写者胜出。一次编辑用一个批次
 保存，因为图结构是针对批次生效后的配置检查的：最多 32 个步骤；所有目标存在；`start` 和每个门的入口是
 页面；notify 指向 end；`on_unanswered` 指向页面；页面不成环且最多 6 层；引用的来访目的、图片素材和快照
-摄像头存在。错误为 `visitor_flow.<code>`，其后可带 `: <step>[.<option>]`。带正文或图片且选项超过 4 个的
+摄像头存在。错误为 `visitor_flow.<code>`，其后可带 `: <位置>`（步骤、选项、图片或带语言的字段）；上限等数值放在 `err` 旁的 `detail` 对象中。全部错误码见 `visitor-flow-contract.md` 第 8.1 节。带正文或图片且选项超过 4 个的
 页面会被接受，并返回警告 `visitor_flow.crowded_page`。
 
 `visitor_flow.require_call`（默认 true）拒绝起始页或任一门的起始页无法到达 `call` 的流程。设为 false 可允许

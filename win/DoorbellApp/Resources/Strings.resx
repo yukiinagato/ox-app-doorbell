@@ -1078,6 +1078,58 @@
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>現在の用件から作成</value></data>
   <data name="flow_editor_templates" xml:space="preserve"><value>テンプレート</value></data>
   <data name="flow_editor_title" xml:space="preserve"><value>来訪者ウィザード</value></data>
+  <data name="flow_error_asset_not_image" xml:space="preserve"><value>選んだ素材は画像ではありません。画像を選んでください</value></data>
+  <data name="flow_error_bad_asset" xml:space="preserve"><value>画像の指定が正しくありません。素材から選び直してください</value></data>
+  <data name="flow_error_bad_boolean" xml:space="preserve"><value>オンかオフで指定してください</value></data>
+  <data name="flow_error_bad_character" xml:space="preserve"><value>使えない制御文字が含まれています（{0}）。削除してください</value></data>
+  <data name="flow_error_bad_door_flow" xml:space="preserve"><value>ドアごとの設定が正しくありません。最初のページだけ指定できます</value></data>
+  <data name="flow_error_bad_enabled" xml:space="preserve"><value>有効・無効の指定が正しくありません</value></data>
+  <data name="flow_error_bad_icon" xml:space="preserve"><value>アイコン名が正しくありません</value></data>
+  <data name="flow_error_bad_idle_s" xml:space="preserve"><value>無操作の秒数は {0} から {1} にしてください</value></data>
+  <data name="flow_error_bad_images" xml:space="preserve"><value>画像の指定が正しくありません。選び直してください</value></data>
+  <data name="flow_error_bad_language" xml:space="preserve"><value>言語コードが正しくありません。ja、en、zh などを使ってください</value></data>
+  <data name="flow_error_bad_option_id" xml:space="preserve"><value>選択肢の ID が空か重複しているか、使えない文字を含みます</value></data>
+  <data name="flow_error_bad_order" xml:space="preserve"><value>並び順は {0} から {1} の整数にしてください</value></data>
+  <data name="flow_error_bad_placement" xml:space="preserve"><value>画像の位置は「上」か「下」にしてください</value></data>
+  <data name="flow_error_bad_purpose" xml:space="preserve"><value>用件の指定が正しくありません。一覧から選んでください</value></data>
+  <data name="flow_error_bad_return_s" xml:space="preserve"><value>戻るまでの秒数は {0} から {1} にしてください</value></data>
+  <data name="flow_error_bad_snapshot" xml:space="preserve"><value>静止画の設定が正しくありません</value></data>
+  <data name="flow_error_bad_snapshot_camera" xml:space="preserve"><value>静止画のカメラ指定が正しくありません。カメラを選び直してください</value></data>
+  <data name="flow_error_bad_snapshot_source" xml:space="preserve"><value>静止画の取得元はカメラかドア端末から選んでください</value></data>
+  <data name="flow_error_bad_start" xml:space="preserve"><value>最初のページの指定が正しくありません。ページを選んでください</value></data>
+  <data name="flow_error_bad_step" xml:space="preserve"><value>ステップの内容が正しくありません。入力し直してください</value></data>
+  <data name="flow_error_bad_step_id" xml:space="preserve"><value>ステップ ID は英数字、_、- の 32 文字以内にしてください</value></data>
+  <data name="flow_error_bad_style" xml:space="preserve"><value>ボタンの種類は「主ボタン」か「通常」にしてください</value></data>
+  <data name="flow_error_bad_target" xml:space="preserve"><value>移動先の指定が正しくありません。一覧から選んでください</value></data>
+  <data name="flow_error_bad_target_kind" xml:space="preserve"><value>移動先の種類が合いません。通知は終了へ、不在時の移動先はページにしてください</value></data>
+  <data name="flow_error_bad_text" xml:space="preserve"><value>文字の形式が正しくありません。入力し直してください</value></data>
+  <data name="flow_error_container_write" xml:space="preserve"><value>ウィザード全体は直接書き換えられません。ステップごとに保存してください</value></data>
+  <data name="flow_error_cycle" xml:space="preserve"><value>ページが循環しています。戻る選択肢を外してください</value></data>
+  <data name="flow_error_disabled_purpose" xml:space="preserve"><value>無効になっている用件を使っています。来訪者には表示されません</value></data>
+  <data name="flow_error_missing_start" xml:space="preserve"><value>最初のページを選んでください</value></data>
+  <data name="flow_error_missing_target" xml:space="preserve"><value>移動先が選ばれていません。移動先を選んでください</value></data>
+  <data name="flow_error_multiple_primary" xml:space="preserve"><value>主ボタンは 1 ページに 1 つだけです。他を通常に変えてください</value></data>
+  <data name="flow_error_no_options" xml:space="preserve"><value>ページには選択肢を 1 つ以上追加してください</value></data>
+  <data name="flow_error_no_reachable_call" xml:space="preserve"><value>最初のページから呼び出しにたどり着けません。呼び出しへ進む選択肢を追加してください</value></data>
+  <data name="flow_error_option_needs_label" xml:space="preserve"><value>選択肢にはラベルか用件を設定してください</value></data>
+  <data name="flow_error_start_not_page" xml:space="preserve"><value>最初のページにはページを選んでください</value></data>
+  <data name="flow_error_step_leaf_write" xml:space="preserve"><value>ステップの一部だけは保存できません。ステップ全体を保存してください</value></data>
+  <data name="flow_error_text_required" xml:space="preserve"><value>必須の文字が入力されていません。入力してください</value></data>
+  <data name="flow_error_text_too_long" xml:space="preserve"><value>文字数が上限を超えています（{0}：上限 {1}、現在 {2}）</value></data>
+  <data name="flow_error_too_deep" xml:space="preserve"><value>ページの階層が深すぎます（上限 {0}、現在 {1}）</value></data>
+  <data name="flow_error_too_many_images" xml:space="preserve"><value>画像が多すぎます（上限 {0}、現在 {1}）</value></data>
+  <data name="flow_error_too_many_languages" xml:space="preserve"><value>言語が多すぎます（上限 {0}、現在 {1}）</value></data>
+  <data name="flow_error_too_many_options" xml:space="preserve"><value>選択肢が多すぎます（上限 {0}、現在 {1}）</value></data>
+  <data name="flow_error_too_many_paragraphs" xml:space="preserve"><value>段落が多すぎます（{0}：上限 {1}、現在 {2}）</value></data>
+  <data name="flow_error_too_many_steps" xml:space="preserve"><value>ステップが多すぎます（上限 {0}、現在 {1}）</value></data>
+  <data name="flow_error_unknown_asset" xml:space="preserve"><value>選んだ画像が素材にありません。画像を選び直してください</value></data>
+  <data name="flow_error_unknown_camera" xml:space="preserve"><value>選んだカメラに静止画 URL がありません。カメラ設定を確認してください</value></data>
+  <data name="flow_error_unknown_field" xml:space="preserve"><value>このステップに使えない項目があります。削除してください</value></data>
+  <data name="flow_error_unknown_key" xml:space="preserve"><value>不明な設定項目です</value></data>
+  <data name="flow_error_unknown_kind" xml:space="preserve"><value>ステップの種類が不明です。ページ、呼び出し、通知、終了から選んでください</value></data>
+  <data name="flow_error_unknown_purpose" xml:space="preserve"><value>存在しない用件を使っています。用件を選び直してください</value></data>
+  <data name="flow_error_unknown_start" xml:space="preserve"><value>最初のページが存在しません。ページを選び直してください</value></data>
+  <data name="flow_error_unknown_target" xml:space="preserve"><value>移動先のステップがありません。移動先を選び直してください</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>{0} が応答</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>応答した端末</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>ドア</value></data>

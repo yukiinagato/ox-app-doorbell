@@ -839,6 +839,15 @@ TEST_CASE("visitor flow node: an older core accepts and merges the unknown visit
   CHECK(json::getString(parsed(a.node->configBatchJson(ops({setOp(
                             "visitor_flow.steps.s_two", R"({"kind":"survey"})")}))).get(), "err") ==
         "visitor_flow.unknown_kind: s_two");
+  {
+    auto refused = parsed(a.node->configBatchJson(ops({setOp(
+        "visitor_flow.steps.s_two", R"({"kind":"end","title":{"ja":")" + std::string(61, 'a') + R"("}})")})));
+    CHECK(json::getString(refused.get(), "err") == "visitor_flow.text_too_long: s_two.title.ja");
+    const cJSON* detail = json::get(refused.get(), "detail");
+    CHECK(json::getInt(detail, "limit") == 60);
+    CHECK(json::getInt(detail, "value") == 61);
+    CHECK(json::getString(detail, "lang") == "ja");
+  }
   a.node->setConfigKey("ui.visitor_lang_revert_s", "30");
   rig.run(500);
   CHECK(at(*b.node, "ui.visitor_lang_revert_s") == "30");

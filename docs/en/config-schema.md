@@ -1193,7 +1193,7 @@ the whole step. One edit is one batch, because the graph is checked on the confi
 would leave: at most 32 steps; every target exists; `start` and each door's start are pages; a
 notify leads to an end; `on_unanswered` leads to a page; pages do not loop and nest at most 6
 deep; referenced purposes, image assets and snapshot cameras exist. Errors are
-`visitor_flow.<code>` optionally followed by `: <step>[.<option>]`. A page with text or images
+`visitor_flow.<code>` optionally followed by `: <location>` (a step, option, image or language-qualified field); numbers such as limits ride in a `detail` object beside `err`. Every code is listed in `visitor-flow-contract.md` section 8.1. A page with text or images
 and more than four options is accepted with warning `visitor_flow.crowded_page`.
 
 `visitor_flow.require_call` (default true) rejects a flow whose entry page, or any door's entry

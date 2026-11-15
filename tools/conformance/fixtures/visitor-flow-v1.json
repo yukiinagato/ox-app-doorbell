@@ -4267,7 +4267,7 @@
      }
     }
    },
-   "write": "visitor_flow.unknown_asset: s_where",
+   "write": "visitor_flow.unknown_asset: s_where.images[0]",
    "expect": {
     "schema_version": 1,
     "enabled": true,
@@ -5256,7 +5256,7 @@
      }
     }
    },
-   "write": "visitor_flow.unknown_target: start",
+   "write": "visitor_flow.unknown_start: start",
    "expect": {
     "schema_version": 1,
     "enabled": true,

@@ -40,13 +40,18 @@ struct Warning {
   std::string message_key;
 };
 
+// JSON object with the numbers (limit, value, min, max) and language behind the most recent
+// refusal on the calling thread, or empty when that refusal has none. Valid until the next call
+// into this module on the same thread.
+const std::string& lastErrorDetail();
+
 // True when a write to key (carrying value, null for a delete) can change the effective flow of
 // some door, so the caller must run candidateValid on the configuration that would result.
 bool touchesFlow(const std::string& key, const cJSON* value);
 
 // Shape of one written key: leaves have the right type and range, a step is one complete
 // object of a known kind, and nothing below a step is written on its own. Errors are
-// "visitor_flow.<code>" optionally followed by ": <step>[.<option>]".
+// "visitor_flow.<code>" optionally followed by ": <location>"; docs/en/visitor-flow-contract.md lists every code.
 bool writeKeyValid(const std::string& key, const cJSON* value, std::string* error);
 
 // Graph rules for the configuration a write would produce: targets exist and have the right

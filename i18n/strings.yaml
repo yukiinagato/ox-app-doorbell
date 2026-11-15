@@ -1520,6 +1520,58 @@ visitor_flow.too_deep: { ja: "ページは 6 階層までです", en: "Pages can
 visitor_flow.no_reachable_call: { ja: "最初のページから呼び出しにたどり着けません", en: "No option leads to a call from the start page", zh: "从起始页无法到达呼叫" }
 visitor_flow.crowded_page: { ja: "本文や画像のあるページは選択肢を 4 つ以内にすると見やすくなります", en: "A page with text or images reads best with four options or fewer", zh: "带正文或图片的页面建议不超过 4 个选项" }
 visitor_flow.no_call: { ja: "このウィザードには呼び出しがありません。来訪者は住人を呼び出せません。", en: "This wizard never rings. Visitors cannot call anyone.", zh: "此向导不包含呼叫，访客无法呼叫住户。" }
+flow_error.bad_step_id: { ja: "ステップ ID は英数字、_、- の 32 文字以内にしてください", en: "Use a step ID of up to 32 letters, digits, _ or -", zh: "步骤 ID 只能用字母、数字、_ 或 -，最多 32 个字符" }
+flow_error.bad_step: { ja: "ステップの内容が正しくありません。入力し直してください", en: "This step is not valid. Fill it in again", zh: "步骤内容无效，请重新填写" }
+flow_error.unknown_kind: { ja: "ステップの種類が不明です。ページ、呼び出し、通知、終了から選んでください", en: "Unknown step type. Choose page, call, notify or end", zh: "步骤类型未知，请选择页面、呼叫、通知或结束" }
+flow_error.unknown_field: { ja: "このステップに使えない項目があります。削除してください", en: "This step has a field it cannot use. Remove it", zh: "此步骤含有不支持的字段，请删除" }
+flow_error.no_options: { ja: "ページには選択肢を 1 つ以上追加してください", en: "Add at least one option to this page", zh: "请至少为此页面添加一个选项" }
+flow_error.too_many_options: { ja: "選択肢が多すぎます（上限 {limit}、現在 {value}）", en: "Too many options (limit {limit}, now {value})", zh: "选项过多（上限 {limit}，当前 {value}）" }
+flow_error.bad_option_id: { ja: "選択肢の ID が空か重複しているか、使えない文字を含みます", en: "An option ID is empty, repeated or has an unusable character", zh: "选项 ID 为空、重复或含有不可用字符" }
+flow_error.option_needs_label: { ja: "選択肢にはラベルか用件を設定してください", en: "Give this option a label or a visit purpose", zh: "请为选项设置标签或来访目的" }
+flow_error.text_required: { ja: "必須の文字が入力されていません。入力してください", en: "Required text is empty. Enter some text", zh: "必填文字为空，请填写" }
+flow_error.text_too_long: { ja: "文字数が上限を超えています（{lang}：上限 {limit}、現在 {value}）", en: "Text is too long ({lang}: limit {limit}, now {value})", zh: "文字超出长度限制（{lang}：上限 {limit}，当前 {value}）" }
+flow_error.too_many_paragraphs: { ja: "段落が多すぎます（{lang}：上限 {limit}、現在 {value}）", en: "Too many paragraphs ({lang}: limit {limit}, now {value})", zh: "段落过多（{lang}：上限 {limit}，当前 {value}）" }
+flow_error.bad_character: { ja: "使えない制御文字が含まれています（{lang}）。削除してください", en: "The text has a control character it cannot use ({lang}). Remove it", zh: "文字中含有不可用的控制字符（{lang}），请删除" }
+flow_error.bad_text: { ja: "文字の形式が正しくありません。入力し直してください", en: "The text is in the wrong format. Enter it again", zh: "文字格式无效，请重新输入" }
+flow_error.bad_language: { ja: "言語コードが正しくありません。ja、en、zh などを使ってください", en: "Invalid language code. Use ja, en, zh and so on", zh: "语言代码无效，请使用 ja、en、zh 等" }
+flow_error.too_many_languages: { ja: "言語が多すぎます（上限 {limit}、現在 {value}）", en: "Too many languages (limit {limit}, now {value})", zh: "语言过多（上限 {limit}，当前 {value}）" }
+flow_error.bad_icon: { ja: "アイコン名が正しくありません", en: "The icon name is not valid", zh: "图标名称无效" }
+flow_error.bad_style: { ja: "ボタンの種類は「主ボタン」か「通常」にしてください", en: "Set the button style to main or normal", zh: "按钮样式只能是主按钮或普通" }
+flow_error.bad_enabled: { ja: "有効・無効の指定が正しくありません", en: "The on/off setting is not valid", zh: "启用/停用设置无效" }
+flow_error.bad_purpose: { ja: "用件の指定が正しくありません。一覧から選んでください", en: "The visit purpose is not valid. Pick one from the list", zh: "来访目的无效，请从列表中选择" }
+flow_error.missing_target: { ja: "移動先が選ばれていません。移動先を選んでください", en: "No destination is chosen. Choose where it leads", zh: "未选择目标步骤，请选择" }
+flow_error.bad_target: { ja: "移動先の指定が正しくありません。一覧から選んでください", en: "The destination is not valid. Pick one from the list", zh: "目标步骤无效，请从列表中选择" }
+flow_error.multiple_primary: { ja: "主ボタンは 1 ページに 1 つだけです。他を通常に変えてください", en: "Only one main button per page. Change the others to normal", zh: "每页只能有一个主按钮，请把其他按钮改为普通" }
+flow_error.too_many_images: { ja: "画像が多すぎます（上限 {limit}、現在 {value}）", en: "Too many images (limit {limit}, now {value})", zh: "图片过多（上限 {limit}，当前 {value}）" }
+flow_error.bad_images: { ja: "画像の指定が正しくありません。選び直してください", en: "The images are not valid. Choose them again", zh: "图片设置无效，请重新选择" }
+flow_error.bad_asset: { ja: "画像の指定が正しくありません。素材から選び直してください", en: "The image is not valid. Choose it again from Assets", zh: "图片无效，请从素材库重新选择" }
+flow_error.bad_placement: { ja: "画像の位置は「上」か「下」にしてください", en: "Set the image position to above or below", zh: "图片位置只能是上方或下方" }
+flow_error.bad_order: { ja: "並び順は {min} から {max} の整数にしてください", en: "Use a whole number from {min} to {max} for the order", zh: "顺序须为 {min} 到 {max} 的整数" }
+flow_error.bad_return_s: { ja: "戻るまでの秒数は {min} から {max} にしてください", en: "Set the return time to {min}-{max} seconds", zh: "返回时间须为 {min} 到 {max} 秒" }
+flow_error.bad_snapshot: { ja: "静止画の設定が正しくありません", en: "The snapshot setting is not valid", zh: "快照设置无效" }
+flow_error.bad_snapshot_source: { ja: "静止画の取得元はカメラかドア端末から選んでください", en: "Choose the camera or the door station as the snapshot source", zh: "快照来源请选择摄像头或门口机" }
+flow_error.bad_snapshot_camera: { ja: "静止画のカメラ指定が正しくありません。カメラを選び直してください", en: "The snapshot camera is not valid. Choose the camera again", zh: "快照摄像头设置无效，请重新选择" }
+flow_error.bad_start: { ja: "最初のページの指定が正しくありません。ページを選んでください", en: "The start page is not valid. Choose a page", zh: "起始页设置无效，请选择页面" }
+flow_error.bad_door_flow: { ja: "ドアごとの設定が正しくありません。最初のページだけ指定できます", en: "The per-door setting is not valid. Only the start page can be set", zh: "门口机单独设置无效，仅可指定起始页" }
+flow_error.bad_idle_s: { ja: "無操作の秒数は {min} から {max} にしてください", en: "Set the idle time to {min}-{max} seconds", zh: "无操作时间须为 {min} 到 {max} 秒" }
+flow_error.bad_boolean: { ja: "オンかオフで指定してください", en: "Set this to on or off", zh: "请设置为开或关" }
+flow_error.container_write: { ja: "ウィザード全体は直接書き換えられません。ステップごとに保存してください", en: "The whole wizard cannot be written at once. Save it step by step", zh: "不能一次写入整个向导，请逐步骤保存" }
+flow_error.step_leaf_write: { ja: "ステップの一部だけは保存できません。ステップ全体を保存してください", en: "Part of a step cannot be saved alone. Save the whole step", zh: "不能单独保存步骤的一部分，请保存整个步骤" }
+flow_error.unknown_key: { ja: "不明な設定項目です", en: "Unknown setting", zh: "未知的设置项" }
+flow_error.too_many_steps: { ja: "ステップが多すぎます（上限 {limit}、現在 {value}）", en: "Too many steps (limit {limit}, now {value})", zh: "步骤过多（上限 {limit}，当前 {value}）" }
+flow_error.unknown_purpose: { ja: "存在しない用件を使っています。用件を選び直してください", en: "A visit purpose used here does not exist. Choose another", zh: "使用了不存在的来访目的，请重新选择" }
+flow_error.disabled_purpose: { ja: "無効になっている用件を使っています。来訪者には表示されません", en: "A visit purpose used here is switched off. Visitors will not see it", zh: "使用了已停用的来访目的，访客将看不到" }
+flow_error.unknown_asset: { ja: "選んだ画像が素材にありません。画像を選び直してください", en: "The chosen image is not in Assets. Choose it again", zh: "所选图片不在素材库中，请重新选择" }
+flow_error.asset_not_image: { ja: "選んだ素材は画像ではありません。画像を選んでください", en: "The chosen asset is not an image. Choose an image", zh: "所选素材不是图片，请选择图片" }
+flow_error.unknown_target: { ja: "移動先のステップがありません。移動先を選び直してください", en: "The step this leads to does not exist. Choose another", zh: "目标步骤不存在，请重新选择" }
+flow_error.bad_target_kind: { ja: "移動先の種類が合いません。通知は終了へ、不在時の移動先はページにしてください", en: "Wrong kind of destination. Notify leads to an end, unanswered leads to a page", zh: "目标步骤类型不符：通知须指向结束，无人应答须指向页面" }
+flow_error.unknown_camera: { ja: "選んだカメラに静止画 URL がありません。カメラ設定を確認してください", en: "The chosen camera has no snapshot URL. Check the camera settings", zh: "所选摄像头没有快照地址，请检查摄像头设置" }
+flow_error.missing_start: { ja: "最初のページを選んでください", en: "Choose a start page", zh: "请选择起始页" }
+flow_error.unknown_start: { ja: "最初のページが存在しません。ページを選び直してください", en: "The start page does not exist. Choose another", zh: "起始页不存在，请重新选择" }
+flow_error.start_not_page: { ja: "最初のページにはページを選んでください", en: "The start must be a page. Choose a page", zh: "起始步骤必须是页面，请选择页面" }
+flow_error.cycle: { ja: "ページが循環しています。戻る選択肢を外してください", en: "The pages loop back on themselves. Remove the option that goes back", zh: "页面形成了循环，请移除返回的选项" }
+flow_error.too_deep: { ja: "ページの階層が深すぎます（上限 {limit}、現在 {value}）", en: "Pages are nested too deep (limit {limit}, now {value})", zh: "页面层级过深（上限 {limit}，当前 {value}）" }
+flow_error.no_reachable_call: { ja: "最初のページから呼び出しにたどり着けません。呼び出しへ進む選択肢を追加してください", en: "No option leads to a call from the start page. Add one that does", zh: "从起始页无法到达呼叫，请添加通往呼叫的选项" }
 flow_editor.tab_overview: { ja: "概要", en: "Overview", zh: "概览" }
 flow_editor.edit: { ja: "ウィザードを編集", en: "Edit the wizard", zh: "编辑向导" }
 flow_editor.status_custom: { ja: "独自のウィザードを使用中です（{n} ステップ）。", en: "Using your own wizard ({n} steps).", zh: "正在使用自定义向导（{n} 个步骤）。" }

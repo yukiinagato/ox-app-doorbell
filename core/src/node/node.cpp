@@ -1949,6 +1949,14 @@ bool airQualityConfigValid(const std::string& key, const cJSON* value, std::stri
   return !embedded || airDisplayObjectValid(embedded, error);
 }
 
+// A refused visitor-flow write also reports the numbers behind the code as "detail".
+void addFlowErrorDetail(cJSON* out, const char* error) {
+  if (std::string(error).rfind("visitor_flow.", 0) != 0) return;
+  const std::string& detail = visitor_flow::lastErrorDetail();
+  if (detail.empty()) return;
+  if (auto parsed = json::parse(detail)) json::setItem(out, "detail", std::move(parsed));
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr,
                       bool enforce_write_scope = true, bool replicated = false) {
@@ -10587,6 +10595,7 @@ struct Node::Impl {
       json::set(result.get(), "request_id", genTokenHex(16));
       json::set(result.get(), "error_code", code);
       json::set(result.get(), "err", code);
+      addFlowErrorDetail(result.get(), code);
       json::set(result.get(), "retry_mode", "none");
       json::set(result.get(), "revision", configurationRevisionOnLoop());
       return json::dump(result.get());
@@ -10807,6 +10816,7 @@ struct Node::Impl {
       auto out = json::obj();
       json::setBool(out.get(), "ok", false);
       json::set(out.get(), "err", error);
+      addFlowErrorDetail(out.get(), error);
       return json::dump(out.get());
     };
     if (key.empty() || key.size() > 512 || key.front() == '.' || key.back() == '.' ||
@@ -10841,6 +10851,7 @@ struct Node::Impl {
       auto out = json::obj();
       json::setBool(out.get(), "ok", false);
       json::set(out.get(), "err", error);
+      addFlowErrorDetail(out.get(), error);
       return json::dump(out.get());
     };
     auto body = json::parse(ops_json);

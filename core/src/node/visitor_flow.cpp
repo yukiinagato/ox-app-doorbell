@@ -12,8 +12,21 @@ namespace {
 
 const char* const kBuiltinLanguages[] = {"ja", "en", "zh"};
 
-bool fail(std::string* error, const std::string& code, const std::string& where = "") {
+using Numbers = std::vector<std::pair<std::string, int64_t>>;
+
+// Set by every refusal on the calling thread; empty when the refusal carries no detail.
+thread_local std::string g_errorDetail;
+
+bool fail(std::string* error, const std::string& code, const std::string& where = "",
+          const Numbers& numbers = {}, const std::string& lang = "") {
   *error = "visitor_flow." + code + (where.empty() ? "" : ": " + where);
+  g_errorDetail.clear();
+  if (!numbers.empty() || !lang.empty()) {
+    auto detail = json::obj();
+    if (!lang.empty()) json::set(detail.get(), "lang", lang);
+    for (const auto& number : numbers) json::set(detail.get(), number.first.c_str(), number.second);
+    g_errorDetail = json::dump(detail.get());
+  }
   return false;
 }
 
@@ -83,39 +96,61 @@ size_t paragraphs(const std::string& text) {
 }
 
 // {lang: text}. Plain text only: no control characters other than the newline a body may use.
-bool textMapValid(const cJSON* value, size_t max_chars, size_t max_paragraphs, bool required) {
-  if (!cJSON_IsObject(value)) return false;
-  int entries = 0;
+// where is the location of the field, for example "s_home.title".
+bool textMapCheck(const cJSON* value, const std::string& where, size_t max_chars,
+                  size_t max_paragraphs, bool required, std::string* error) {
+  if (!cJSON_IsObject(value)) return fail(error, "bad_text", where);
+  const int entries = cJSON_GetArraySize(value);
+  if (entries > 8) return fail(error, "too_many_languages", where, {{"limit", 8}, {"value", entries}});
   bool any_text = false;
   const cJSON* item = nullptr;
   cJSON_ArrayForEach(item, value) {
-    if (++entries > 8 || !item->string || !cJSON_IsString(item) || !item->valuestring) return false;
-    const std::string lang = item->string;
-    if (lang.size() < 2 || lang.size() > 8) return false;
+    const std::string lang = item->string ? item->string : "";
+    bool lang_ok = lang.size() >= 2 && lang.size() <= 8;
     for (unsigned char c : lang)
-      if (!(std::isalpha(c) || c == '-')) return false;
+      if (!(std::isalpha(c) || c == '-')) lang_ok = false;
+    if (!lang_ok) return fail(error, "bad_language", where);
+    const std::string at = where + "." + lang;
+    if (!cJSON_IsString(item) || !item->valuestring) return fail(error, "bad_text", at);
     const std::string text = item->valuestring;
-    if (codePoints(text) > max_chars) return false;
+    const size_t length = codePoints(text);
+    if (length > max_chars)
+      return fail(error, "text_too_long", at,
+                  {{"limit", static_cast<int64_t>(max_chars)}, {"value", static_cast<int64_t>(length)}}, lang);
     for (unsigned char c : text)
-      if (c < 0x20 && !(c == '\n' && max_paragraphs > 0)) return false;
-    if (max_paragraphs > 0 && paragraphs(text) > max_paragraphs) return false;
+      if (c < 0x20 && !(c == '\n' && max_paragraphs > 0))
+        return fail(error, "bad_character", at, {}, lang);
+    if (max_paragraphs > 0) {
+      const size_t count = paragraphs(text);
+      if (count > max_paragraphs)
+        return fail(error, "too_many_paragraphs", at,
+                    {{"limit", static_cast<int64_t>(max_paragraphs)}, {"value", static_cast<int64_t>(count)}},
+                    lang);
+    }
     if (!text.empty()) any_text = true;
   }
-  return any_text || !required;
+  if (required && !any_text) return fail(error, "text_required", where);
+  return true;
 }
 
-bool imagesValid(const cJSON* images) {
-  if (!cJSON_IsArray(images) || cJSON_GetArraySize(images) > kMaxImages) return false;
+bool imagesCheck(const cJSON* images, const std::string& id, std::string* error) {
+  if (!cJSON_IsArray(images)) return fail(error, "bad_images", id);
+  const int count = cJSON_GetArraySize(images);
+  if (count > kMaxImages)
+    return fail(error, "too_many_images", id, {{"limit", kMaxImages}, {"value", count}});
+  int index = 0;
   const cJSON* image = nullptr;
   cJSON_ArrayForEach(image, images) {
-    if (!cJSON_IsObject(image) || !hasOnly(image, {"asset", "alt", "place"})) return false;
-    if (!sha256Valid(json::getString(image, "asset"))) return false;
+    const std::string where = id + ".images[" + std::to_string(index++) + "]";
+    if (!cJSON_IsObject(image)) return fail(error, "bad_images", where);
+    if (!hasOnly(image, {"asset", "alt", "place"})) return fail(error, "unknown_field", where);
+    if (!sha256Valid(json::getString(image, "asset"))) return fail(error, "bad_asset", where);
     const cJSON* alt = json::get(image, "alt");
-    if (alt && !textMapValid(alt, 120, 0, false)) return false;
+    if (alt && !textMapCheck(alt, where + ".alt", 120, 0, false, error)) return false;
     const cJSON* place = json::get(image, "place");
     if (place && json::getString(image, "place") != "above" &&
         json::getString(image, "place") != "below")
-      return false;
+      return fail(error, "bad_placement", where);
   }
   return true;
 }
@@ -125,20 +160,30 @@ bool optionalTargetValid(const cJSON* step, const char* field) {
   return !target || (cJSON_IsString(target) && idValid(target->valuestring));
 }
 
+// A required jump target: absent or empty is missing_target, anything else malformed is bad_target.
+bool targetCheck(const cJSON* owner, const char* field, const std::string& where, std::string* error) {
+  const cJSON* target = json::get(owner, field);
+  if (!target || (cJSON_IsString(target) && !*target->valuestring))
+    return fail(error, "missing_target", where);
+  if (!cJSON_IsString(target) || !idValid(target->valuestring)) return fail(error, "bad_target", where);
+  return true;
+}
+
 bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error) {
   if (!idValid(id)) return fail(error, "bad_step_id", id);
   if (!cJSON_IsObject(step)) return fail(error, "bad_step", id);
   const std::string kind = json::getString(step, "kind");
   const cJSON* order = json::get(step, "order");
-  if (order && !wholeNumber(order, 0, kMaxStepOrder)) return fail(error, "bad_order", id);
+  if (order && !wholeNumber(order, 0, kMaxStepOrder))
+    return fail(error, "bad_order", id, {{"min", 0}, {"max", kMaxStepOrder}});
   const cJSON* title = json::get(step, "title");
   const cJSON* body = json::get(step, "body");
   const cJSON* images = json::get(step, "images");
   const cJSON* purpose = json::get(step, "purpose");
   if (kind == "page" || kind == "end") {
-    if (title && !textMapValid(title, 60, 0, false)) return fail(error, "bad_text", id + ".title");
-    if (body && !textMapValid(body, 600, 8, false)) return fail(error, "bad_text", id + ".body");
-    if (images && !imagesValid(images)) return fail(error, "bad_images", id);
+    if (title && !textMapCheck(title, id + ".title", 60, 0, false, error)) return false;
+    if (body && !textMapCheck(body, id + ".body", 600, 8, false, error)) return false;
+    if (images && !imagesCheck(images, id, error)) return false;
   }
   if (kind == "page") {
     if (!hasOnly(step, {"kind", "title", "body", "images", "options", "order"}))
@@ -146,7 +191,9 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     const cJSON* options = json::get(step, "options");
     if (!cJSON_IsArray(options) || cJSON_GetArraySize(options) < 1)
       return fail(error, "no_options", id);
-    if (cJSON_GetArraySize(options) > kMaxOptions) return fail(error, "too_many_options", id);
+    if (cJSON_GetArraySize(options) > kMaxOptions)
+      return fail(error, "too_many_options", id,
+                  {{"limit", kMaxOptions}, {"value", cJSON_GetArraySize(options)}});
     std::set<std::string> seen;
     int primaries = 0;
     const cJSON* option = nullptr;
@@ -162,8 +209,8 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
       const cJSON* label = json::get(option, "label");
       const cJSON* option_purpose = json::get(option, "purpose");
       if (!label && !option_purpose) return fail(error, "option_needs_label", where);
-      if (label && !textMapValid(label, 40, 0, !option_purpose))
-        return fail(error, "bad_text", where + ".label");
+      if (label && !textMapCheck(label, where + ".label", 40, 0, !option_purpose, error))
+        return false;
       if (option_purpose && !referenceValid(option_purpose, 64))
         return fail(error, "bad_purpose", where);
       const cJSON* icon = json::get(option, "icon");
@@ -176,7 +223,7 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
       if (style_name == "primary" && ++primaries > 1) return fail(error, "multiple_primary", id);
       const cJSON* enabled = json::get(option, "enabled");
       if (enabled && !cJSON_IsBool(enabled)) return fail(error, "bad_enabled", where);
-      if (!idValid(json::getString(option, "to"))) return fail(error, "bad_target", where);
+      if (!targetCheck(option, "to", where, error)) return false;
     }
     return true;
   }
@@ -191,19 +238,21 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     if (!hasOnly(step, {"kind", "message", "purpose", "to", "snapshot", "order"}))
       return fail(error, "unknown_field", id);
     const cJSON* message = json::get(step, "message");
-    if (!message || !textMapValid(message, 200, 0, true))
-      return fail(error, "bad_text", id + ".message");
+    if (!message) return fail(error, "text_required", id + ".message");
+    if (!textMapCheck(message, id + ".message", 200, 0, true, error)) return false;
     if (purpose && !referenceValid(purpose, 64)) return fail(error, "bad_purpose", id);
-    if (!idValid(json::getString(step, "to"))) return fail(error, "bad_target", id);
+    if (!targetCheck(step, "to", id, error)) return false;
     const cJSON* snapshot = json::get(step, "snapshot");
     if (snapshot) {
       if (!cJSON_IsObject(snapshot) || !hasOnly(snapshot, {"source", "id"}))
         return fail(error, "bad_snapshot", id);
       const std::string source = json::getString(snapshot, "source");
       const cJSON* camera = json::get(snapshot, "id");
-      const bool external = source == "media_source" && referenceValid(camera, 128);
-      const bool door = source == "door_station" && !camera;
-      if (!external && !door) return fail(error, "bad_snapshot", id);
+      if (source != "media_source" && source != "door_station")
+        return fail(error, "bad_snapshot_source", id);
+      if (source == "media_source" && !referenceValid(camera, 128))
+        return fail(error, "bad_snapshot_camera", id);
+      if (source == "door_station" && camera) return fail(error, "bad_snapshot_camera", id);
     }
     return true;
   }
@@ -211,7 +260,8 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
     if (!hasOnly(step, {"kind", "title", "body", "images", "return_s", "order"}))
       return fail(error, "unknown_field", id);
     const cJSON* return_s = json::get(step, "return_s");
-    if (return_s && !wholeNumber(return_s, 3, 60)) return fail(error, "bad_return_s", id);
+    if (return_s && !wholeNumber(return_s, 3, 60))
+      return fail(error, "bad_return_s", id, {{"min", 3}, {"max", 60}});
     return true;
   }
   return fail(error, "unknown_kind", id);
@@ -223,7 +273,7 @@ bool doorFlowValid(const cJSON* door_flow, std::string* error) {
     return fail(error, "bad_door_flow");
   const cJSON* start = json::get(door_flow, "start");
   if (start && (!cJSON_IsString(start) || !idValid(start->valuestring)))
-    return fail(error, "bad_target", "start");
+    return fail(error, "bad_start", "start");
   return true;
 }
 
@@ -584,6 +634,8 @@ json::Doc disabledDocument(const std::string& door, const std::string& reason) {
   return out;
 }
 
+const std::string& lastErrorDetail() { return g_errorDetail; }
+
 bool touchesFlow(const std::string& key, const cJSON* value) {
   if (key == "visitor_flow" || key.rfind("visitor_flow.", 0) == 0) return true;
   // Removing a door's entry point cannot break a flow, and an unrelated door edit must not be
@@ -611,7 +663,7 @@ bool writeKeyValid(const std::string& key, const cJSON* value, std::string* erro
     if (member == "visitor_flow") return doorFlowValid(value, error);
     if (member == "visitor_flow.start") {
       if (cJSON_IsString(value) && idValid(value->valuestring)) return true;
-      return fail(error, "bad_target", "start");
+      return fail(error, "bad_start", "start");
     }
     if (member.rfind("visitor_flow.", 0) == 0) return fail(error, "unknown_key", key);
     return true;
@@ -625,11 +677,11 @@ bool writeKeyValid(const std::string& key, const cJSON* value, std::string* erro
   }
   if (key == "visitor_flow.start") {
     if (cJSON_IsString(value) && idValid(value->valuestring)) return true;
-    return fail(error, "bad_target", "start");
+    return fail(error, "bad_start", "start");
   }
   if (key == "visitor_flow.idle_s") {
     if (wholeNumber(value, 15, 300)) return true;
-    return fail(error, "bad_idle_s");
+    return fail(error, "bad_idle_s", "", {{"min", 15}, {"max", 300}});
   }
   const std::string prefix = "visitor_flow.steps.";
   if (key.rfind(prefix, 0) != 0) return fail(error, "unknown_key", key);
@@ -646,7 +698,9 @@ bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
   auto raw = effectiveRaw(config, text, &source, &reason);
   if (!raw) return true;
   const cJSON* steps = json::get(raw.get(), "steps");
-  if (cJSON_GetArraySize(steps) > kMaxSteps) return fail(error, "too_many_steps");
+  if (cJSON_GetArraySize(steps) > kMaxSteps)
+    return fail(error, "too_many_steps", "",
+                {{"limit", kMaxSteps}, {"value", cJSON_GetArraySize(steps)}});
   const cJSON* step = nullptr;
   cJSON_ArrayForEach(step, steps) {
     const std::string id = step->string ? step->string : "";
@@ -657,10 +711,16 @@ bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
     const std::string purpose = json::getString(step, "purpose");
     if (!purpose.empty() && !purposeEntry(config, purpose))
       return fail(error, "unknown_purpose", id);
+    if (!purpose.empty() && !purposeSelectable(config, purpose) && warnings)
+      warnings->push_back({"visitor_flow.steps." + id, "visitor_flow.disabled_purpose"});
+    int image_index = 0;
     const cJSON* image = nullptr;
     cJSON_ArrayForEach(image, json::get(step, "images")) {
-      if (!imageAssetKnown(config, json::getString(image, "asset")))
-        return fail(error, "unknown_asset", id);
+      const std::string where = id + ".images[" + std::to_string(image_index++) + "]";
+      const std::string asset = json::getString(image, "asset");
+      if (!cJSON_IsObject(json::get(json::get(config, "assets"), asset.c_str())))
+        return fail(error, "unknown_asset", where);
+      if (!imageAssetKnown(config, asset)) return fail(error, "asset_not_image", where);
     }
     const cJSON* option = nullptr;
     cJSON_ArrayForEach(option, json::get(step, "options")) {
@@ -670,6 +730,8 @@ bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
       const std::string option_purpose = json::getString(option, "purpose");
       if (!option_purpose.empty() && !purposeEntry(config, option_purpose))
         return fail(error, "unknown_purpose", where);
+      if (!option_purpose.empty() && !purposeSelectable(config, option_purpose) && warnings)
+        warnings->push_back({"visitor_flow.steps." + where, "visitor_flow.disabled_purpose"});
     }
     if (kind == "call") {
       const std::string unanswered = json::getString(step, "on_unanswered");
@@ -694,8 +756,9 @@ bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
   entries.emplace_back("start", start);
   for (const auto& door : doorStarts(config)) entries.emplace_back(door.first, door.second);
   for (const auto& entry : entries) {
-    if (!json::get(steps, entry.second.c_str())) return fail(error, "unknown_target", entry.first);
-    if (kindOf(steps, entry.second) != "page") return fail(error, "bad_target_kind", entry.first);
+    const std::string where = entry.first == "start" ? "start" : "doors." + entry.first + ".start";
+    if (!json::get(steps, entry.second.c_str())) return fail(error, "unknown_start", where);
+    if (kindOf(steps, entry.second) != "page") return fail(error, "start_not_page", where);
   }
 
   std::map<std::string, int> depths;
@@ -703,7 +766,8 @@ bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
     std::set<std::string> visiting;
     const int depth = pageDepth(steps, step->string, &depths, &visiting);
     if (depth < 0) return fail(error, "cycle", step->string);
-    if (depth > kMaxPageDepth) return fail(error, "too_deep", step->string);
+    if (depth > kMaxPageDepth)
+      return fail(error, "too_deep", step->string, {{"limit", kMaxPageDepth}, {"value", depth}});
   }
 
   const bool require_call = json::getBool(raw.get(), "require_call", true);

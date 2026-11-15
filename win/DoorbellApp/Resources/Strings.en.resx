@@ -1078,6 +1078,58 @@ Delete it?</value></data>
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>Start from the current purposes</value></data>
   <data name="flow_editor_templates" xml:space="preserve"><value>Templates</value></data>
   <data name="flow_editor_title" xml:space="preserve"><value>Visitor wizard</value></data>
+  <data name="flow_error_asset_not_image" xml:space="preserve"><value>The chosen asset is not an image. Choose an image</value></data>
+  <data name="flow_error_bad_asset" xml:space="preserve"><value>The image is not valid. Choose it again from Assets</value></data>
+  <data name="flow_error_bad_boolean" xml:space="preserve"><value>Set this to on or off</value></data>
+  <data name="flow_error_bad_character" xml:space="preserve"><value>The text has a control character it cannot use ({0}). Remove it</value></data>
+  <data name="flow_error_bad_door_flow" xml:space="preserve"><value>The per-door setting is not valid. Only the start page can be set</value></data>
+  <data name="flow_error_bad_enabled" xml:space="preserve"><value>The on/off setting is not valid</value></data>
+  <data name="flow_error_bad_icon" xml:space="preserve"><value>The icon name is not valid</value></data>
+  <data name="flow_error_bad_idle_s" xml:space="preserve"><value>Set the idle time to {0}-{1} seconds</value></data>
+  <data name="flow_error_bad_images" xml:space="preserve"><value>The images are not valid. Choose them again</value></data>
+  <data name="flow_error_bad_language" xml:space="preserve"><value>Invalid language code. Use ja, en, zh and so on</value></data>
+  <data name="flow_error_bad_option_id" xml:space="preserve"><value>An option ID is empty, repeated or has an unusable character</value></data>
+  <data name="flow_error_bad_order" xml:space="preserve"><value>Use a whole number from {0} to {1} for the order</value></data>
+  <data name="flow_error_bad_placement" xml:space="preserve"><value>Set the image position to above or below</value></data>
+  <data name="flow_error_bad_purpose" xml:space="preserve"><value>The visit purpose is not valid. Pick one from the list</value></data>
+  <data name="flow_error_bad_return_s" xml:space="preserve"><value>Set the return time to {0}-{1} seconds</value></data>
+  <data name="flow_error_bad_snapshot" xml:space="preserve"><value>The snapshot setting is not valid</value></data>
+  <data name="flow_error_bad_snapshot_camera" xml:space="preserve"><value>The snapshot camera is not valid. Choose the camera again</value></data>
+  <data name="flow_error_bad_snapshot_source" xml:space="preserve"><value>Choose the camera or the door station as the snapshot source</value></data>
+  <data name="flow_error_bad_start" xml:space="preserve"><value>The start page is not valid. Choose a page</value></data>
+  <data name="flow_error_bad_step" xml:space="preserve"><value>This step is not valid. Fill it in again</value></data>
+  <data name="flow_error_bad_step_id" xml:space="preserve"><value>Use a step ID of up to 32 letters, digits, _ or -</value></data>
+  <data name="flow_error_bad_style" xml:space="preserve"><value>Set the button style to main or normal</value></data>
+  <data name="flow_error_bad_target" xml:space="preserve"><value>The destination is not valid. Pick one from the list</value></data>
+  <data name="flow_error_bad_target_kind" xml:space="preserve"><value>Wrong kind of destination. Notify leads to an end, unanswered leads to a page</value></data>
+  <data name="flow_error_bad_text" xml:space="preserve"><value>The text is in the wrong format. Enter it again</value></data>
+  <data name="flow_error_container_write" xml:space="preserve"><value>The whole wizard cannot be written at once. Save it step by step</value></data>
+  <data name="flow_error_cycle" xml:space="preserve"><value>The pages loop back on themselves. Remove the option that goes back</value></data>
+  <data name="flow_error_disabled_purpose" xml:space="preserve"><value>A visit purpose used here is switched off. Visitors will not see it</value></data>
+  <data name="flow_error_missing_start" xml:space="preserve"><value>Choose a start page</value></data>
+  <data name="flow_error_missing_target" xml:space="preserve"><value>No destination is chosen. Choose where it leads</value></data>
+  <data name="flow_error_multiple_primary" xml:space="preserve"><value>Only one main button per page. Change the others to normal</value></data>
+  <data name="flow_error_no_options" xml:space="preserve"><value>Add at least one option to this page</value></data>
+  <data name="flow_error_no_reachable_call" xml:space="preserve"><value>No option leads to a call from the start page. Add one that does</value></data>
+  <data name="flow_error_option_needs_label" xml:space="preserve"><value>Give this option a label or a visit purpose</value></data>
+  <data name="flow_error_start_not_page" xml:space="preserve"><value>The start must be a page. Choose a page</value></data>
+  <data name="flow_error_step_leaf_write" xml:space="preserve"><value>Part of a step cannot be saved alone. Save the whole step</value></data>
+  <data name="flow_error_text_required" xml:space="preserve"><value>Required text is empty. Enter some text</value></data>
+  <data name="flow_error_text_too_long" xml:space="preserve"><value>Text is too long ({0}: limit {1}, now {2})</value></data>
+  <data name="flow_error_too_deep" xml:space="preserve"><value>Pages are nested too deep (limit {0}, now {1})</value></data>
+  <data name="flow_error_too_many_images" xml:space="preserve"><value>Too many images (limit {0}, now {1})</value></data>
+  <data name="flow_error_too_many_languages" xml:space="preserve"><value>Too many languages (limit {0}, now {1})</value></data>
+  <data name="flow_error_too_many_options" xml:space="preserve"><value>Too many options (limit {0}, now {1})</value></data>
+  <data name="flow_error_too_many_paragraphs" xml:space="preserve"><value>Too many paragraphs ({0}: limit {1}, now {2})</value></data>
+  <data name="flow_error_too_many_steps" xml:space="preserve"><value>Too many steps (limit {0}, now {1})</value></data>
+  <data name="flow_error_unknown_asset" xml:space="preserve"><value>The chosen image is not in Assets. Choose it again</value></data>
+  <data name="flow_error_unknown_camera" xml:space="preserve"><value>The chosen camera has no snapshot URL. Check the camera settings</value></data>
+  <data name="flow_error_unknown_field" xml:space="preserve"><value>This step has a field it cannot use. Remove it</value></data>
+  <data name="flow_error_unknown_key" xml:space="preserve"><value>Unknown setting</value></data>
+  <data name="flow_error_unknown_kind" xml:space="preserve"><value>Unknown step type. Choose page, call, notify or end</value></data>
+  <data name="flow_error_unknown_purpose" xml:space="preserve"><value>A visit purpose used here does not exist. Choose another</value></data>
+  <data name="flow_error_unknown_start" xml:space="preserve"><value>The start page does not exist. Choose another</value></data>
+  <data name="flow_error_unknown_target" xml:space="preserve"><value>The step this leads to does not exist. Choose another</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>Answered on</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>Door</value></data>

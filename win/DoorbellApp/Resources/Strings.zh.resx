@@ -1078,6 +1078,58 @@
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>根据当前来访目的创建</value></data>
   <data name="flow_editor_templates" xml:space="preserve"><value>模板</value></data>
   <data name="flow_editor_title" xml:space="preserve"><value>访客向导</value></data>
+  <data name="flow_error_asset_not_image" xml:space="preserve"><value>所选素材不是图片，请选择图片</value></data>
+  <data name="flow_error_bad_asset" xml:space="preserve"><value>图片无效，请从素材库重新选择</value></data>
+  <data name="flow_error_bad_boolean" xml:space="preserve"><value>请设置为开或关</value></data>
+  <data name="flow_error_bad_character" xml:space="preserve"><value>文字中含有不可用的控制字符（{0}），请删除</value></data>
+  <data name="flow_error_bad_door_flow" xml:space="preserve"><value>门口机单独设置无效，仅可指定起始页</value></data>
+  <data name="flow_error_bad_enabled" xml:space="preserve"><value>启用/停用设置无效</value></data>
+  <data name="flow_error_bad_icon" xml:space="preserve"><value>图标名称无效</value></data>
+  <data name="flow_error_bad_idle_s" xml:space="preserve"><value>无操作时间须为 {0} 到 {1} 秒</value></data>
+  <data name="flow_error_bad_images" xml:space="preserve"><value>图片设置无效，请重新选择</value></data>
+  <data name="flow_error_bad_language" xml:space="preserve"><value>语言代码无效，请使用 ja、en、zh 等</value></data>
+  <data name="flow_error_bad_option_id" xml:space="preserve"><value>选项 ID 为空、重复或含有不可用字符</value></data>
+  <data name="flow_error_bad_order" xml:space="preserve"><value>顺序须为 {0} 到 {1} 的整数</value></data>
+  <data name="flow_error_bad_placement" xml:space="preserve"><value>图片位置只能是上方或下方</value></data>
+  <data name="flow_error_bad_purpose" xml:space="preserve"><value>来访目的无效，请从列表中选择</value></data>
+  <data name="flow_error_bad_return_s" xml:space="preserve"><value>返回时间须为 {0} 到 {1} 秒</value></data>
+  <data name="flow_error_bad_snapshot" xml:space="preserve"><value>快照设置无效</value></data>
+  <data name="flow_error_bad_snapshot_camera" xml:space="preserve"><value>快照摄像头设置无效，请重新选择</value></data>
+  <data name="flow_error_bad_snapshot_source" xml:space="preserve"><value>快照来源请选择摄像头或门口机</value></data>
+  <data name="flow_error_bad_start" xml:space="preserve"><value>起始页设置无效，请选择页面</value></data>
+  <data name="flow_error_bad_step" xml:space="preserve"><value>步骤内容无效，请重新填写</value></data>
+  <data name="flow_error_bad_step_id" xml:space="preserve"><value>步骤 ID 只能用字母、数字、_ 或 -，最多 32 个字符</value></data>
+  <data name="flow_error_bad_style" xml:space="preserve"><value>按钮样式只能是主按钮或普通</value></data>
+  <data name="flow_error_bad_target" xml:space="preserve"><value>目标步骤无效，请从列表中选择</value></data>
+  <data name="flow_error_bad_target_kind" xml:space="preserve"><value>目标步骤类型不符：通知须指向结束，无人应答须指向页面</value></data>
+  <data name="flow_error_bad_text" xml:space="preserve"><value>文字格式无效，请重新输入</value></data>
+  <data name="flow_error_container_write" xml:space="preserve"><value>不能一次写入整个向导，请逐步骤保存</value></data>
+  <data name="flow_error_cycle" xml:space="preserve"><value>页面形成了循环，请移除返回的选项</value></data>
+  <data name="flow_error_disabled_purpose" xml:space="preserve"><value>使用了已停用的来访目的，访客将看不到</value></data>
+  <data name="flow_error_missing_start" xml:space="preserve"><value>请选择起始页</value></data>
+  <data name="flow_error_missing_target" xml:space="preserve"><value>未选择目标步骤，请选择</value></data>
+  <data name="flow_error_multiple_primary" xml:space="preserve"><value>每页只能有一个主按钮，请把其他按钮改为普通</value></data>
+  <data name="flow_error_no_options" xml:space="preserve"><value>请至少为此页面添加一个选项</value></data>
+  <data name="flow_error_no_reachable_call" xml:space="preserve"><value>从起始页无法到达呼叫，请添加通往呼叫的选项</value></data>
+  <data name="flow_error_option_needs_label" xml:space="preserve"><value>请为选项设置标签或来访目的</value></data>
+  <data name="flow_error_start_not_page" xml:space="preserve"><value>起始步骤必须是页面，请选择页面</value></data>
+  <data name="flow_error_step_leaf_write" xml:space="preserve"><value>不能单独保存步骤的一部分，请保存整个步骤</value></data>
+  <data name="flow_error_text_required" xml:space="preserve"><value>必填文字为空，请填写</value></data>
+  <data name="flow_error_text_too_long" xml:space="preserve"><value>文字超出长度限制（{0}：上限 {1}，当前 {2}）</value></data>
+  <data name="flow_error_too_deep" xml:space="preserve"><value>页面层级过深（上限 {0}，当前 {1}）</value></data>
+  <data name="flow_error_too_many_images" xml:space="preserve"><value>图片过多（上限 {0}，当前 {1}）</value></data>
+  <data name="flow_error_too_many_languages" xml:space="preserve"><value>语言过多（上限 {0}，当前 {1}）</value></data>
+  <data name="flow_error_too_many_options" xml:space="preserve"><value>选项过多（上限 {0}，当前 {1}）</value></data>
+  <data name="flow_error_too_many_paragraphs" xml:space="preserve"><value>段落过多（{0}：上限 {1}，当前 {2}）</value></data>
+  <data name="flow_error_too_many_steps" xml:space="preserve"><value>步骤过多（上限 {0}，当前 {1}）</value></data>
+  <data name="flow_error_unknown_asset" xml:space="preserve"><value>所选图片不在素材库中，请重新选择</value></data>
+  <data name="flow_error_unknown_camera" xml:space="preserve"><value>所选摄像头没有快照地址，请检查摄像头设置</value></data>
+  <data name="flow_error_unknown_field" xml:space="preserve"><value>此步骤含有不支持的字段，请删除</value></data>
+  <data name="flow_error_unknown_key" xml:space="preserve"><value>未知的设置项</value></data>
+  <data name="flow_error_unknown_kind" xml:space="preserve"><value>步骤类型未知，请选择页面、呼叫、通知或结束</value></data>
+  <data name="flow_error_unknown_purpose" xml:space="preserve"><value>使用了不存在的来访目的，请重新选择</value></data>
+  <data name="flow_error_unknown_start" xml:space="preserve"><value>起始页不存在，请重新选择</value></data>
+  <data name="flow_error_unknown_target" xml:space="preserve"><value>目标步骤不存在，请重新选择</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>由 {0} 接听</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>接听设备</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>门</value></data>

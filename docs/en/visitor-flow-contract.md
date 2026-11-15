@@ -240,8 +240,9 @@ write (`visitor_flow.steps.<id>`, the existing object with its new `order`) in o
 `order` when rewriting a step for any other reason; an editor that drops it only moves that step
 to the end of the list.
 
-Rules Core enforces on write (error string `visitor_flow.<code>[: <step>[.<option>]]`; the part
-before `": "` is also an i18n key, `visitor_flow.invalid` is the generic fallback with `{detail}`):
+Rules Core enforces on write (error string `visitor_flow.<code>[: <location>]`; the complete code
+table is in section 8.1; each code has its own message `flow_error.<code>` in `i18n/strings.yaml`;
+`visitor_flow.invalid` is the generic fallback with `{detail}`):
 
 - Never write `visitor_flow` or `visitor_flow.steps` as a container and never write a key below
   a step (`visitor_flow.steps.s_home.title` is refused). Deleting `visitor_flow` (one delete op)
@@ -283,6 +284,80 @@ steps that go away. Steps are an unordered pool: list them start page first, the
 they are reached. Images come from the existing asset upload; downscale to ≤ 1280 px on the long
 edge and about 400 KB before uploading. Explicit steps supersede `ui.call_flow`: grey that
 select and say why. Strings: `flow_editor.*`, `visitor_flow.*`, `flow.*` in `i18n/strings.yaml`.
+
+### 8.1 Error codes
+
+A refused write answers HTTP 400 `{"ok":false,"err":"visitor_flow.<code>[: <location>]"}`. When the
+code carries numbers or a language, the same body also has `"detail":{...}` (additive; absent
+otherwise). `db_core_config_*` calls return the identical body. Show `flow_error.<code>` with the
+placeholders `{limit}`, `{value}`, `{min}`, `{max}`, `{lang}` filled from `detail`, and use the
+location to focus the field. `<step>` and `<option>` are ids; `<lang>` is a language tag;
+`<step>.images[n]` is a zero-based image index.
+
+| Code | Meaning | Location | Detail |
+|---|---|---|---|
+| `bad_step_id` | step id empty, over 32 characters, bad characters or `__` prefix | `<id>` | |
+| `bad_step` | step value is not an object | `<step>` | |
+| `unknown_kind` | `kind` is not page, call, notify or end | `<step>` | |
+| `unknown_field` | member not allowed for that kind (step, option or image) | `<step>`, `<step>.<option>`, `<step>.images[n]` | |
+| `no_options` | page has no options | `<step>` | |
+| `too_many_options` | more than 12 options | `<step>` | `limit`, `value` |
+| `bad_option_id` | option id invalid or repeated | `<step>.<option>` | |
+| `option_needs_label` | option has neither label nor purpose | `<step>.<option>` | |
+| `text_required` | required text empty or absent: option label (without purpose), notify message | `<step>.<option>.label`, `<step>.message` | |
+| `text_too_long` | text over its limit in code points: title 60, body 600, label 40, message 200, alt 120 | `<step>.title.<lang>`, `.body.<lang>`, `<step>.<option>.label.<lang>`, `<step>.message.<lang>`, `<step>.images[n].alt.<lang>` | `lang`, `limit`, `value` |
+| `too_many_paragraphs` | body over 8 paragraphs | `<step>.body.<lang>` | `lang`, `limit`, `value` |
+| `bad_character` | control character not allowed in that field | `<field>.<lang>` | `lang` |
+| `bad_text` | text field is not `{lang:string}` | `<field>` or `<field>.<lang>` | |
+| `bad_language` | language tag is not 2..8 letters or `-` | `<field>` | |
+| `too_many_languages` | more than 8 languages in one text | `<field>` | `limit`, `value` |
+| `bad_icon` | icon is not a string of at most 32 characters | `<step>.<option>` | |
+| `bad_style` | style is not primary or normal | `<step>.<option>` | |
+| `bad_enabled` | `enabled` is not a boolean | `<step>.<option>` | |
+| `bad_purpose` | purpose reference malformed | `<step>` or `<step>.<option>` | |
+| `missing_target` | `to` absent or empty (option, notify) | `<step>` or `<step>.<option>` | |
+| `bad_target` | `to` or `on_unanswered` is not a valid id | `<step>` or `<step>.<option>` | |
+| `multiple_primary` | more than one primary option | `<step>` | |
+| `too_many_images` | more than 2 images | `<step>` | `limit`, `value` |
+| `bad_images` | `images` is not an array of objects | `<step>` or `<step>.images[n]` | |
+| `bad_asset` | image `asset` is not a 64-hex sha256 | `<step>.images[n]` | |
+| `bad_placement` | image `place` is not above or below | `<step>.images[n]` | |
+| `bad_order` | `order` not an integer 0..9999 | `<step>` | `min`, `max` |
+| `bad_return_s` | `return_s` not an integer 3..60 | `<step>` | `min`, `max` |
+| `bad_snapshot` | snapshot is not an object or has other members | `<step>` | |
+| `bad_snapshot_source` | snapshot `source` is not media_source or door_station | `<step>` | |
+| `bad_snapshot_camera` | media_source without a valid `id`, or door_station with one | `<step>` | |
+| `bad_start` | start value is not a valid id (global or per door) | `start` | |
+| `bad_door_flow` | `doors.<door>.visitor_flow` has members other than `start` | (none) | |
+| `bad_idle_s` | `visitor_flow.idle_s` not an integer 15..300 | (none) | `min`, `max` |
+| `bad_boolean` | `enabled` or `require_call` is not a boolean | key | |
+| `container_write` | `visitor_flow` or `visitor_flow.steps` written whole | key | |
+| `step_leaf_write` | a key below a step written on its own | key | |
+| `unknown_key` | unknown `visitor_flow.*` key | key | |
+| `too_many_steps` | more than 32 steps | (none) | `limit`, `value` |
+| `unknown_purpose` | referenced purpose does not exist | `<step>` or `<step>.<option>` | |
+| `unknown_asset` | image asset is not in `assets` | `<step>.images[n]` | |
+| `asset_not_image` | asset exists but its type is not `image/*` | `<step>.images[n]` | |
+| `unknown_target` | `to` or `on_unanswered` names no step | `<step>` or `<step>.<option>` | |
+| `bad_target_kind` | notify `to` is not an end, or `on_unanswered` is not a page | `<step>` | |
+| `unknown_camera` | snapshot camera is not a media source with a snapshot URL | `<step>` | |
+| `missing_start` | no start page | (none) | |
+| `unknown_start` | start names no step | `start` or `doors.<door>.start` | |
+| `start_not_page` | start names a step that is not a page | `start` or `doors.<door>.start` | |
+| `cycle` | pages lead back to themselves (`on_unanswered` excluded) | `<step>` | |
+| `too_deep` | page nesting over 6 levels | `<step>` | `limit`, `value` |
+| `no_reachable_call` | `require_call` is true and an entry cannot reach a call | `start` or `<door>` | |
+
+Not an error: a reference to a purpose that exists but is switched off is accepted and returns
+warning `visitor_flow.disabled_purpose` (the option disappears until the purpose is back on).
+
+Renamed from earlier builds: `bad_text` is now only the wrong-shape case (the former
+too-long / empty / paragraphs / control-character causes have their own codes); `bad_target` on a
+start is `bad_start`; `unknown_target` and `bad_target_kind` on a start are `unknown_start` and
+`start_not_page`, located `start` or `doors.<door>.start` (was `<door>`); `bad_images` split into
+`too_many_images`, `bad_asset`, `bad_placement` and `unknown_field`; `bad_snapshot` split into
+`bad_snapshot_source` and `bad_snapshot_camera`; a missing `to` is `missing_target` instead of
+`bad_target`; `unknown_asset` is located `<step>.images[n]`.
 
 ## 9. What Core does on notify (for indoor/alert implementers)
 

@@ -953,7 +953,7 @@ iOS、iOS 5 互換版、Android、Windows のネイティブ門口機がこの�
 後勝ちになる。1 回の編集は 1 つのバッチで保存する。グラフはバッチ適用後の設定に対して検査される:
 ステップは最大 32、すべての移動先が存在、`start` と各ドアの開始位置はページ、notify は end へ、
 `on_unanswered` はページへ、ページは循環せず深さは 6 まで、参照する用件・画像アセット・スナップショット用
-カメラが存在すること。エラーは `visitor_flow.<code>` に任意で `: <step>[.<option>]` が続く。
+カメラが存在すること。エラーは `visitor_flow.<code>` に任意で `: <位置>`（ステップ、選択肢、画像、言語付きの項目）が続き、上限などの数値は `err` と並ぶ `detail` オブジェクトに入る。全コードは `visitor-flow-contract.md` の 8.1 節。
 本文や画像があり選択肢が 4 つを超えるページは、警告 `visitor_flow.crowded_page` 付きで受理される。
 
 `visitor_flow.require_call`（既定 true）は、最初のページまたはいずれかのドアの開始ページから `call` に

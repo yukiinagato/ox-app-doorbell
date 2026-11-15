@@ -118,7 +118,7 @@ TEST_CASE("visitor flow: written keys are leaves or one whole step") {
   CHECK(writeKey("visitor_flow.enabled", "\"yes\"") == "visitor_flow.bad_boolean: visitor_flow.enabled");
   CHECK(writeKey("visitor_flow.require_call", "false") == "ok");
   CHECK(writeKey("visitor_flow.start", "\"s_home\"") == "ok");
-  CHECK(writeKey("visitor_flow.start", "\"__call\"") == "visitor_flow.bad_target: start");
+  CHECK(writeKey("visitor_flow.start", "\"__call\"") == "visitor_flow.bad_start: start");
   CHECK(writeKey("visitor_flow.idle_s", "45") == "ok");
   CHECK(writeKey("visitor_flow.idle_s", "14") == "visitor_flow.bad_idle_s");
   CHECK(writeKey("visitor_flow.idle_s", "301") == "visitor_flow.bad_idle_s");
@@ -143,7 +143,7 @@ TEST_CASE("visitor flow: written keys are leaves or one whole step") {
   CHECK(writeKey("visitor_flow.steps.__call", R"({"kind":"call"})") ==
         "visitor_flow.bad_step_id: __call");
   CHECK(writeKey("doors.d_back.visitor_flow.start", "\"s_back\"") == "ok");
-  CHECK(writeKey("doors.d_back.visitor_flow.start", "7") == "visitor_flow.bad_target: start");
+  CHECK(writeKey("doors.d_back.visitor_flow.start", "7") == "visitor_flow.bad_start: start");
   CHECK(writeKey("doors.d_back.visitor_flow", R"({"start":"s_back"})") == "ok");
   CHECK(writeKey("doors.d_back.visitor_flow", R"({"start":"s_back","steps":{}})") ==
         "visitor_flow.bad_door_flow");
@@ -163,9 +163,9 @@ TEST_CASE("visitor flow: step shape matrix") {
   CHECK(page(R"([{"id":"o_a","to":"c_any"}])") == "visitor_flow.option_needs_label: s_x.o_a");
   CHECK(page(R"([{"id":"o_a","purpose":"p_visit","to":"c_any"}])") == "ok");
   CHECK(page(R"([{"id":"o_a","label":{"ja":""},"to":"c_any"}])") ==
-        "visitor_flow.bad_text: s_x.o_a.label");
+        "visitor_flow.text_required: s_x.o_a.label");
   CHECK(page("[" + option + "," + option + "]") == "visitor_flow.bad_option_id: s_x.o_a");
-  CHECK(page(R"([{"id":"o_a","label":{"ja":"A"}}])") == "visitor_flow.bad_target: s_x.o_a");
+  CHECK(page(R"([{"id":"o_a","label":{"ja":"A"}}])") == "visitor_flow.missing_target: s_x.o_a");
   CHECK(page(R"([{"id":"o_a","label":{"ja":"A"},"to":"c_any","style":"huge"}])") ==
         "visitor_flow.bad_style: s_x.o_a");
   CHECK(page(R"([{"id":"o_a","label":{"ja":"A"},"to":"c_any","style":"primary"},)"
@@ -184,7 +184,7 @@ TEST_CASE("visitor flow: step shape matrix") {
 
   const std::string title61(61, 'a');
   CHECK(page("[" + option + "]", R"(,"title":{"ja":")" + title61 + "\"}") ==
-        "visitor_flow.bad_text: s_x.title");
+        "visitor_flow.text_too_long: s_x.title.ja");
   // Limits count characters, not bytes: sixty Japanese characters are a legal title.
   std::string japanese;
   for (int i = 0; i < 60; ++i) japanese += "\xE3\x81\x82";
@@ -192,22 +192,22 @@ TEST_CASE("visitor flow: step shape matrix") {
   CHECK(page("[" + option + "]", R"(,"body":{"ja":"one\n\ntwo\nstill two"})") == "ok");
   CHECK(page("[" + option + "]",
              R"(,"body":{"ja":"1\n\n2\n\n3\n\n4\n\n5\n\n6\n\n7\n\n8\n\n9"})") ==
-        "visitor_flow.bad_text: s_x.body");
+        "visitor_flow.too_many_paragraphs: s_x.body.ja");
   CHECK(page("[" + option + "]", R"(,"title":{"ja":"two\nlines"})") ==
-        "visitor_flow.bad_text: s_x.title");
+        "visitor_flow.bad_character: s_x.title.ja");
   CHECK(page("[" + option + "]", R"(,"markup":"<b>")") == "visitor_flow.unknown_field: s_x");
   const std::string sha(64, 'a');
   CHECK(page("[" + option + "]", R"(,"images":[{"asset":")" + sha + R"(","place":"below"}])") == "ok");
-  CHECK(page("[" + option + "]", R"(,"images":[{"asset":"nope"}])") == "visitor_flow.bad_images: s_x");
+  CHECK(page("[" + option + "]", R"(,"images":[{"asset":"nope"}])") == "visitor_flow.bad_asset: s_x.images[0]");
   CHECK(page("[" + option + "]", R"(,"images":[{"asset":")" + sha + R"("},{"asset":")" + sha +
                                      R"("},{"asset":")" + sha + R"("}])") ==
-        "visitor_flow.bad_images: s_x");
+        "visitor_flow.too_many_images: s_x");
 
   CHECK(writeKey(key, R"({"kind":"call","purpose":"p_visit","on_unanswered":"s_home"})") == "ok");
   CHECK(writeKey(key, R"({"kind":"call","to":"s_home"})") == "visitor_flow.unknown_field: s_x");
   CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"},"to":"e_x"})") == "ok");
-  CHECK(writeKey(key, R"({"kind":"notify","to":"e_x"})") == "visitor_flow.bad_text: s_x.message");
-  CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"}})") == "visitor_flow.bad_target: s_x");
+  CHECK(writeKey(key, R"({"kind":"notify","to":"e_x"})") == "visitor_flow.text_required: s_x.message");
+  CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"}})") == "visitor_flow.missing_target: s_x");
   CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"},"to":"e_x",)"
                       R"("snapshot":{"source":"media_source","id":"porch_camera"}})") == "ok");
   CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"},"to":"e_x",)"
@@ -218,7 +218,7 @@ TEST_CASE("visitor flow: step shape matrix") {
                       R"("url":"http://user:pw@192.0.2.20/s.jpg"}})") ==
         "visitor_flow.bad_snapshot: s_x");
   CHECK(writeKey(key, R"({"kind":"notify","message":{"ja":"m"},"to":"e_x",)"
-                      R"("snapshot":{"source":"url","id":"x"}})") == "visitor_flow.bad_snapshot: s_x");
+                      R"("snapshot":{"source":"url","id":"x"}})") == "visitor_flow.bad_snapshot_source: s_x");
   CHECK(writeKey(key, R"({"kind":"end","title":{"ja":"t"},"return_s":8})") == "ok");
   CHECK(writeKey(key, R"({"kind":"end","return_s":2})") == "visitor_flow.bad_return_s: s_x");
   CHECK(writeKey(key, R"({"kind":"end","return_s":61})") == "visitor_flow.bad_return_s: s_x");
@@ -247,7 +247,7 @@ TEST_CASE("visitor flow: graph rules on the configuration a write would leave") 
           json::set(json::get(steps_of(c), "c_delivery"), "on_unanswered", "e_thanks");
         }) == "visitor_flow.bad_target_kind: c_delivery");
   CHECK(with([&](cJSON* c) { json::set(json::get(c, "visitor_flow"), "start", "c_any"); }) ==
-        "visitor_flow.bad_target_kind: start");
+        "visitor_flow.start_not_page: start");
   CHECK(with([&](cJSON* c) { cJSON_DeleteItemFromObject(json::get(c, "visitor_flow"), "start"); }) ==
         "visitor_flow.missing_start");
   CHECK(with([&](cJSON* c) { json::set(json::get(steps_of(c), "c_visit"), "purpose", "p_gone"); }) ==
@@ -258,7 +258,7 @@ TEST_CASE("visitor flow: graph rules on the configuration a write would leave") 
           json::setBool(json::get(json::get(c, "visit_purposes"), "p_visit"), "enabled", false);
         }) == "ok");
   CHECK(with([&](cJSON* c) { cJSON_DeleteItemFromObject(c, "assets"); }) ==
-        "visitor_flow.unknown_asset: s_where");
+        "visitor_flow.unknown_asset: s_where.images[0]");
   CHECK(with([&](cJSON* c) { cJSON_DeleteItemFromObject(c, "media_sources"); }) ==
         "visitor_flow.unknown_camera: n_left");
   CHECK(with([&](cJSON* c) {
@@ -273,7 +273,7 @@ TEST_CASE("visitor flow: graph rules on the configuration a write would leave") 
   CHECK(with([&](cJSON* c) {
           json::set(json::addObj(json::addObj(json::get(c, "doors"), "d_back"), "visitor_flow"),
                     "start", "s_gone");
-        }) == "visitor_flow.unknown_target: d_back");
+        }) == "visitor_flow.unknown_start: doors.d_back.start");
   CHECK(with([&](cJSON* c) {
           json::set(json::addObj(json::addObj(json::get(c, "doors"), "d_back"), "visitor_flow"),
                     "start", "s_where");
@@ -391,4 +391,139 @@ TEST_CASE("visitor flow: templates are writable flows") {
   CHECK(json::get(json::get(steps, "n_left"), "purpose") == nullptr);
   CHECK(json::get(json::get(steps, "n_left"), "snapshot") == nullptr);
   CHECK(json::get(json::get(steps, "s_where"), "images") == nullptr);
+}
+
+TEST_CASE("visitor flow: every refusal has its own code, location and detail") {
+  struct Row {
+    std::string code;
+    std::string key;
+    std::string value;
+    std::string location;
+    std::string detail;
+  };
+  std::string many_options = R"({"kind":"page","options":[)";
+  for (int i = 0; i < 13; ++i)
+    many_options += std::string(i ? "," : "") + R"({"id":"o_)" + std::to_string(i) +
+                    R"(","label":{"ja":"A"},"to":"c_any"})";
+  many_options += "]}";
+  const std::string long_title = R"({"kind":"page","title":{"ja":")" + std::string(61, 'a') +
+                                 R"("},"options":[{"id":"o","label":{"ja":"A"},"to":"c_any"}]})";
+  const std::string sha(64, 'a');
+  const std::string option = R"({"id":"o_a","label":{"ja":"A"},"to":"c_any")";
+  auto page = [&](const std::string& extra) {
+    return R"({"kind":"page","options":[)" + option + "," + extra + "}]}";
+  };
+  auto images = [&](int count) {
+    std::string out = R"({"kind":"end","images":[)";
+    for (int i = 0; i < count; ++i) out += std::string(i ? "," : "") + R"({"asset":")" + sha + R"("})";
+    return out + "]}";
+  };
+  const std::string notify = R"({"kind":"notify","message":{"ja":"m"},"to":"e_x")";
+  const std::string s = "visitor_flow.steps.s_x";
+  const std::vector<Row> rows = {
+      {"bad_step_id", "visitor_flow.steps.bad id", R"({"kind":"call"})", "bad id", ""},
+      {"bad_step", s, "[]", "s_x", ""},
+      {"unknown_kind", s, R"({"kind":"survey"})", "s_x", ""},
+      {"unknown_field", s, R"({"kind":"call","to":"s_home"})", "s_x", ""},
+      {"no_options", s, R"({"kind":"page","options":[]})", "s_x", ""},
+      {"too_many_options", s, many_options, "s_x", R"({"limit":12,"value":13})"},
+      {"bad_option_id", s, R"({"kind":"page","options":[{"id":"a b","to":"c_any"}]})", "s_x.a b", ""},
+      {"option_needs_label", s, R"({"kind":"page","options":[{"id":"o_a","to":"c_any"}]})", "s_x.o_a", ""},
+      {"text_required", s, R"({"kind":"page","options":[{"id":"o_a","label":{"ja":""},"to":"c_any"}]})",
+       "s_x.o_a.label", ""},
+      {"text_required", s, R"({"kind":"notify","message":{"ja":""},"to":"e_x"})", "s_x.message", ""},
+      {"text_required", s, R"({"kind":"notify","to":"e_x"})", "s_x.message", ""},
+      {"text_too_long", s, long_title, "s_x.title.ja", R"({"lang":"ja","limit":60,"value":61})"},
+      {"too_many_paragraphs", s, R"({"kind":"end","body":{"en":"1\n\n2\n\n3\n\n4\n\n5\n\n6\n\n7\n\n8\n\n9"}})",
+       "s_x.body.en", R"({"lang":"en","limit":8,"value":9})"},
+      {"bad_character", s, R"({"kind":"end","title":{"ja":"a\nb"}})", "s_x.title.ja", R"({"lang":"ja"})"},
+      {"bad_text", s, R"({"kind":"end","title":{"ja":5}})", "s_x.title.ja", ""},
+      {"bad_text", s, R"({"kind":"end","title":"plain"})", "s_x.title", ""},
+      {"bad_language", s, R"({"kind":"end","title":{"j1":"a"}})", "s_x.title", ""},
+      {"too_many_languages", s,
+       R"({"kind":"end","title":{"aa":"a","ab":"a","ac":"a","ad":"a","ae":"a","af":"a","ag":"a","ah":"a","ai":"a"}})",
+       "s_x.title", R"({"limit":8,"value":9})"},
+      {"bad_icon", s, page(R"("icon":5)"), "s_x.o_a", ""},
+      {"bad_style", s, page(R"("style":"huge")"), "s_x.o_a", ""},
+      {"bad_enabled", s, page(R"("enabled":"no")"), "s_x.o_a", ""},
+      {"bad_purpose", s, R"({"kind":"call","purpose":"a.b"})", "s_x", ""},
+      {"missing_target", s, R"({"kind":"notify","message":{"ja":"m"}})", "s_x", ""},
+      {"missing_target", s, R"({"kind":"page","options":[{"id":"o_a","label":{"ja":"A"}}]})", "s_x.o_a", ""},
+      {"bad_target", s, R"({"kind":"notify","message":{"ja":"m"},"to":"__x"})", "s_x", ""},
+      {"multiple_primary", s,
+       R"({"kind":"page","options":[{"id":"a","label":{"ja":"A"},"to":"c","style":"primary"},)"
+       R"({"id":"b","label":{"ja":"B"},"to":"c","style":"primary"}]})",
+       "s_x", ""},
+      {"too_many_images", s, images(3), "s_x", R"({"limit":2,"value":3})"},
+      {"bad_images", s, R"({"kind":"end","images":{}})", "s_x", ""},
+      {"bad_asset", s, R"({"kind":"end","images":[{"asset":"nope"}]})", "s_x.images[0]", ""},
+      {"bad_placement", s, R"({"kind":"end","images":[{"asset":")" + sha + R"(","place":"left"}]})",
+       "s_x.images[0]", ""},
+      {"text_too_long", s,
+       R"({"kind":"end","images":[{"asset":")" + sha + R"(","alt":{"ja":")" + std::string(121, 'a') + R"("}}]})",
+       "s_x.images[0].alt.ja", R"({"lang":"ja","limit":120,"value":121})"},
+      {"bad_order", s, R"({"kind":"call","order":-1})", "s_x", R"({"min":0,"max":9999})"},
+      {"bad_return_s", s, R"({"kind":"end","return_s":2})", "s_x", R"({"min":3,"max":60})"},
+      {"bad_snapshot", s, notify + R"(,"snapshot":{"source":"door_station","x":1}})", "s_x", ""},
+      {"bad_snapshot_source", s, notify + R"(,"snapshot":{"source":"url"}})", "s_x", ""},
+      {"bad_snapshot_camera", s, notify + R"(,"snapshot":{"source":"media_source"}})", "s_x", ""},
+      {"bad_start", "visitor_flow.start", "7", "start", ""},
+      {"bad_start", "doors.d_back.visitor_flow.start", "7", "start", ""},
+      {"bad_door_flow", "doors.d_back.visitor_flow", R"({"x":1})", "", ""},
+      {"bad_idle_s", "visitor_flow.idle_s", "14", "", R"({"min":15,"max":300})"},
+      {"bad_boolean", "visitor_flow.enabled", "\"yes\"", "visitor_flow.enabled", ""},
+      {"container_write", "visitor_flow.steps", "{}", "visitor_flow.steps", ""},
+      {"step_leaf_write", "visitor_flow.steps.c_any.purpose", "\"p\"", "visitor_flow.steps.c_any.purpose", ""},
+      {"unknown_key", "visitor_flow.theme", "1", "visitor_flow.theme", ""},
+  };
+  for (const Row& row : rows) {
+    auto value = json::parse(row.value);
+    REQUIRE(value);
+    std::string error;
+    INFO(row.code << " " << row.key);
+    CHECK_FALSE(visitor_flow::writeKeyValid(row.key, value.get(), &error));
+    CHECK(error == "visitor_flow." + row.code + (row.location.empty() ? "" : ": " + row.location));
+    CHECK(visitor_flow::lastErrorDetail() == row.detail);
+  }
+
+  auto suite = loadFixture();
+  const cJSON* item = fixtureCase(suite.get(), "explicit-flow");
+  REQUIRE(item);
+  auto steps_of = [](cJSON* config) { return json::get(json::get(config, "visitor_flow"), "steps"); };
+  auto refused = [&](const std::function<void(cJSON*)>& change, const std::string& detail) {
+    json::Doc config(cJSON_Duplicate(json::get(item, "config"), 1));
+    change(config.get());
+    const std::string error = validate(config.get());
+    CHECK(visitor_flow::lastErrorDetail() == detail);
+    return error;
+  };
+  CHECK(refused([&](cJSON* c) {
+          const cJSON* image = cJSON_GetArrayItem(json::get(json::get(steps_of(c), "s_where"), "images"), 0);
+          json::set(json::get(json::get(c, "assets"), json::getString(image, "asset").c_str()), "type",
+                    "application/pdf");
+        }, "") == "visitor_flow.asset_not_image: s_where.images[0]");
+  CHECK(refused([&](cJSON* c) {
+          for (int i = 0; i < 25; ++i)
+            json::set(json::addObj(steps_of(c), ("c_extra" + std::to_string(i)).c_str()), "kind", "call");
+        }, R"({"limit":32,"value":33})") == "visitor_flow.too_many_steps");
+  CHECK(refused([&](cJSON* c) { json::set(json::get(c, "visitor_flow"), "start", "s_gone"); }, "") ==
+        "visitor_flow.unknown_start: start");
+  CHECK(refused([&](cJSON* c) {
+          json::set(json::addObj(json::addObj(json::get(c, "doors"), "d_back"), "visitor_flow"), "start",
+                    "c_any");
+        }, "") == "visitor_flow.start_not_page: doors.d_back.start");
+}
+
+TEST_CASE("visitor flow: a disabled purpose is a warning, not a refusal") {
+  auto suite = loadFixture();
+  const cJSON* item = fixtureCase(suite.get(), "explicit-flow");
+  REQUIRE(item);
+  json::Doc config(cJSON_Duplicate(json::get(item, "config"), 1));
+  json::setBool(json::get(json::get(config.get(), "visit_purposes"), "p_visit"), "enabled", false);
+  std::string error;
+  std::vector<visitor_flow::Warning> warnings;
+  CHECK(visitor_flow::candidateValid(config.get(), catalog(), &error, &warnings));
+  bool found = false;
+  for (const auto& warning : warnings) found = found || warning.message_key == "visitor_flow.disabled_purpose";
+  CHECK(found);
 }
