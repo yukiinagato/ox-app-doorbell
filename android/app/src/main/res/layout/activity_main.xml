@@ -341,6 +341,26 @@
                 android:textSize="40sp"
                 android:textStyle="bold" />
         </ScrollView>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp">
+            <TextView
+                android:id="@+id/reply_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="15sp" />
+            <TextView
+                android:id="@+id/reply_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|end"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="15sp" />
+        </FrameLayout>
     </LinearLayout>
     <View
         android:id="@+id/secret_corner"

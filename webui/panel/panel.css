@@ -195,6 +195,10 @@ body.replyActive #replyBanner { display:-webkit-box !important; -webkit-box-orie
 #replyBox { -webkit-box-flex:1; position:relative; min-height:0; overflow:auto; display:-webkit-box;
             -webkit-box-orient:vertical; -webkit-box-pack:center; -webkit-box-align:center; }
 #replyBox.overflowing { -webkit-box-pack:start; }
+#replyFoot { position:relative; height:40px; overflow:hidden; padding-top:6px; text-align:center; font-size:15px; line-height:1.25; color:#e8edf2; color:var(--on-surface); }
+#replyHint { display:inline-block; padding:2px 36px; }
+#replyHint.confirm { font-weight:bold; border:2px solid #6db3ff; border:2px solid var(--accent-text); border-radius:14px; padding:0 14px; }
+#replyCount { position:absolute; right:0; top:6px; }
 #replyBanner .txt { font-size:32px; font-weight:bold; line-height:1.15; white-space:pre-wrap;
                     overflow-wrap:normal; word-wrap:normal; word-break:normal; }
 #replyBanner #replyMeasure { position:absolute; left:0; top:0; visibility:hidden; pointer-events:none; }

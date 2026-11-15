@@ -210,7 +210,7 @@ namespace DoorbellApp
             {
                 ExitScreensaver();
                 CallingView.Visibility = Visibility.Collapsed;
-                ReplyBanner.Visibility = Visibility.Collapsed;
+                HideReply();
                 EmergencySource.Text = EmergencySourceLine(ev);
                 EmergencyView.Visibility = Visibility.Visible;
                 SetBrightnessAsync(100);

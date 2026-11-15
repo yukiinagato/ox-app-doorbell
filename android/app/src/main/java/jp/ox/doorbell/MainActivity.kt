@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -71,6 +72,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private lateinit var replyBanner: View
     private lateinit var replyText: TextView
     private lateinit var replyScroll: View
+    private lateinit var replyHint: TextView
+    private lateinit var replyCount: TextView
     private lateinit var offlineView: View
     private lateinit var offlineTitle: TextView
     private lateinit var offlineBody: TextView
@@ -173,10 +176,43 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             showIdle()
         }
     }
-    private val replyTimeout = Runnable { replyBanner.visibility = View.GONE }
+    private var replyGuard: ReplyDismissGuard? = null
+    private var replyShownAt = 0L
+    private var replyTtlMs = 30_000L
+    private val replyTick = object : Runnable {
+        override fun run() {
+            val guard = replyGuard
+            if (replyBanner.visibility != View.VISIBLE || guard == null) return
+            val now = SystemClock.elapsedRealtime()
+            val left = replyTtlMs - (now - replyShownAt)
+            if (left <= 0) { dismissReply(); return }
+            replyCount.text = ((left + 999) / 1000).toString()
+            when (guard.hint(now)) {
+                ReplyDismissGuard.Hint.NONE -> replyHint.text = ""
+                ReplyDismissGuard.Hint.EXIT -> {
+                    replyHint.text = texts.t("reply.exit_hint", R.string.reply_exit_hint)
+                    replyHint.setTypeface(null, Typeface.NORMAL)
+                    replyHint.background = null
+                }
+                ReplyDismissGuard.Hint.CONFIRM -> {
+                    replyHint.text = texts.t("reply.exit_confirm", R.string.reply_exit_confirm)
+                    replyHint.setTypeface(null, Typeface.BOLD)
+                    replyHint.background = ShellUi.rounded(this@MainActivity, palette.surface, 14, palette.accent)
+                }
+            }
+            ui.postDelayed(this, 250)
+        }
+    }
+
+    private fun replyTap() {
+        val guard = replyGuard ?: return
+        if (guard.tap(SystemClock.elapsedRealtime()) == ReplyDismissGuard.Tap.CLOSE) dismissReply()
+        else { ui.removeCallbacks(replyTick); replyTick.run() }
+    }
 
     private fun dismissReply() {
-        ui.removeCallbacks(replyTimeout)
+        ui.removeCallbacks(replyTick)
+        replyGuard = null
         replyBanner.visibility = View.GONE
     }
 
@@ -479,6 +515,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         // otherwise backing out of first-run setup strands the operator on an empty screen.
         setupLaunchRequested = false
         resumed = false
+        dismissReply()
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(airTick)
         ui.removeCallbacks(purposeTimeout)
@@ -561,10 +598,12 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         replyBanner = findViewById(R.id.reply_banner)
         replyText = findViewById(R.id.reply_text)
         replyScroll = findViewById(R.id.reply_scroll)
+        replyHint = findViewById(R.id.reply_hint)
+        replyCount = findViewById(R.id.reply_count)
         val replyPad = ((if (resources.configuration.smallestScreenWidthDp >= 600) 24 else 16) *
             resources.displayMetrics.density).toInt()
         replyBanner.setPadding(replyPad, replyPad, replyPad, replyPad)
-        replyBanner.setOnClickListener { dismissReply() }
+        replyBanner.setOnClickListener { replyTap() }
         replyScroll.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or2, ob ->
             if (r - l != or2 - ol || b - t != ob - ot) fitReply()
         }
@@ -805,6 +844,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (dashboard != null) return
         replyBanner.setBackgroundColor(ShellUi.opaque(palette.surface))
         replyText.setTextColor(ShellUi.opaque(palette.ink))
+        replyHint.setTextColor(ShellUi.opaque(palette.ink))
+        replyCount.setTextColor(ShellUi.opaque(palette.ink))
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
@@ -1472,13 +1513,18 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                     clearCallProjection()
                     showIdle()
                 }
-                replyText.text = ev.optString("text")
-                replyBanner.visibility = View.VISIBLE
-                replyScroll.post { fitReply() }
-                var ttl = ev.optDouble("ttl_s", 30.0)
-                if (ttl <= 0) ttl = 30.0
-                ui.removeCallbacks(replyTimeout)
-                ui.postDelayed(replyTimeout, (ttl * 1000).toLong())
+                if (app.emergencyAlerts.current() == null) {
+                    var ttl = ev.optDouble("ttl_s", 30.0)
+                    if (ttl <= 0) ttl = 30.0
+                    replyTtlMs = (ttl * 1000).toLong()
+                    replyShownAt = SystemClock.elapsedRealtime()
+                    replyGuard = ReplyDismissGuard(replyShownAt)
+                    replyText.text = ev.optString("text")
+                    replyBanner.visibility = View.VISIBLE
+                    replyScroll.post { fitReply() }
+                    ui.removeCallbacks(replyTick)
+                    replyTick.run()
+                }
             }
             // Replicated visitor-language update.
             "visitor_lang" -> {

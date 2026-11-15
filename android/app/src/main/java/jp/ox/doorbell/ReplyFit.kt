@@ -32,3 +32,38 @@ object ReplyFit {
         return Result(lo, true)
     }
 }
+
+/**
+ * Guarded dismissal of the quick-reply overlay: taps are ignored for [GUARD_MS]; a first tap
+ * after that arms the guard for [CONFIRM_MS]; a second tap at least [MIN_GAP_MS] later closes.
+ */
+class ReplyDismissGuard(private val shownAtMs: Long) {
+    enum class Tap { IGNORE, ARM, CLOSE }
+    enum class Hint { NONE, EXIT, CONFIRM }
+
+    private var armedAtMs: Long? = null
+
+    private fun armed(now: Long): Boolean {
+        val at = armedAtMs ?: return false
+        return now - at <= CONFIRM_MS
+    }
+
+    fun tap(now: Long): Tap {
+        if (now - shownAtMs < GUARD_MS) return Tap.IGNORE
+        if (armed(now)) return if (now - armedAtMs!! < MIN_GAP_MS) Tap.IGNORE else Tap.CLOSE
+        armedAtMs = now
+        return Tap.ARM
+    }
+
+    fun hint(now: Long): Hint = when {
+        now - shownAtMs < GUARD_MS -> Hint.NONE
+        armed(now) -> Hint.CONFIRM
+        else -> Hint.EXIT
+    }
+
+    companion object {
+        const val GUARD_MS = 3000L
+        const val CONFIRM_MS = 3000L
+        const val MIN_GAP_MS = 300L
+    }
+}

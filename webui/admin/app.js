@@ -2295,8 +2295,11 @@ var AdminLogic = (function () {
 
   function uiEntries(f) {
     var langs = (f.languages && f.languages.length) ? f.languages : ["ja"];
-    return [{ key: "ui.languages", value: langs },
-            { key: "ui.visitor_lang_revert_s", value: num(f.revert_s, 60) }];
+    var entries = [{ key: "ui.languages", value: langs },
+                   { key: "ui.visitor_lang_revert_s", value: num(f.revert_s, 60) }];
+    if (f.reply_ttl_s !== undefined)
+      entries.push({ key: "reply.display_ttl_s", value: Math.min(300, Math.max(5, num(f.reply_ttl_s, 30))) });
+    return entries;
   }
 
 
@@ -9115,6 +9118,10 @@ if (typeof document !== "undefined") (function () {
          " (visitor_lang_revert_s)</label><input id='uiRevert' type='number' value='" +
          esc(ui.visitor_lang_revert_s !== undefined ? ui.visitor_lang_revert_s : 60) +
          "'></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("prefs.reply_ttl")) +
+         " (reply.display_ttl_s, 5-300)</label><input id='uiReplyTtl' type='number' min='5' max='300' value='" +
+         esc((cfgObj("reply") || {}).display_ttl_s !== undefined ? cfgObj("reply").display_ttl_s : 30) +
+         "'></div>" +
          "<div class='actions'><button class='btn small' id='uiSave'>" + esc(t("admin.save")) +
          "</button></div></div>";
     el.innerHTML = h;
@@ -9149,7 +9156,8 @@ if (typeof document !== "undefined") (function () {
       $all("[data-uilang]", el).forEach(function (c) {
         if (c.checked) ls.push(c.getAttribute("data-uilang"));
       });
-      saveAndRefresh(L.uiEntries({ languages: ls, revert_s: $("#uiRevert").value }), null);
+      saveAndRefresh(L.uiEntries({ languages: ls, revert_s: $("#uiRevert").value,
+                                     reply_ttl_s: $("#uiReplyTtl").value }), null);
     };
   }
 

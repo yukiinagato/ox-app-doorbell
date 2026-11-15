@@ -1714,6 +1714,8 @@
 "reply.answered" = "已回复（%@）";
 "reply.banner" = "住户留言";
 "reply.choose" = "选择快捷回复";
+"reply.exit_confirm" = "再点一次即可关闭";
+"reply.exit_hint" = "连续点击屏幕两次即可关闭";
 "reply.failed" = "发送快捷回复失败";
 "reply.sent" = "已发送：%@";
 "ring.answer" = "接听";

@@ -1721,6 +1721,8 @@ Delete it?</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
   <data name="reply_choose" xml:space="preserve"><value>Choose a quick reply</value></data>
+  <data name="reply_exit_confirm" xml:space="preserve"><value>Tap once more to close</value></data>
+  <data name="reply_exit_hint" xml:space="preserve"><value>Tap the screen twice to close</value></data>
   <data name="reply_failed" xml:space="preserve"><value>Failed to send the quick reply</value></data>
   <data name="reply_sent" xml:space="preserve"><value>Sent: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>

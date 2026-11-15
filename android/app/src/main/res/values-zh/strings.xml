@@ -1719,6 +1719,8 @@
     <string name="reply_answered">已回复（%1$s）</string>
     <string name="reply_banner">住户留言</string>
     <string name="reply_choose">选择快捷回复</string>
+    <string name="reply_exit_confirm">再点一次即可关闭</string>
+    <string name="reply_exit_hint">连续点击屏幕两次即可关闭</string>
     <string name="reply_failed">发送快捷回复失败</string>
     <string name="reply_sent">已发送：%1$s</string>
     <string name="ring_answer">接听</string>

@@ -65,4 +65,29 @@ class ReplyFitTest {
     @Test fun ceilingIsRespected() {
         assertEquals(20, ReplyFit.fit(10, 10, 10, 20) { ReplyFit.Extent(1, 1) }.sizePx)
     }
+
+    @Test fun replyInkReachesSevenToOneOnBothPalettes() {
+        for (p in listOf(Palette.LIGHT, Palette.DARK)) {
+            assertTrue(UiContrast.contrast(p.ink, p.surface) >= 7.0)
+        }
+    }
+
+    @Test fun dismissGuardIgnoresThenArmsThenCloses() {
+        val g = ReplyDismissGuard(1000)
+        assertEquals(ReplyDismissGuard.Hint.NONE, g.hint(3999))
+        assertEquals(ReplyDismissGuard.Tap.IGNORE, g.tap(3999))
+        assertEquals(ReplyDismissGuard.Hint.EXIT, g.hint(4000))
+        assertEquals(ReplyDismissGuard.Tap.ARM, g.tap(4000))
+        assertEquals(ReplyDismissGuard.Hint.CONFIRM, g.hint(4100))
+        assertEquals(ReplyDismissGuard.Tap.IGNORE, g.tap(4200))
+        assertEquals(ReplyDismissGuard.Tap.CLOSE, g.tap(4300))
+    }
+
+    @Test fun dismissGuardLapsesAfterThreeSeconds() {
+        val g = ReplyDismissGuard(0)
+        assertEquals(ReplyDismissGuard.Tap.ARM, g.tap(5000))
+        assertEquals(ReplyDismissGuard.Hint.EXIT, g.hint(8001))
+        assertEquals(ReplyDismissGuard.Tap.ARM, g.tap(9000))
+        assertEquals(ReplyDismissGuard.Tap.CLOSE, g.tap(9500))
+    }
 }

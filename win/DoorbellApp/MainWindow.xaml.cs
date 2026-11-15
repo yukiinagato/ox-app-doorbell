@@ -250,7 +250,7 @@ namespace DoorbellApp
             UpdateClock();
 
             _callTimeout.Interval = TimeSpan.FromSeconds(1);
-            _replyTimeout.Tick += (s, e) => { _replyTimeout.Stop(); ReplyBanner.Visibility = Visibility.Collapsed; };
+            _replyTimeout.Tick += (s, e) => ReplyTick();
 
             _pixelShift.Tick += (s, e) =>
             {

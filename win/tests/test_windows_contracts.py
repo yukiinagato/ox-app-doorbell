@@ -56,6 +56,23 @@ class WindowsContracts(unittest.TestCase):
                       capabilities)
         self.assertIn("status.ACLineStatus == 1", device_info)
 
+    def test_reply_overlay_ink_reaches_seven_to_one_on_its_surface(self):
+        rows = {m.group(1): (m.group(2), m.group(3)) for m in re.finditer(
+            r'\{ "(Bg|Fg)", "[A-Za-z]+", "(#[0-9A-F]{6})", "(#[0-9A-F]{6})" \}',
+            read("win/DoorbellApp/Util/Appearance.cs"))}
+
+        def luminance(color):
+            channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+        for theme in (0, 1):
+            a, b = luminance(rows["Fg"][theme]), luminance(rows["Bg"][theme])
+            self.assertGreaterEqual((max(a, b) + 0.05) / (min(a, b) + 0.05), 7.0)
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        self.assertIn('x:Name="ReplyBanner"', xaml)
+        self.assertIn('Background="{DynamicResource Bg}"', xaml)
+
     def test_xaml_and_resources_are_well_formed(self):
         for path in [WIN / "DoorbellApp" / "MainWindow.xaml",
                      WIN / "DoorbellApp" / "App.xaml",

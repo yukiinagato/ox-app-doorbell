@@ -1721,6 +1721,8 @@
   <data name="reply_answered" xml:space="preserve"><value>已回复（{0}）</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>
   <data name="reply_choose" xml:space="preserve"><value>选择快捷回复</value></data>
+  <data name="reply_exit_confirm" xml:space="preserve"><value>再点一次即可关闭</value></data>
+  <data name="reply_exit_hint" xml:space="preserve"><value>连续点击屏幕两次即可关闭</value></data>
   <data name="reply_failed" xml:space="preserve"><value>发送快捷回复失败</value></data>
   <data name="reply_sent" xml:space="preserve"><value>已发送：{0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>

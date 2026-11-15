@@ -1714,6 +1714,8 @@
 "reply.answered" = "Replied (%@)";
 "reply.banner" = "Message from resident";
 "reply.choose" = "Choose a quick reply";
+"reply.exit_confirm" = "Tap once more to close";
+"reply.exit_hint" = "Tap the screen twice to close";
 "reply.failed" = "Failed to send the quick reply";
 "reply.sent" = "Sent: %@";
 "ring.answer" = "Answer";

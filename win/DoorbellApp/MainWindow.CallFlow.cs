@@ -119,21 +119,54 @@ namespace DoorbellApp
                     ? Texts.T("visitor.restoring") : Texts.T("calling.title");
         }
 
+        private readonly Stopwatch _replyClock = new Stopwatch();
+        private ReplyDismissGuard _replyGuard;
+        private long _replyTtlMs = 30000;
+
         private void HideReply()
         {
             _replyTimeout.Stop();
+            _replyGuard = null;
             ReplyBanner.Visibility = Visibility.Collapsed;
+        }
+
+        private void ReplyTick()
+        {
+            if (_replyGuard == null) return;
+            long now = _replyClock.ElapsedMilliseconds;
+            long left = _replyTtlMs - now;
+            if (left <= 0) { HideReply(); return; }
+            ReplyCountText.Text = ((left + 999) / 1000).ToString();
+            ReplyHint hint = _replyGuard.Hint(now);
+            ReplyHintText.Text = hint == Ui.ReplyHint.None ? "" :
+                Texts.T(hint == Ui.ReplyHint.Confirm ? "reply.exit_confirm" : "reply.exit_hint");
+            ReplyHintText.FontWeight = hint == Ui.ReplyHint.Confirm ? FontWeights.Bold : FontWeights.Normal;
+            ReplyHintText.TextDecorations = hint == Ui.ReplyHint.Confirm ? TextDecorations.Underline : null;
+        }
+
+        private void ReplyTapped()
+        {
+            if (_replyGuard == null) return;
+            if (_replyGuard.Tap(_replyClock.ElapsedMilliseconds) == Ui.ReplyTap.Close) HideReply();
+            else ReplyTick();
         }
 
         private void OnReplyBannerClick(object sender, MouseButtonEventArgs e)
         {
-            HideReply();
+            ReplyTapped();
             e.Handled = true;
         }
 
         private void OnReplyBannerTouchUp(object sender, TouchEventArgs e)
         {
-            HideReply();
+            ReplyTapped();
+            e.Handled = true;
+        }
+
+        private void OnReplyBannerKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter && e.Key != Key.Space) return;
+            ReplyTapped();
             e.Handled = true;
         }
 
@@ -148,7 +181,7 @@ namespace DoorbellApp
             double margin = ReplyBanner.ActualWidth >= 720 ? 24 : 16;
             ReplyBanner.Padding = new Thickness(margin);
             double width = ReplyBanner.ActualWidth - 2 * margin;
-            double height = ReplyBanner.ActualHeight - 2 * margin;
+            double height = ReplyBanner.ActualHeight - 2 * margin - 40;
             string text = ReplyText.Text;
             if (width <= 0 || height <= 0 || string.IsNullOrEmpty(text)) return;
             double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
@@ -361,9 +394,14 @@ namespace DoorbellApp
                     FitReply();
                     double ttl = 30;
                     double.TryParse(ev.Str("ttl_s"), out ttl);
-                    _replyTimeout.Interval = TimeSpan.FromSeconds(ttl <= 0 ? 30 : ttl);
+                    _replyTtlMs = (long)((ttl <= 0 ? 30 : ttl) * 1000);
+                    _replyClock.Restart();
+                    _replyGuard = new ReplyDismissGuard(0);
+                    _replyTimeout.Interval = TimeSpan.FromMilliseconds(250);
                     _replyTimeout.Stop();
                     _replyTimeout.Start();
+                    ReplyTick();
+                    ReplyBanner.Focus();
                     _callTimeout.Stop();
                     _activeCallId = "";
                     ShowIdle();

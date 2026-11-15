@@ -22,6 +22,7 @@
   </header>
   <div id="replyBanner" role="button" tabindex="0" style="display:none">
     <div id="replyBox"><div class="txt" id="replyText"></div></div>
+    <div id="replyFoot"><span id="replyHint"></span><span id="replyCount"></span></div>
     <div class="txt" id="replyMeasure" aria-hidden="true"></div>
   </div>
   <main id="main">
@@ -47,7 +48,6 @@
 (function () {
   "use strict";
   var POLL_MS = 2000;
-  var REPLY_MS = 30000;
   var OFFLINE_AFTER = 5;
 
   var C = DoorbellPanelCommon, R = DoorbellPanelRuntime;
@@ -471,8 +471,9 @@
 
 
   var lastReplyTs = -1;
-  var replyTimer = null;
   var REPLY_FLOOR = 28;
+  var replyTimer = null, replyGuard = null, replyShownAt = 0, replyTtlMs = 30000;
+  function nowMs() { return new Date().getTime(); }
   function showingReply() { return $("replyBanner").style.display !== "none"; }
   function fitReply() {
     if (!showingReply()) return;
@@ -488,14 +489,29 @@
     txt.style.fontSize = r.size + "px";
     box.className = r.fits ? "" : "overflowing";
   }
+  function replyTick() {
+    if (!showingReply()) return;
+    var now = nowMs(), left = replyTtlMs - (now - replyShownAt);
+    if (left <= 0) { hideReply(); return; }
+    $("replyCount").innerHTML = String(Math.ceil(left / 1000));
+    var hint = replyGuard.hint(now), el = $("replyHint");
+    el.innerHTML = hint === "none" ? "" : esc(t(hint === "confirm" ? "reply.exit_confirm" : "reply.exit_hint"));
+    el.className = hint === "confirm" ? "confirm" : "";
+  }
   function hideReply() {
+    if (replyTimer) { clearInterval(replyTimer); replyTimer = null; }
     $("replyBanner").style.display = "none";
     document.body.className = document.body.className.replace(/ ?replyActive/, "");
   }
-  $("replyBanner").onclick = hideReply;
+  function replyTap() {
+    if (!showingReply()) return;
+    var action = replyGuard.tap(nowMs());
+    if (action === "close") hideReply(); else replyTick();
+  }
+  $("replyBanner").onclick = replyTap;
   $("replyBanner").onkeydown = function (e) {
     var key = e.keyCode;
-    if (key === 13 || key === 32 || key === 27) hideReply();
+    if (key === 13 || key === 32) { replyTap(); if (e.preventDefault) e.preventDefault(); }
   };
   window.addEventListener("resize", fitReply, false);
   window.addEventListener("orientationchange", fitReply, false);
@@ -503,12 +519,17 @@
     if (lastReplyTs === -1) { lastReplyTs = (reply && reply.ts) || 0; return; }
     if (!reply || !reply.ts || reply.ts <= lastReplyTs) return;
     lastReplyTs = reply.ts;
+    var ttl = Number(reply.ttl_s);
+    replyTtlMs = (ttl > 0 ? ttl : 30) * 1000;
+    replyShownAt = nowMs();
+    replyGuard = DoorbellPanelCommon.createReplyGuard(replyShownAt);
     $("replyText").innerHTML = esc(reply.text);
     $("replyBanner").style.display = "block";
     if (document.body.className.indexOf("replyActive") < 0) document.body.className += " replyActive";
     fitReply();
-    if (replyTimer) clearTimeout(replyTimer);
-    replyTimer = setTimeout(hideReply, REPLY_MS);
+    replyTick();
+    if (replyTimer) clearInterval(replyTimer);
+    replyTimer = setInterval(replyTick, 250);
   }
 
 

@@ -1719,6 +1719,8 @@ Delete it?</string>
     <string name="reply_answered">Replied (%1$s)</string>
     <string name="reply_banner">Message from resident</string>
     <string name="reply_choose">Choose a quick reply</string>
+    <string name="reply_exit_confirm">Tap once more to close</string>
+    <string name="reply_exit_hint">Tap the screen twice to close</string>
     <string name="reply_failed">Failed to send the quick reply</string>
     <string name="reply_sent">Sent: %1$s</string>
     <string name="ring_answer">Answer</string>

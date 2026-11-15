@@ -2272,6 +2272,7 @@ struct Node::Impl {
   std::string sip_call_id;
   std::string last_reply_text;
   int64_t last_reply_ts = 0;
+  int64_t last_reply_ttl_s = 30;
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;
 
@@ -8647,6 +8648,7 @@ struct Node::Impl {
       if (p) {
         last_reply_text = json::getString(p.get(), "text");
         last_reply_ts = hlc->correctedWallMs();
+        last_reply_ttl_s = json::getInt(p.get(), "ttl_s", 30);
       }
       const std::string id = p ? json::getString(p.get(), "call_id") : "";
       auto active = active_calls.find(ev.door);
@@ -12578,6 +12580,7 @@ struct Node::Impl {
         cJSON* r = json::addObj(o.get(), "reply");
         json::set(r, "text", last_reply_text);
         json::set(r, "ts", last_reply_ts);
+        json::set(r, "ttl_s", last_reply_ttl_s);
       } else {
         json::setItem(o.get(), "reply", json::Doc(cJSON_CreateNull()));
       }

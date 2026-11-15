@@ -725,7 +725,29 @@
     return { size: lo, fits: true };
   }
 
-  return { fitFontSize: fitFontSize, esc: esc, qs: qs, normalizeLang: normalizeLang, format: format,
+  /* Guarded dismissal of the quick-reply overlay. Taps are ignored for the first GUARD_MS; after
+   * that a first tap arms the guard for CONFIRM_MS and a second tap, at least MIN_GAP_MS later,
+   * closes. tap(now) returns "ignore", "arm" or "close"; hint(now) returns "none", "exit" or
+   * "confirm". Times are milliseconds from any monotonic-enough clock. */
+  var REPLY_GUARD = { GUARD_MS: 3000, CONFIRM_MS: 3000, MIN_GAP_MS: 300 };
+  function createReplyGuard(shownAt) {
+    var armedAt = null;
+    function armed(now) { return armedAt !== null && now - armedAt <= REPLY_GUARD.CONFIRM_MS; }
+    return {
+      tap: function (now) {
+        if (now - shownAt < REPLY_GUARD.GUARD_MS) return "ignore";
+        if (armed(now)) return now - armedAt < REPLY_GUARD.MIN_GAP_MS ? "ignore" : "close";
+        armedAt = now;
+        return "arm";
+      },
+      hint: function (now) {
+        if (now - shownAt < REPLY_GUARD.GUARD_MS) return "none";
+        return armed(now) ? "confirm" : "exit";
+      }
+    };
+  }
+
+  return { createReplyGuard: createReplyGuard, REPLY_GUARD: REPLY_GUARD, fitFontSize: fitFontSize, esc: esc, qs: qs, normalizeLang: normalizeLang, format: format,
            createCatalog: createCatalog, setText: setText,
            applyEmergencyText: applyEmergencyText, newestHlc: newestHlc,
            sizeClass: sizeClass, colorRoles: colorRoles, applyColorRoles: applyColorRoles,

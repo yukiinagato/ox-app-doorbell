@@ -849,9 +849,10 @@
              layer (ZIndex), source and time, and one Clear action that needs a deliberate long
              press; keyboard users get a confirmation instead. Colors come from the Core event. -->
         <Border x:Name="ReplyBanner" Visibility="Collapsed" Background="{DynamicResource Bg}"
-                Padding="24" Cursor="Hand" MouseLeftButtonUp="OnReplyBannerClick"
+                Padding="24" Cursor="Hand" Focusable="True" KeyDown="OnReplyBannerKeyDown" MouseLeftButtonUp="OnReplyBannerClick"
                 TouchUp="OnReplyBannerTouchUp" SizeChanged="OnReplyBannerSizeChanged">
             <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="40"/></Grid.RowDefinitions>
                 <TextBlock x:Name="ReplyCaption" Visibility="Collapsed"/>
                 <ScrollViewer x:Name="ReplyScroll" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -860,6 +861,12 @@
                                VerticalAlignment="Center" TextAlignment="Center"
                                LineStackingStrategy="BlockLineHeight"/>
                 </ScrollViewer>
+                <Grid Grid.Row="1">
+                    <TextBlock x:Name="ReplyHintText" FontSize="16" Foreground="{DynamicResource Fg}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ReplyCountText" FontSize="16" Foreground="{DynamicResource Fg}"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
             </Grid>
         </Border>
 

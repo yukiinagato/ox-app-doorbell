@@ -69,6 +69,15 @@ internal static class ReplyFitTests
         bool f;
         Check(Fit("a\nb\nc\nd", 600, 600, out f) < Fit("a b c d", 600, 600, out f), "explicit newlines add lines");
         Check(ReplyFit.Fit(10, 10, 10, 20, s => new ReplyExtent(1, 1), out f) == 20, "ceiling is respected");
+        var g = new ReplyDismissGuard(1000);
+        Check(g.Hint(3999) == ReplyHint.None && g.Tap(3999) == ReplyTap.Ignore, "taps are ignored for 3 s");
+        Check(g.Hint(4000) == ReplyHint.Exit && g.Tap(4000) == ReplyTap.Arm, "first tap arms");
+        Check(g.Hint(4100) == ReplyHint.Confirm, "confirm hint while armed");
+        Check(g.Tap(4200) == ReplyTap.Ignore, "a bounce under 300 ms is ignored");
+        Check(g.Tap(4300) == ReplyTap.Close, "second tap closes");
+        var h = new ReplyDismissGuard(0);
+        Check(h.Tap(5000) == ReplyTap.Arm && h.Hint(8001) == ReplyHint.Exit, "the confirm state lapses");
+        Check(h.Tap(9000) == ReplyTap.Arm && h.Tap(9500) == ReplyTap.Close, "a late second tap only re-arms");
         Console.WriteLine("reply fit tests passed: " + _assertions + " assertions");
         return 0;
     }
