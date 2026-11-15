@@ -69,6 +69,30 @@ final class SettingsCatalogTests: XCTestCase {
 
     // MARK: Key mapping
 
+    func testAirQualityRowsWriteThisDevicesKeys() {
+        let config: [String: Any] = ["air_sensors": [
+            "s_2": ["name": "Porch", "host": "h", "address": "a"],
+            "s_1": ["name": "Hall", "host": "h", "address": "b"],
+        ]]
+        let c = catalog(config)
+        let show = item(c, ["device"], "air_show")
+        XCTAssertEqual(operations(show?.commit?(.bool(true))).first?.0,
+                       "devices.node1.local.air_quality.show")
+        let sensor = item(c, ["device"], "air_sensor")
+        guard case .choice(_, let options, _)? = sensor?.control else {
+            return XCTFail("the sensor row is a picker")
+        }
+        XCTAssertEqual(options.map { $0.value }, ["", "s_1", "s_2"], "none first, then by name")
+        XCTAssertEqual(operations(sensor?.commit?(.string("s_1"))).first?.1, "s_1")
+        XCTAssertEqual(operations(sensor?.commit?(.string(""))).first?.1, "<delete>")
+        XCTAssertEqual(operations(item(c, ["device"], "air_host")?.commit?(.bool(true))).first?.0,
+                       "devices.node1.local.air_quality.host")
+        XCTAssertNil(item(catalog(config, isTV: true), ["device"], "air_host"),
+                     "an Apple TV never hosts a Bluetooth sensor")
+        XCTAssertNotNil(item(catalog(config, isTV: true), ["device"], "air_show"))
+    }
+
+
     func testCallFlowAndTtlMapToUiKeys() {
         let c = catalog()
         let flow = item(c, ["calls"], "call_flow")

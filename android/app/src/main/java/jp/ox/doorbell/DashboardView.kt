@@ -130,6 +130,8 @@ internal class DashboardView(
 
     private val clockText = ShellUi.label(activity, "", TextRole.DISPLAY)
     private val dateText = ShellUi.label(activity, "", TextRole.SUBTITLE)
+    private val airIndicator =
+        AirQualityIndicator(activity, ShellUi.label(activity, "", TextRole.SUBTITLE))
     private val appBar = PlatformUi.appBar(activity, app.boot.name)
 
     private val countersRow = LinearLayout(activity).apply {
@@ -317,6 +319,14 @@ internal class DashboardView(
      */
     fun prioritizeDoor(door: String) = tilesPanel.prioritizeDoor(door)
 
+    /** Show a PM2.5 reading the host has already read from core. */
+    fun setAirQuality(reading: AirQualityReading) {
+        if (airIndicator.render(reading, texts, palette.line)) {
+            applyRegionInk()
+            scheduleRegionInk()
+        }
+    }
+
     // ---------- construction ----------
 
     private fun build() {
@@ -349,6 +359,9 @@ internal class DashboardView(
             orientation = LinearLayout.VERTICAL
             addView(clockText)
             addView(dateText)
+            addView(airIndicator.root, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = ShellUi.dp(activity, UiTokens.SPACE_XS) })
         }
         header.addView(clockBox, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
@@ -468,6 +481,7 @@ internal class DashboardView(
         footerGlass.update(softenedBackdrop, palette.surface, palette.line)
         footer.background = footerGlass
         sosSlider.applyPalette(palette)
+        airIndicator.render(airIndicator.reading, texts, palette.line)
         // Labels are reapplied here too, so a language change reaches the controls built once.
         if (actionsLang != texts.lang) {
             actionsLang = texts.lang
@@ -609,6 +623,8 @@ internal class DashboardView(
     private fun applyRegionInk() {
         paintRegion(clockText, "clock", palette.ground, muted = false)
         paintRegion(dateText, "date", palette.ground, muted = true)
+        if (airIndicator.reading.visible)
+            paintRegion(airIndicator.label, "air", palette.ground, muted = airIndicator.reading.dimmed)
         tilesPanel.heading?.let { paintRegion(it, "status_line", palette.ground, muted = true,
                                         cacheKey = "doors_heading") }
         // The app bar has no plate of its own either: its title and action icons take the ink

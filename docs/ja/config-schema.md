@@ -1062,3 +1062,7 @@ SIP は明示的なアカウントの `user` と安全な `pass_ref` のみを�
 旧 `panel.token_refs` とそのセッションは明示的に `legacy_shared` とし、宣言済みのローカル操作と共有 SIP の互換動作を維持します。個別デバイス失効とは呼ばず、独立 ID として遠隔メディアを委譲できません。ID の欠落や不正な委譲を自動で legacy と扱いません。`media.publish` に加え T15 の現在の session/call/revision/owner が必要です。認証された受信側も現在の ID 世代・権限・通話所有権を確認し、ブラウザ Cookie、CSRF、長期 bearer を転送しません。
 
 既存の LAN-public な `/stream.mjpeg`、`/stream.mp4`、`/snapshot.jpg` の玄関カメラ方針は維持します。`view` はパネル API と保護プロキシを制限しますが、明示的に公開された玄関映像を非公開にはしません。住戸からの返信映像には別の発行者/session 認可があります。
+
+## Bluetooth PM2.5 センサー
+
+`air_sensors.<id>` は Bluetooth PM2.5 センサー 1 台を、接続するデバイスに割り当てます：`{name, host, address, kind?, enabled?}`。`devices.<id>.local.air_quality` は `{host, show, sensor}` で、`host` はそのデバイスにセンサーを検索・接続させ、`show` はホーム画面に値を表示し、`sensor` は表示するセンサーを選びます。値は揮発的なピア runtime であり、設定には書き込まれません。[Bluetooth PM2.5 センサー](air-quality-sensors.md) を参照してください。

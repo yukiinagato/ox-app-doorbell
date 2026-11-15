@@ -20,6 +20,40 @@
   <data name="admin_add_rule" xml:space="preserve"><value>Add rule</value></data>
   <data name="admin_add_window" xml:space="preserve"><value>Add window</value></data>
   <data name="admin_addresses" xml:space="preserve"><value>Addresses</value></data>
+  <data name="admin_air_add" xml:space="preserve"><value>Add</value></data>
+  <data name="admin_air_address" xml:space="preserve"><value>Bluetooth identifier</value></data>
+  <data name="admin_air_battery" xml:space="preserve"><value>Battery {0}%</value></data>
+  <data name="admin_air_ble_off" xml:space="preserve"><value>Bluetooth is off</value></data>
+  <data name="admin_air_ble_ready" xml:space="preserve"><value>Bluetooth ready</value></data>
+  <data name="admin_air_ble_unauthorized" xml:space="preserve"><value>Bluetooth permission not granted</value></data>
+  <data name="admin_air_ble_unknown" xml:space="preserve"><value>Bluetooth state unknown</value></data>
+  <data name="admin_air_ble_unsupported" xml:space="preserve"><value>No Bluetooth LE</value></data>
+  <data name="admin_air_discovered" xml:space="preserve"><value>Sensors found nearby</value></data>
+  <data name="admin_air_display_unsupported" xml:space="preserve"><value>This device's app cannot show PM2.5</value></data>
+  <data name="admin_air_host" xml:space="preserve"><value>Search for and connect Bluetooth sensors</value></data>
+  <data name="admin_air_host_device" xml:space="preserve"><value>Connected through</value></data>
+  <data name="admin_air_host_offline" xml:space="preserve"><value>Connecting device is offline</value></data>
+  <data name="admin_air_host_unsupported" xml:space="preserve"><value>This device's app cannot connect Bluetooth sensors</value></data>
+  <data name="admin_air_intro" xml:space="preserve"><value>Connect a Bluetooth PM2.5 sensor (MOPS·VIDA) to a nearby device and show its reading on any door station or indoor panel. Keep the sensor on USB power: a constant connection drains its battery.</value></data>
+  <data name="admin_air_link" xml:space="preserve"><value>Connection</value></data>
+  <data name="admin_air_link_connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="admin_air_link_connecting" xml:space="preserve"><value>Connecting</value></data>
+  <data name="admin_air_link_disconnected" xml:space="preserve"><value>Not connected</value></data>
+  <data name="admin_air_link_not_found" xml:space="preserve"><value>Not found</value></data>
+  <data name="admin_air_name" xml:space="preserve"><value>Name</value></data>
+  <data name="admin_air_name_prompt" xml:space="preserve"><value>Sensor name (for example, Entrance)</value></data>
+  <data name="admin_air_no_hosts" xml:space="preserve"><value>No device is searching. Turn on “Search for and connect Bluetooth sensors” for a device near the sensor.</value></data>
+  <data name="admin_air_no_sensors" xml:space="preserve"><value>No sensors yet</value></data>
+  <data name="admin_air_none" xml:space="preserve"><value>(none)</value></data>
+  <data name="admin_air_nothing_found" xml:space="preserve"><value>{0}: nothing found yet</value></data>
+  <data name="admin_air_reading" xml:space="preserve"><value>Latest reading</value></data>
+  <data name="admin_air_remove" xml:space="preserve"><value>Remove</value></data>
+  <data name="admin_air_remove_confirm" xml:space="preserve"><value>Remove the sensor “{0}”?</value></data>
+  <data name="admin_air_sensor_pick" xml:space="preserve"><value>Sensor to show</value></data>
+  <data name="admin_air_sensors" xml:space="preserve"><value>Sensors</value></data>
+  <data name="admin_air_show" xml:space="preserve"><value>Show PM2.5</value></data>
+  <data name="admin_air_signal" xml:space="preserve"><value>Signal {0} dBm</value></data>
+  <data name="admin_air_title" xml:space="preserve"><value>PM2.5 sensors</value></data>
   <data name="admin_alert_accent" xml:space="preserve"><value>SOS accent</value></data>
   <data name="admin_alert_background" xml:space="preserve"><value>SOS background</value></data>
   <data name="admin_alert_channels" xml:space="preserve"><value>Channels</value></data>
@@ -472,6 +506,19 @@ Delete it?</value></data>
   <data name="admin_windows" xml:space="preserve"><value>Time windows</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
   <data name="admin_write" xml:space="preserve"><value>Write</value></data>
+  <data name="air_a11y" xml:space="preserve"><value>PM2.5 {0} micrograms per cubic metre, {1}</value></data>
+  <data name="air_a11y_no_value" xml:space="preserve"><value>PM2.5, {0}</value></data>
+  <data name="air_level_good" xml:space="preserve"><value>Good</value></data>
+  <data name="air_level_hazardous" xml:space="preserve"><value>Hazardous</value></data>
+  <data name="air_level_moderate" xml:space="preserve"><value>Moderate</value></data>
+  <data name="air_level_sensitive" xml:space="preserve"><value>Sensitive groups</value></data>
+  <data name="air_level_unhealthy" xml:space="preserve"><value>Unhealthy</value></data>
+  <data name="air_level_very_unhealthy" xml:space="preserve"><value>Very unhealthy</value></data>
+  <data name="air_pm25_label" xml:space="preserve"><value>PM2.5</value></data>
+  <data name="air_stale" xml:space="preserve"><value>Not updated</value></data>
+  <data name="air_unconfigured" xml:space="preserve"><value>No sensor</value></data>
+  <data name="air_unit" xml:space="preserve"><value>µg/m³</value></data>
+  <data name="air_waiting" xml:space="preserve"><value>Waiting</value></data>
   <data name="app_already_running" xml:space="preserve"><value>Doorbell is already running on this device.</value></data>
   <data name="app_core_start_failed" xml:space="preserve"><value>The core could not start. Check the log.</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>

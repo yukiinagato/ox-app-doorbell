@@ -35,6 +35,7 @@ final class RuntimeSupervisor {
     private var mainThreadHeartbeat = ProcessInfo.processInfo.systemUptime
     #if os(iOS)
     private var keepalive: KeepaliveClient?
+    private var airSensorHost: AirSensorHost?
     private var nativeKioskActive = false
     private var helperSupervising = false
     private var helperPolicy = "off"
@@ -75,6 +76,7 @@ final class RuntimeSupervisor {
         guard heartbeat == nil else {
             #if os(iOS)
             refreshHelperPolicy()
+            airSensorHost?.planMayHaveChanged()
             #endif
             noteMainThreadResponsive()
             publishCapabilities()
@@ -113,6 +115,9 @@ final class RuntimeSupervisor {
             hangSentinel.armAfterForegroundGrace()
         }
         configureKeepaliveFallback()
+        let host = AirSensorHost(core: core)
+        airSensorHost = host
+        host.start()
         #endif
 
         beginDeviceInfoUpdates()
@@ -144,6 +149,8 @@ final class RuntimeSupervisor {
         #if os(iOS)
         keepalive?.stop()
         keepalive = nil
+        airSensorHost?.stop()
+        airSensorHost = nil
         helperSupervising = false
         updateExternalSupervisorSnapshot()
         hangSentinel.disarmForBackground()
@@ -463,6 +470,20 @@ final class RuntimeSupervisor {
                 "call_cancel_v2": true,
                 "call_lifecycle_v2": supportsCallLifecycle,
                 "device_alert_v1": true,
+                "air_quality_display_v1": {
+                    #if os(iOS)
+                    return true
+                    #else
+                    return false
+                    #endif
+                }(),
+                "ble_air_sensor_v1": {
+                    #if os(iOS)
+                    return true
+                    #else
+                    return false
+                    #endif
+                }(),
                 "ui_manifest_v1": supportsUiManifest,
                 "runtime_recovery_v1": true,
                 "helper_policy_v1": {

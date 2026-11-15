@@ -259,6 +259,7 @@ struct SettingsCatalog {
                             }, searchable: false), commit: set(deviceKey("local.ui_lang"))),
             ]),
         ]
+        sections.append(SettingSection(t("admin.air_title"), airQualityItems()))
         if !ctx.isTV {
             // The same replicated key the web Admin edits; the root helper reads it on the
             // devices that have one.
@@ -324,6 +325,35 @@ struct SettingsCatalog {
             ]))
         }
         return SettingsPage(id: "device", title: t("settings.section_device"), sections: sections)
+    }
+
+    /// This device's PM2.5 line: whether it shows one, which registered sensor it shows, and,
+    /// where the shell has Bluetooth, whether it searches for and connects sensors itself.
+    private func airQualityItems() -> [SettingItem] {
+        let base = deviceKey("local.air_quality")
+        let sensors = (ConfigUtil.dig(cfg, "air_sensors") as? [String: Any]) ?? [:]
+        let options = sensors.compactMap { id, raw -> SettingOption? in
+            guard let entry = raw as? [String: Any] else { return nil }
+            return SettingOption(value: id, title: ConfigUtil.str(entry, "name") ?? id)
+        }.sorted {
+            $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }
+        var items = [
+            SettingItem("air_show", t("admin.air_show"),
+                        .toggle(bool(base.map { "\($0).show" } ?? "", false)),
+                        commit: set(base.map { "\($0).show" })),
+            SettingItem("air_sensor", t("admin.air_sensor_pick"),
+                        .choice(value: str(base.map { "\($0).sensor" } ?? "", ""),
+                                options: [SettingOption(value: "", title: t("admin.air_none"))]
+                                    + options, searchable: false),
+                        commit: setOptional(base.map { "\($0).sensor" })),
+        ]
+        if !ctx.isTV {
+            items.append(SettingItem("air_host", t("admin.air_host"),
+                                     .toggle(bool(base.map { "\($0).host" } ?? "", false)),
+                                     commit: set(base.map { "\($0).host" })))
+        }
+        return items
     }
 
     private func cameraPage() -> SettingsPage {

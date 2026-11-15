@@ -60,8 +60,8 @@ namespace DoorbellApp
 
         /// <summary>
         /// Runs on a worker. status/config/audio are served from run-loop snapshots and never
-        /// enter the loop; pairing and the call log do marshal into it, which is exactly why they
-        /// are read here rather than on the dispatcher.
+        /// enter the loop; pairing, the call log and air quality do marshal into it, which is
+        /// exactly why they are read here rather than on the dispatcher.
         /// </summary>
         private HomeSnapshot ReadHomeSnapshot(HomeRefresh kinds)
         {
@@ -76,6 +76,8 @@ namespace DoorbellApp
                 if ((kinds & HomeRefresh.Pairing) != 0) snapshot.Pairing = App.Core.PairingInfo();
                 if ((kinds & HomeRefresh.History) != 0)
                     snapshot.CallLog = App.Core.CallLog(0, RecentCallRows);
+                if ((kinds & HomeRefresh.AirQuality) != 0)
+                    snapshot.AirQuality = App.Core.AirQuality();
             }
             catch (Exception ex)
             {
@@ -95,6 +97,7 @@ namespace DoorbellApp
             if ((kinds & HomeRefresh.Tiles) != 0) RefreshDoorTiles(snapshot.Status);
             if ((kinds & HomeRefresh.History) != 0) RefreshCallHistory(snapshot.CallLog);
             if ((kinds & HomeRefresh.Pairing) != 0) RefreshPairingState(snapshot.Pairing);
+            if ((kinds & HomeRefresh.AirQuality) != 0) RefreshAirQuality(snapshot.AirQuality);
         }
 
         private void RefreshNodeInfo(HomeSnapshot snapshot)

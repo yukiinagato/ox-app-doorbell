@@ -33,6 +33,7 @@
 | tvOS SIP Answer/transmit | 不支援 | Apple TV 沒有 mic；UI 刻意隱藏 Answer，且不 advertise transmit。 |
 | 瀏覽器 WebRTC 通話 | 有條件 | 需要 Asterisk WebSocket/WebRTC 與 secure context；MJPEG panel 不等於有麥克風。 |
 | Web SOS active-page/Push presentation | 已實作；browser/deployment qualification 另計 | open page 預設顯示 replicated SOS。`emergency.web_active_page_alerts:false` 只停用 raw-state 顯示，positive matching `device_alert`/Push 仍可顯示。raw state 啟用時 rule TTL 只結束 decoration/sound，安全的紅色 overlay 保留至 clear；驗證 visual/sound/volume/sticky/TTL/colors 並保留於 Push，但 OS notification 可能限制 custom color/audio。`?group=` 的保存值供 poll/Push 共用，完整 subscription secret 在 CRDT 內以 XChaCha20-Poly1305 seal。Core `delivery_result` 是 dispatch evidence，不是 presentation proof。 |
+| 蓝牙 PM2.5 传感器宿主与主屏幕显示 | Core 已实现并通过主机测试；各应用仅确认可构建；未经真机验证 | Core 解析 MOPS·VIDA 帧，在 Core 所有的 `air_sensors` runtime 段中传播读数，并按设备解析管理员的选择；见[蓝牙 PM2.5 传感器](air-quality-sensors.md)。Android、iOS/iPadOS 及有低功耗蓝牙的 iOS 5 设备可作宿主；iOS 5、Windows、Android、iOS 可显示。尚无传感器完成真机连接、重连或电池长时间测试。 |
 | Native/Web semantic UI manifest | 已實作 durable native cache；Web scope 僅本 node | Core 永久保存 peer 的 last-valid native manifest/capability；configured offline device 以 `cached_contract:true` 驗證/queue，但仍需 renderer apply report。`web_ui.manifest` 只屬 serving node，不是 remote Web catalog。 |
 | cross-platform conformance harness | golden model + source smoke | 只重播 reference traces 與檢查 narrow source literals，不執行 client artifact，也不是 rendering/timing/hardware/release evidence。 |
 

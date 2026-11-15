@@ -52,6 +52,8 @@ namespace DoorbellApp
             DateText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Dim");
             DashClock.Foreground = ClockText.Foreground;
             DashDate.Foreground = DateText.Foreground;
+            VisitorAirText.Foreground = ClockText.Foreground;
+            DashAirText.Foreground = ClockText.Foreground;
             SaverClock.Foreground = _night ? NightClockBrush : SaverClockBrush;
 
             if (!App.SafeMode && _pixelShiftS > 0)

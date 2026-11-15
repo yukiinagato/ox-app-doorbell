@@ -329,6 +329,54 @@ than a zero-percent indicator. A device that does not implement the callback has
 which is not the same as a battery at zero. Peer values arrive through the bounded runtime
 projection, so they carry these three fields and nothing else.
 
+## PM2.5 sensors
+
+A Bluetooth LE PM2.5 sensor (MOPS·VIDA) is bound to one device that connects to it; Core gossips
+its readings, and every door station or indoor panel can show any sensor. Both halves are
+ordinary replicated configuration, written through `POST /api/config/commit` and validated by
+Core (`airQualityConfigValid`):
+
+```json
+{ "air_sensors": { "s_3f9a1c07": { "name": "Entrance", "host": "<node_id>",
+                                   "address": "<host-local BLE identifier>",
+                                   "kind": "mops_vida_pm25", "enabled": true } },
+  "devices": { "<node_id>": { "local": { "air_quality":
+                 { "show": true, "sensor": "s_3f9a1c07", "host": false } } } } }
+```
+
+- `air_sensors.<id>`: `id` is 1..32 of `[A-Za-z0-9_-]` (the admin writes `s_<8 hex>`), at most 16
+  sensors. `name` is 1..40 code points, `host` is the node id of the connecting device, `address`
+  is the identifier that device reported in discovery (1..64 characters; it is only meaningful on
+  that host). `kind` and `enabled` are optional. Writing `null` removes the sensor; the admin also
+  writes `devices.<id>.local.air_quality.sensor = null` on every device that showed it.
+- `devices.<id>.local.air_quality`: `show` displays a reading, `sensor` picks the sensor (`null`
+  or empty for none), and `host: true` makes that device search for and connect sensors. The
+  leaves `…air_quality.show|sensor|host` are valid on their own, and the admin writes one leaf per
+  change so concurrent edits of the other fields survive.
+
+A shell advertises `air_quality_display_v1` when it can show a reading and `ble_air_sensor_v1`
+when it can host a sensor, in its capability features. The admin disables the corresponding
+switch on a device that lacks the feature, except to turn an existing setting off.
+
+`GET /api/status` carries the administrator view as `air_quality`:
+
+```json
+{ "sensors": [ { "id": "s_3f9a1c07", "name": "Entrance", "host": "<node_id>",
+                 "address": "…", "enabled": true, "host_alive": true, "level": "moderate",
+                 "reading": { "pm25": 14, "at_ms": 1772000000000, "battery_pct": 80,
+                              "charging": false, "link": "connected" } } ],
+  "hosts": [ { "device": "<node_id>", "ble": "ready",
+               "discovered": [ { "address": "…", "name": "MOPS-VIDA", "rssi": -61,
+                                 "seen_ms": 1772000000000 } ] } ] }
+```
+
+`level` (good, moderate, sensitive, unhealthy, very_unhealthy, hazardous) and `reading` are
+absent until the host has reported a value. `link` is connected, connecting, disconnected, or
+not_found. `hosts` lists only devices that host or scan; `ble` is ready, off, unauthorized,
+unsupported, or unknown. `discovered` may include sensors that are already registered; the admin
+hides an address already bound to the same host. The Devices tab refreshes this on its regular
+five-second status poll.
+
 ## Announcements, unlock, appearance, and the automatic theme
 
 `POST /api/notice` and `DELETE /api/notice` write the cluster-wide announcement at

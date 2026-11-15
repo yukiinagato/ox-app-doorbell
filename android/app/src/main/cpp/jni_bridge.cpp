@@ -1039,6 +1039,62 @@ Java_jp_ox_doorbell_DoorbellCore_nativeAudioJson(JNIEnv* env, jobject, jlong h,
   return out;
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAirQualityJson(JNIEnv* env, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_air_quality_json(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAirSensorPlanJson(JNIEnv* env, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_air_sensor_plan_json(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAirSensorPacket(JNIEnv* env, jobject, jlong h,
+                                                       jstring sensor_id, jbyteArray data) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core || !data) return;
+  const jsize len = env->GetArrayLength(data);
+  if (len <= 0) return;
+  std::vector<uint8_t> bytes(static_cast<size_t>(len));
+  env->GetByteArrayRegion(data, 0, len, reinterpret_cast<jbyte*>(bytes.data()));
+  const std::string id = toUtf8(env, sensor_id);
+  if (id.empty()) return;
+  db_core_air_sensor_packet(b->core, id.c_str(), bytes.data(), bytes.size());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAirSensorReportJson(JNIEnv* env, jobject, jlong h,
+                                                           jstring report_json) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (b && b->core) db_core_air_sensor_report_json(b->core, toUtf8(env, report_json).c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAirSensorConnectCommandHex(JNIEnv* env, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_air_sensor_connect_command_hex(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeSetDoorNotice(JNIEnv* env, jobject, jlong h, jstring door,
                                                      jstring text, jlong expires_ms) {

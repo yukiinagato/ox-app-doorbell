@@ -350,6 +350,9 @@ namespace DoorbellApp
                 case "notice_changed":
                     RequestHomeRefresh(HomeRefresh.Notice | HomeRefresh.Tiles);
                     break;
+                case "air_quality_changed":
+                    RequestHomeRefresh(HomeRefresh.AirQuality);
+                    break;
                 case "call_log_changed":
                     _unreadMissed = DictInt(ev.Data, "unread_missed", _unreadMissed);
                     RequestHomeRefresh(HomeRefresh.History);

@@ -178,6 +178,12 @@
 		FB0000000000000000000074 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
 		FB0000000000000000000094 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
 		F90000000000000000000074 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
+		FB0000000000000000000301 /* AirQualityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000301 /* AirQualityView.swift */; };
+		FB0000000000000000000302 /* AirQualityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000301 /* AirQualityView.swift */; };
+		F90000000000000000000301 /* AirQualityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000301 /* AirQualityView.swift */; };
+		FB0000000000000000000303 /* AirSensorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000302 /* AirSensorHost.swift */; };
+		F90000000000000000000303 /* AirSensorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000302 /* AirSensorHost.swift */; };
+		AC0000000000000000000302 /* AirQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000301 /* AirQualityTests.swift */; };
 		FB0000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		FB0000000000000000000095 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		F90000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
@@ -290,6 +296,9 @@
 		E5E84E39C4B00251F5A31125 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
 		FA0000000000000000000033 /* SosSlideControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosSlideControl.swift; sourceTree = "<group>"; };
 		FA0000000000000000000034 /* NoticeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeSupport.swift; sourceTree = "<group>"; };
+		FA0000000000000000000301 /* AirQualityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirQualityView.swift; sourceTree = "<group>"; };
+		FA0000000000000000000302 /* AirSensorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirSensorHost.swift; sourceTree = "<group>"; };
+		AC0000000000000000000301 /* AirQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirQualityTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000035 /* CallHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHistory.swift; sourceTree = "<group>"; };
 		FA0000000000000000000037 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000038 /* AdminQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminQrView.swift; sourceTree = "<group>"; };
@@ -369,6 +378,8 @@
 				E5E84E39C4B00251F5A31125 /* SettingsModel.swift */,
 				FA0000000000000000000033 /* SosSlideControl.swift */,
 				FA0000000000000000000034 /* NoticeSupport.swift */,
+				FA0000000000000000000301 /* AirQualityView.swift */,
+				FA0000000000000000000302 /* AirSensorHost.swift */,
 				FA0000000000000000000035 /* CallHistory.swift */,
 				FA0000000000000000000037 /* SettingsViewController.swift */,
 				FA0000000000000000000038 /* AdminQrView.swift */,
@@ -442,6 +453,7 @@
 				AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */,
 				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
 				AC0000000000000000000017 /* SosVisibilityTests.swift */,
+				AC0000000000000000000301 /* AirQualityTests.swift */,
 				AC0000000000000000000019 /* ClusterAndClockTests.swift */,
 				EDAD294A1E4281CAE8E43DAE /* SettingsCatalogTests.swift */,
 				AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */,
@@ -765,6 +777,7 @@
 				AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */,
 				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
 				AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */,
+				AC0000000000000000000302 /* AirQualityTests.swift in Sources */,
 				AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */,
 				E39CD4A21B90E5412DE8E9D1 /* SettingsCatalogTests.swift in Sources */,
 				AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */,
@@ -788,6 +801,8 @@
 				E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */,
 				FB0000000000000000000073 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000074 /* NoticeSupport.swift in Sources */,
+				FB0000000000000000000301 /* AirQualityView.swift in Sources */,
+				FB0000000000000000000303 /* AirSensorHost.swift in Sources */,
 				FB0000000000000000000075 /* CallHistory.swift in Sources */,
 				FB0000000000000000000077 /* SettingsViewController.swift in Sources */,
 				FB0000000000000000000078 /* AdminQrView.swift in Sources */,
@@ -846,6 +861,7 @@
 				E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */,
 				FB0000000000000000000093 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000094 /* NoticeSupport.swift in Sources */,
+				FB0000000000000000000302 /* AirQualityView.swift in Sources */,
 				FB0000000000000000000095 /* CallHistory.swift in Sources */,
 				FB0000000000000000000097 /* SettingsViewController.swift in Sources */,
 				FB0000000000000000000098 /* AdminQrView.swift in Sources */,
@@ -898,6 +914,8 @@
 				E0A28CEB5B39E2FE6DBA4C41 /* SettingsModel.swift in Sources */,
 				F90000000000000000000073 /* SosSlideControl.swift in Sources */,
 				F90000000000000000000074 /* NoticeSupport.swift in Sources */,
+				F90000000000000000000301 /* AirQualityView.swift in Sources */,
+				F90000000000000000000303 /* AirSensorHost.swift in Sources */,
 				F90000000000000000000075 /* CallHistory.swift in Sources */,
 				F90000000000000000000077 /* SettingsViewController.swift in Sources */,
 				F90000000000000000000078 /* AdminQrView.swift in Sources */,

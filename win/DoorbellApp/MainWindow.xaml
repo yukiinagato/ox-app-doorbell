@@ -104,6 +104,19 @@
                                    HorizontalAlignment="Center" Foreground="{DynamicResource Fg}"/>
                         <TextBlock x:Name="DateText" FontSize="24" HorizontalAlignment="Center"
                                    Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
+                        <!-- PM2.5 from the sensor the administrator chose for this device
+                             (MainWindow.AirQuality.cs). The dot is the level colour. -->
+                        <StackPanel x:Name="VisitorAirQuality" Orientation="Horizontal"
+                                    HorizontalAlignment="Center" Margin="0,6,0,0"
+                                    Visibility="Collapsed">
+                            <Ellipse x:Name="VisitorAirDot" Width="12" Height="12"
+                                     StrokeThickness="1" VerticalAlignment="Center"
+                                     Margin="0,0,8,0"
+                                     Stroke="{Binding Foreground, ElementName=VisitorAirText}"/>
+                            <TextBlock x:Name="VisitorAirText" FontSize="20"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Fg}"/>
+                        </StackPanel>
                     </StackPanel>
                     <WrapPanel x:Name="LangBar" Grid.Column="2" Orientation="Horizontal"
                                HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -202,6 +215,16 @@
                                     </StackPanel>
                                     <TextBlock x:Name="DashDate" FontSize="18"
                                                Foreground="{DynamicResource Dim}" Margin="2,0,0,0"/>
+                                    <StackPanel x:Name="DashAirQuality" Orientation="Horizontal"
+                                                Margin="2,8,0,0" Visibility="Collapsed">
+                                        <Ellipse x:Name="DashAirDot" Width="12" Height="12"
+                                                 StrokeThickness="1" VerticalAlignment="Center"
+                                                 Margin="0,0,8,0"
+                                                 Stroke="{Binding Foreground, ElementName=DashAirText}"/>
+                                        <TextBlock x:Name="DashAirText" FontSize="18"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Fg}"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
                                     <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"

@@ -771,6 +771,23 @@ namespace DoorbellApp.Core
             catch { return null; }
         }
 
+        /// <summary>
+        /// The PM2.5 reading this device is configured to show
+        /// ({show,state,name,pm25,level,age_s,...}); state "hidden" means draw nothing.
+        /// </summary>
+        public Dictionary<string, object> AirQuality()
+        {
+            string s;
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_air_quality_json(_core));
+            }
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
         public bool SetDoorNotice(string door, string text, long expiresMs)
         {
             if (string.IsNullOrEmpty(door) || string.IsNullOrEmpty(text)) return false;

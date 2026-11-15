@@ -1353,3 +1353,11 @@ SIP call-info uses only the mapped account's `user` and secure `pass_ref`. A mis
 Legacy global `panel.token_refs` and their sessions are explicitly `legacy_shared`. They retain the declared local compatibility actions and shared SIP behavior; rotating a shared credential is not independent device revocation. They cannot be delegated as independent identities for remote media. A missing identity or malformed delegation never becomes legacy automatically. `media.publish` is additional to current T15 session/call/revision/owner checks; the authenticated receiver must recheck current principal generation/grants and call ownership. No browser cookie, CSRF value, or long-lived bearer is forwarded.
 
 The existing LAN-public `/stream.mjpeg`, `/stream.mp4`, and `/snapshot.jpg` camera policy is unchanged. Panel `view` scope protects panel APIs and protected proxies; it does not turn those intentionally public door-camera feeds into private resources. Sensitive resident return-camera frames use their separate publisher/session authorization.
+
+## Bluetooth PM2.5 sensors
+
+`air_sensors.<id>` binds one Bluetooth PM2.5 sensor to the device that connects to it:
+`{name, host, address, kind?, enabled?}`. `devices.<id>.local.air_quality` is
+`{host, show, sensor}`: `host` makes that device search for and connect sensors, `show` displays a
+reading on its home screen, and `sensor` chooses which. Readings are volatile peer runtime, never
+configuration. See [Bluetooth PM2.5 sensors](air-quality-sensors.md).

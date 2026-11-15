@@ -215,6 +215,8 @@ class App : Application(), DoorbellCore.Listener {
             }
         }
         if (eventType == "event") handleLifecycleEvent(ev)
+        if (eventType == "air_sensor_plan_changed" && ::runtime.isInitialized &&
+            runtime.isCurrentGeneration(callbackGeneration)) runtime.airSensors.onPlanChanged()
 
         // IncomingActivity stays independent from the main activity listener, so it receives
         // the local SIP and reply lifecycle explicitly.

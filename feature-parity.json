@@ -14054,6 +14054,324 @@
         }
       ],
       "review_annotations": []
+    },
+    {
+      "id": "F45",
+      "name_zh": "蓝牙 PM2.5 传感器读数显示",
+      "acceptance_zh": "管理员可为每台门口机/室内机决定是否显示 PM2.5 以及显示哪个传感器；宿主设备经蓝牙连接 MOPS·VIDA 传感器，读数经 mesh 传播；过期读数明确标示；不支持的设备不宣告能力",
+      "requirement_status": "PROPOSED_ACCEPTANCE_PENDING_INVENTORY_RECONCILIATION",
+      "source_revision": null,
+      "owner": null,
+      "production_symbols": [
+        "db_core_air_quality_json",
+        "db_core_air_sensor_plan_json",
+        "db_core_air_sensor_packet",
+        "db_core_air_sensor_report_json",
+        "db_core_air_sensor_connect_command_hex"
+      ],
+      "profiles": [
+        {
+          "profile_id": "P01",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P02",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P03",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P04",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P05",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P06",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P07",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P08",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P09",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P10",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P11",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        },
+        {
+          "profile_id": "P12",
+          "applicability": "NOT_RUN",
+          "conditions": [],
+          "implementation": "NOT_RUN",
+          "validation": {
+            "unit": "NOT_RUN",
+            "integration": "NOT_RUN",
+            "sanitizer": "NOT_RUN",
+            "target_build": "NOT_RUN",
+            "device_or_browser": "NOT_RUN"
+          },
+          "runtime_availability": "NOT_RUN",
+          "reason": null,
+          "test_ids": [],
+          "evidence": [],
+          "remaining_work": [],
+          "exception": {
+            "requested": false,
+            "approved": false,
+            "rationale": null
+          },
+          "tested_sha": null,
+          "inventory_status": "NOT_RUN"
+        }
+      ],
+      "review_annotations": []
     }
   ],
   "inventory_complete": false,

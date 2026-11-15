@@ -42,6 +42,7 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     private let clockLabel = HaloLabel()
     private let dateLabel = HaloLabel()
     private lazy var counters = ClusterCountersView(texts: texts)
+    private lazy var airQuality = AirQualityView(texts: texts, centred: false)
     private let missedButton = UIButton(type: .system)
     private let pairingButton = UIButton(type: .system)
     private let offlineDoorButton = UIButton(type: .system)
@@ -106,6 +107,8 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         dateLabel.font = SystemStyle.font(.title3, weight: .semibold)
         dateLabel.numberOfLines = 0
         SystemStyle.followContentSize(dateLabel)
+        airQuality.font = SystemStyle.font(.body, weight: .semibold)
+        SystemStyle.followContentSize(airQuality.label)
         clockLabel.inkCompanion = dateLabel
         dateLabel.inkCompanion = clockLabel
 
@@ -143,8 +146,10 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         headerView.spacing = Space.xxs
         headerView.addArrangedSubview(clockLabel)
         headerView.addArrangedSubview(dateLabel)
+        headerView.addArrangedSubview(airQuality)
         headerView.addArrangedSubview(statusCard)
         IOSAvailability.setCustomSpacing(Space.s, after: dateLabel, in: headerView)
+        IOSAvailability.setCustomSpacing(Space.s, after: airQuality, in: headerView)
 
         footerCard.contentView.addSubview(adminQr)
         NSLayoutConstraint.activate([
@@ -389,6 +394,7 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     private func applySkin() {
         skin.apply("clock", to: clockLabel)
         skin.apply("date", to: dateLabel)
+        airQuality.apply(skin: skin)
         counters.update(lastCounts, ink: SystemStyle.label, surface: .clear)
         missedButton.tintColor = SystemStyle.negative
         pairingButton.tintColor = SystemStyle.warning
@@ -419,6 +425,15 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
             // The header was measured before the first reading arrived.
             invalidateHeader()
         }
+    }
+
+    /// The PM2.5 line under the date. The host reads Core and hands the reading in.
+    func updateAirQuality(_ reading: AirQualityReading) {
+        if airQuality.update(reading) { invalidateHeader() }
+    }
+
+    func refreshAirQualityText() {
+        if airQuality.refreshText() { invalidateHeader() }
     }
 
     /// While missed calls are unread, one row says so and leads to the History tab; the count

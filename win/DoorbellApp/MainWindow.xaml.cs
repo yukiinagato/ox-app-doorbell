@@ -132,7 +132,8 @@ namespace DoorbellApp
             Tiles = 4,
             History = 8,
             Pairing = 16,
-            All = Node | Notice | Tiles | History | Pairing,
+            AirQuality = 32,
+            All = Node | Notice | Tiles | History | Pairing | AirQuality,
         }
 
         /// <summary>One read of core per refresh, taken on a worker and applied on the UI thread.</summary>
@@ -143,6 +144,7 @@ namespace DoorbellApp
             public Dictionary<string, object> Pairing;
             public Dictionary<string, object> CallLog;
             public Dictionary<string, object> Audio;
+            public Dictionary<string, object> AirQuality;
             public string SipBackend = "";
             public bool SipAvailable;
         }
@@ -243,6 +245,7 @@ namespace DoorbellApp
             _clockSync.Interval = TimeSpan.FromSeconds(30);
             _clockSync.Tick += (s, e) => SyncClockBase();
             _clockSync.Start();
+            StartAirQualityTimer();
             SyncClockBase();
             UpdateClock();
 
@@ -585,6 +588,7 @@ namespace DoorbellApp
             TouchHint.Text = IdleHintText();
             PairingOverlay.ApplyStrings();
             ApplyLayoutStrings();
+            RenderAirQuality();
         }
 
         private string DoorLabel(string door)

@@ -170,6 +170,9 @@ final class MainViewController: UIViewController {
     private var tabs: PanelTabBarController?
     private var homeScreen: HomeViewController?
     private var visitorScreen: VisitorScreenView?
+    private var airQualityTimer: Timer?
+    private var airQualityFetchInFlight = false
+    private var airQualityFetchAgain = false
     private var palette = DoorbellPalette.dark
     private var idleSkin = DoorbellSkin.plain(.dark)
     private var displayDoc: [String: Any]?
@@ -224,6 +227,7 @@ final class MainViewController: UIViewController {
 
     deinit {
         callTimeoutTimer?.invalidate()
+        airQualityTimer?.invalidate()
         for observer in [pairingObserver, wakeObserver, inviteObserver, activeObserver,
                          backgroundObserver, debugScreenObserver] {
             guard let observer = observer else { continue }
@@ -272,6 +276,14 @@ final class MainViewController: UIViewController {
             withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
         ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
+        // Core re-sends air_quality_changed only when the reading itself changes, so the age
+        // that turns a reading stale is re-read on this timer.
+        airQualityTimer = IOSAvailability.scheduledTimer(withTimeInterval: 60, repeats: true) {
+            [weak self] _ in
+            guard UIApplication.shared.applicationState != .background else { return }
+            self?.refreshAirQuality()
+        }
+        refreshAirQuality()
 #if DEBUG
         if suppressVisitorMediaForTesting { return }
 #endif
@@ -1353,6 +1365,33 @@ final class MainViewController: UIViewController {
         applyStrings()
         buildPurposeButtons()
         updateLangBarSelection()
+        visitorScreen?.refreshAirQualityText()
+        dashboard?.refreshAirQualityText()
+    }
+
+    /// db_core_air_quality_json waits on Core's loop, so it is read off the main thread. One read
+    /// at a time; a request that arrives during a read schedules exactly one more.
+    private func refreshAirQuality() {
+        guard visitorScreen != nil || dashboard != nil else { return }
+        guard !airQualityFetchInFlight else {
+            airQualityFetchAgain = true
+            return
+        }
+        airQualityFetchInFlight = true
+        let core = self.core
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let reading = AirQualityReading.from(core.airQuality())
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.airQualityFetchInFlight = false
+                self.visitorScreen?.updateAirQuality(reading)
+                self.dashboard?.updateAirQuality(reading)
+                if self.airQualityFetchAgain {
+                    self.airQualityFetchAgain = false
+                    self.refreshAirQuality()
+                }
+            }
+        }
     }
 
 
@@ -1838,6 +1877,8 @@ final class MainViewController: UIViewController {
         case "notice_changed":
             refreshConfigCache()
             scheduleHomeRefresh()
+        case "air_quality_changed":
+            refreshAirQuality()
         case "call_log_changed":
             dashboard?.refreshHistory()
         case "pairing_state", "paired", "device_joined", "pairing_revoked", "pending_changed":

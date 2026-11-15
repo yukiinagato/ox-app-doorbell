@@ -840,6 +840,66 @@ final class CoreBridge {
         } ?? nil
     }
 
+    /// The PM2.5 reading this device should show. Marshals to Core's loop: call off the main
+    /// thread.
+    func airQuality() -> [String: Any]? {
+        return withCore { takeJson(db_core_air_quality_json($0)) } ?? nil
+    }
+
+    /// What this device should do as a Bluetooth sensor host. Marshals to Core's loop: call off
+    /// the main thread.
+    func airSensorPlan() -> [String: Any]? {
+        return withCore { takeJson(db_core_air_sensor_plan_json($0)) } ?? nil
+    }
+
+    /// One raw notification from a sensor's TX characteristic. Queued by Core; never blocks.
+    func airSensorPacket(sensorId: String, data: Data) {
+        guard !sensorId.isEmpty, !data.isEmpty else { return }
+        withCore { c -> Void in
+            data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+                guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+                db_core_air_sensor_packet(c, sensorId, base, raw.count)
+            }
+        }
+    }
+
+    func airSensorReport(_ report: [String: Any]) {
+        withJson(report) { json in
+            withCore { c in db_core_air_sensor_report_json(c, json) }
+        }
+    }
+
+    /// The bytes to write to a sensor's RX characteristic once after subscribing. Marshals to
+    /// Core's loop: call off the main thread.
+    func airSensorConnectCommand() -> Data? {
+        return withCore { c -> Data? in
+            guard let p = db_core_air_sensor_connect_command_hex(c) else { return nil }
+            defer { db_free(p) }
+            return CoreBridge.bytes(fromHex: String(cString: p))
+        } ?? nil
+    }
+
+    static func bytes(fromHex hex: String) -> Data? {
+        let digits = Array(hex.utf8)
+        guard !digits.isEmpty, digits.count % 2 == 0 else { return nil }
+        func nibble(_ c: UInt8) -> UInt8? {
+            switch c {
+            case 48...57: return c - 48
+            case 65...70: return c - 55
+            case 97...102: return c - 87
+            default: return nil
+            }
+        }
+        var out = Data(capacity: digits.count / 2)
+        var i = 0
+        while i < digits.count {
+            guard let high = nibble(digits[i]), let low = nibble(digits[i + 1]) else { return nil }
+            out.append(high << 4 | low)
+            i += 2
+        }
+        return out
+    }
+
     /// Publish a replicated announcement. `expiresMs` of zero means "until cleared".
     @discardableResult
     func setDoorNotice(door: String, text: String, expiresMs: Int64) -> Bool {

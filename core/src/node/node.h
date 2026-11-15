@@ -281,6 +281,15 @@ class Node {
   // Effective volumes for one device (empty means this node):
   // {"device","call","sos","idle","source","sources":{...}}.
   std::string audioJson(const std::string& device_id);
+  // Bluetooth air-quality sensors. airQualityJson is what this device should display:
+  // {"show","sensor","state":"hidden|unconfigured|waiting|stale|ok","name","pm25","level",
+  //  "at_ms","age_s","battery_pct","charging"}. airSensorPlanJson tells a host shell what to scan
+  // for and connect to. Packets and reports are queued to the loop and never block the caller.
+  std::string airQualityJson();
+  std::string airSensorPlanJson();
+  void airSensorPacket(const std::string& sensor_id, const uint8_t* data, size_t len);
+  void airSensorReport(const std::string& report_json);
+  std::string airSensorConnectCommandHex();
   // Start one immediate SNTP round. Returns false when NTP is disabled or the node is stopped.
   bool syncTimeNow();
   // Replicated per-door announcement. expires_ms is an absolute wall-clock deadline; 0 means

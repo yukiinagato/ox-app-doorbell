@@ -8,6 +8,7 @@
 #include "node/media_relay_bounds.h"
 #include "node/admin_password.h"
 #include "node/visitor_flow.h"
+#include "sensors/mops_vida.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -1813,6 +1814,141 @@ bool sipDtmfRepliesExist(const std::string& key, const cJSON* value, Lookup repl
   return true;
 }
 
+// air_sensors.<id> = {name, host, address, kind, enabled} binds one Bluetooth sensor to the device
+// that connects to it; devices.<id>.local.air_quality = {show, sensor, host} chooses what a
+// device displays and whether it scans for sensors.
+bool airSensorFieldValid(const std::string& field, const cJSON* value, std::string* error) {
+  auto text_valid = [&](size_t max, const char* what) {
+    if (cJSON_IsString(value) && !std::string(value->valuestring).empty() &&
+        utf8Length(value->valuestring) <= max)
+      return true;
+    *error = std::string("air sensor ") + what + " must be 1.." + std::to_string(max) +
+             " characters";
+    return false;
+  };
+  if (field == "name") return text_valid(40, "name");
+  if (field == "host") return text_valid(128, "host");
+  if (field == "address") return text_valid(64, "address");
+  if (field == "kind") {
+    if (cJSON_IsString(value) && std::string(value->valuestring) == mops_vida::kKind) return true;
+    *error = std::string("air sensor kind must be ") + mops_vida::kKind;
+    return false;
+  }
+  if (field == "enabled") {
+    if (cJSON_IsBool(value)) return true;
+    *error = "air sensor enabled must be a boolean";
+    return false;
+  }
+  *error = "air sensor contains unsupported field " + field;
+  return false;
+}
+
+bool airSensorDefinitionValid(const cJSON* value, std::string* error) {
+  if (cJSON_IsNull(value)) return true;
+  if (!objectHasOnly(value, {"name", "host", "address", "kind", "enabled"}, "air sensor", error))
+    return false;
+  for (const char* required : {"name", "host", "address"}) {
+    if (!json::get(value, required)) {
+      *error = std::string("air sensor needs ") + required;
+      return false;
+    }
+  }
+  const cJSON* field = nullptr;
+  cJSON_ArrayForEach(field, value) {
+    if (!airSensorFieldValid(field->string, field, error)) return false;
+  }
+  return true;
+}
+
+bool airDisplayFieldValid(const std::string& field, const cJSON* value, std::string* error) {
+  if (field == "show" || field == "host") {
+    if (cJSON_IsBool(value)) return true;
+    *error = "air_quality." + field + " must be a boolean";
+    return false;
+  }
+  if (field == "sensor") {
+    if (cJSON_IsNull(value) || (cJSON_IsString(value) && (!*value->valuestring ||
+                                                          simpleIdValid(value->valuestring, 32))))
+      return true;
+    *error = "air_quality.sensor must be an air sensor id";
+    return false;
+  }
+  *error = "air_quality contains unsupported field " + field;
+  return false;
+}
+
+bool airDisplayObjectValid(const cJSON* value, std::string* error) {
+  if (cJSON_IsNull(value)) return true;
+  if (!objectHasOnly(value, {"show", "sensor", "host"}, "air_quality", error)) return false;
+  const cJSON* field = nullptr;
+  cJSON_ArrayForEach(field, value) {
+    if (!airDisplayFieldValid(field->string, field, error)) return false;
+  }
+  return true;
+}
+
+bool airQualityConfigValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string root = "air_sensors";
+  if (key == root) {
+    if (!cJSON_IsObject(value)) {
+      *error = "air_sensors must be an object";
+      return false;
+    }
+    if (cJSON_GetArraySize(value) > 16) {
+      *error = "air_sensors holds at most 16 sensors";
+      return false;
+    }
+    const cJSON* def = nullptr;
+    cJSON_ArrayForEach(def, value) {
+      if (!simpleIdValid(def->string ? def->string : "", 32)) {
+        *error = "an air sensor id must be 1..32 characters of letters, digits, _ or -";
+        return false;
+      }
+      if (!airSensorDefinitionValid(def, error)) return false;
+    }
+    return true;
+  }
+  if (key.rfind(root + ".", 0) == 0) {
+    const std::string rest = key.substr(root.size() + 1);
+    const size_t dot = rest.find('.');
+    const std::string id = rest.substr(0, dot);
+    if (!simpleIdValid(id, 32)) {
+      *error = "an air sensor id must be 1..32 characters of letters, digits, _ or -";
+      return false;
+    }
+    if (dot == std::string::npos) return airSensorDefinitionValid(value, error);
+    const std::string field = rest.substr(dot + 1);
+    if (field.find('.') != std::string::npos) {
+      *error = "unknown air sensor key " + key;
+      return false;
+    }
+    return airSensorFieldValid(field, value, error);
+  }
+  if (key.rfind("devices.", 0) != 0) return true;
+  const std::string marker = ".local.air_quality";
+  const size_t at = key.find(marker);
+  if (at != std::string::npos) {
+    const std::string tail = key.substr(at + marker.size());
+    if (tail.empty()) return airDisplayObjectValid(value, error);
+    if (tail[0] != '.') return true;
+    const std::string field = tail.substr(1);
+    if (field.find('.') != std::string::npos) {
+      *error = "unknown air_quality key " + key;
+      return false;
+    }
+    return airDisplayFieldValid(field, value, error);
+  }
+  if (!cJSON_IsObject(value)) return true;
+  const size_t local_suffix = key.size() >= 6 ? key.size() - 6 : std::string::npos;
+  const cJSON* local = nullptr;
+  if (local_suffix != std::string::npos && key.compare(local_suffix, 6, ".local") == 0)
+    local = value;
+  else if (key.find(".local") == std::string::npos)
+    local = json::get(value, "local");
+  const cJSON* embedded = json::get(local, "air_quality");
+  return !embedded || airDisplayObjectValid(embedded, error);
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr,
                       bool enforce_write_scope = true) {
@@ -1834,6 +1970,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   }
   if (!eventRetentionValid(key, value, error)) return false;
   if (!timeConfigValid(key, value, error)) return false;
+  if (!airQualityConfigValid(key, value, error)) return false;
   if (!audioVolumeValid(key, value, error)) return false;
   if (!doorNoticeValid(key, value, error)) return false;
   if ((enforce_write_scope || key.rfind("notice.global.", 0) != 0) &&
@@ -2392,6 +2529,7 @@ struct Node::Impl {
 #include "node/panel_session_revocation.inc"
 #include "node/conversation_service.inc"
 #include "node/visitor_flow_service.inc"
+#include "node/air_quality_service.inc"
 
   bool uiNotify(const std::string& event_json) {
 
@@ -3311,6 +3449,8 @@ struct Node::Impl {
     auto doc = json::parse(runtime_status_json);
     if (!doc || !cJSON_IsObject(doc.get())) doc = json::obj();
     if (power.known) json::setItem(doc.get(), "power", powerDoc());
+    cJSON_DeleteItemFromObjectCaseSensitive(doc.get(), "air_sensors");
+    if (auto air = airRuntimeDoc()) json::setItem(doc.get(), "air_sensors", std::move(air));
     auto* conversation = json::addObj(doc.get(), "conversation");
     json::set(conversation, "schema_version", int64_t{1});
     json::setBool(conversation, "enabled", conversationProtocolEnabled() && sipBackendAvailable());
@@ -3592,6 +3732,7 @@ struct Node::Impl {
   void minuteTick() {
     pollPowerState();
     pruneDoorNotices();
+    refreshAirQuality();
     applyTimeOffset();
     refreshDerivedTzOffset();
   }
@@ -6324,7 +6465,8 @@ struct Node::Impl {
       json::setBool(features.get(), feature, true);
     for (const char* feature : {"platform_v2", "call_flow_v2", "call_cancel_v2",
                                 "call_lifecycle_v2", "device_alert_v1", "runtime_recovery_v1",
-                                "helper_policy_v1", "visitor_flow_v1"})
+                                "helper_policy_v1", "visitor_flow_v1",
+                                "air_quality_display_v1", "ble_air_sensor_v1"})
       json::setBool(features.get(), feature, measuredFeature(feature));
     json::setBool(features.get(), "ui_manifest_v1",
                   measuredFeature("ui_manifest_v1") && uiManifestSupports());
@@ -6852,6 +6994,8 @@ struct Node::Impl {
       uiNotify(json::dump(notice_event.get()));
     }
     scheduleBridgeReapply();
+    refreshAirPlan();
+    refreshAirQuality();
     if (started) evalDisplay();
     evalVisitorFlow();
     schedulePrefetch();
@@ -6996,6 +7140,7 @@ struct Node::Impl {
       sendPendingRevocations();
       rearmCallTimeouts();
       rearmCallRecoveryTakeovers();
+      refreshAirQuality();
       notifyPeersChanged();
     };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
@@ -9689,6 +9834,7 @@ struct Node::Impl {
     // without needing to know which of the two names predates the other.
     json::setItem(o.get(), "self", json::Doc(cJSON_Duplicate(self, 1)));
     json::setItem(o.get(), "time", timeStatusDoc());
+    json::setItem(o.get(), "air_quality", airStatusDoc());
     cJSON* sip = json::addObj(o.get(), "sip");
     json::set(sip, "backend", sipBackendName());
     json::setBool(sip, "available", sipBackendAvailable());
@@ -13959,6 +14105,35 @@ std::string Node::localTimeJson(int64_t wall_ms) {
 std::string Node::audioJson(const std::string& device_id) {
   auto snap = std::atomic_load(&impl_->audio_snap);
   return Impl::resolveAudioJson(*snap, device_id);
+}
+
+std::string Node::airQualityJson() {
+  std::string out;
+  impl_->loop->callSync([&] { out = json::dump(impl_->airQualityDocOnLoop(true).get()); });
+  return out;
+}
+
+std::string Node::airSensorPlanJson() {
+  std::string out;
+  impl_->loop->callSync([&] { out = json::dump(impl_->airPlanDoc().get()); });
+  return out;
+}
+
+void Node::airSensorPacket(const std::string& sensor_id, const uint8_t* data, size_t len) {
+  if (!data || len == 0 || len > 64 || sensor_id.empty() || sensor_id.size() > 32) return;
+  std::vector<uint8_t> bytes(data, data + len);
+  impl_->loop->post([this, sensor_id, bytes] { impl_->airSensorPacketOnLoop(sensor_id, bytes); });
+}
+
+void Node::airSensorReport(const std::string& report_json) {
+  if (report_json.size() > 16 * 1024) return;
+  impl_->loop->post([this, report_json] { impl_->airReportOnLoop(report_json); });
+}
+
+std::string Node::airSensorConnectCommandHex() {
+  int64_t now = 0;
+  impl_->loop->callSync([&] { now = impl_->hlc->correctedWallMs(); });
+  return mops_vida::toHex(mops_vida::setRtcCommand(now));
 }
 
 bool Node::syncTimeNow() {

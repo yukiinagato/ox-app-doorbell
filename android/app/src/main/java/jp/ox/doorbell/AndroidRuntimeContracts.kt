@@ -20,7 +20,8 @@ internal object AndroidRuntimeContracts {
         val radius: Int,
     )
 
-    internal fun featureManifest(): JSONObject = JSONObject()
+    /** [bleAirSensor] is the measured FEATURE_BLUETOOTH_LE, never assumed from the tier. */
+    internal fun featureManifest(bleAirSensor: Boolean = false): JSONObject = JSONObject()
         .put("platform_v2", true)
         .put("call_flow_v2", true)
         .put("call_cancel_v2", true)
@@ -29,6 +30,8 @@ internal object AndroidRuntimeContracts {
         .put("ui_manifest_v1", true)
         .put("runtime_recovery_v1", true)
         .put("helper_policy_v1", true)
+        .put("air_quality_display_v1", true)
+        .apply { if (bleAirSensor) put("ble_air_sensor_v1", true) }
 
     internal fun uiProperties(@Suppress("UNUSED_PARAMETER") semanticId: String): Set<String> =
         UiStylePolicy.allProperties
@@ -70,6 +73,7 @@ internal object AndroidRuntimeContracts {
         safeMode: Boolean = false,
         legacy19: Boolean = false,
         h264ReleaseQualified: Boolean = !legacy19,
+        bleAirSensor: Boolean = false,
     ): JSONObject {
         val operational = operationalCapabilities(app.core.isOnMainsPower())
         return JSONObject()
@@ -109,7 +113,7 @@ internal object AndroidRuntimeContracts {
             .put("h264_release_qualified", h264ReleaseQualified)
             .put("h264_decode_baseline", !safeMode && decoderState == "active")
             .put("h264_decode_state", decoderState)
-            .put("features", featureManifest())
+            .put("features", featureManifest(bleAirSensor))
     }
 
     fun uiManifest(): JSONObject {

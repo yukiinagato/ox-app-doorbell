@@ -779,6 +779,40 @@ DB_API const char* db_core_sip_backend(void);
 /* Set or clear SOS. Emergency state is replicated to every node and delivered to each shell.
  * Authorization and PIN verification for clearing SOS remain the shell's responsibility. */
 DB_API void db_core_emergency(db_core* c, int active);
+/* Bluetooth air-quality sensors (MOPS VIDA PM2.5, kind "mops_vida_pm25").
+ *
+ * Display, for every shell that advertises air_quality_display_v1:
+ *   db_core_air_quality_json -> {"show":bool,"sensor":"<id>",
+ *     "state":"hidden|unconfigured|waiting|stale|ok","name":"<label>","pm25":<ug/m3>,
+ *     "level":"good|moderate|sensitive|unhealthy|very_unhealthy|hazardous","at_ms":<wall ms>,
+ *     "age_s":<int>,"battery_pct":<-1..100>,"charging":bool}
+ *   Fields after name appear only when a reading exists. Draw nothing for "hidden"; otherwise
+ *   draw the value and level for "ok", the value dimmed for "stale", and a placeholder for
+ *   "waiting"/"unconfigured". {"t":"air_quality_changed"} is a coalesced refresh hint emitted
+ *   only when that document (without age_s) changes; re-read it then and once a minute for age.
+ *
+ * Hosting, for a shell that advertises ble_air_sensor_v1:
+ *   db_core_air_sensor_plan_json -> {"host":bool,"scan":bool,
+ *     "sensors":[{"id","address","kind"}],"mops_vida_pm25":{"advertised_service":"7676",
+ *     "advertised_name","service","rx","tx"}}
+ *   When host is false release every link and stop Bluetooth work. scan asks for periodic
+ *   discovery of sensors advertising that service. Keep one GATT link per listed sensor, enable
+ *   notifications on tx, write db_core_air_sensor_connect_command_hex to rx once, and pass every
+ *   notification unchanged to db_core_air_sensor_packet (queued; never blocks). Report adapter
+ *   state, scan results, and link states with db_core_air_sensor_report_json:
+ *     {"ble":"ready|off|unauthorized|unsupported|unknown",
+ *      "discovered":[{"address","name","rssi"}],
+ *      "links":{"<sensor id>":"connecting|connected|disconnected|not_found"}}
+ *   Any field may be omitted. address is the shell's own stable identifier for the peripheral
+ *   (a MAC address on Android, a CBPeripheral identifier on iOS) and is meaningful only on the
+ *   host that reported it. {"t":"air_sensor_plan_changed"} means re-read the plan. */
+DB_API char* db_core_air_quality_json(db_core* c);
+DB_API char* db_core_air_sensor_plan_json(db_core* c);
+DB_API void db_core_air_sensor_packet(db_core* c, const char* sensor_id, const uint8_t* data,
+                                      size_t len);
+DB_API void db_core_air_sensor_report_json(db_core* c, const char* report_json);
+DB_API char* db_core_air_sensor_connect_command_hex(db_core* c);
+
 /* Durable SOS variant. Returns one only after the event and its materialized projection commit;
  * shells should use this before showing an optimistic local acknowledgement. */
 DB_API int db_core_emergency_v2(db_core* c, int active);

@@ -1,4 +1,7 @@
 import AVFoundation
+#if os(iOS)
+import CoreBluetooth
+#endif
 import Foundation
 #if !IOS9_COMPAT
 import os.log
@@ -11,6 +14,24 @@ enum IOSAvailability {
     private static let timerDispatcher = LegacyTimerDispatcher()
 
 #if os(iOS)
+    /// The adapter state in the words of db_core_air_sensor_report_json. CBManagerState is iOS 10
+    /// API; iOS 9 reports the same raw values through CBCentralManagerState.
+    static func bluetoothState(_ central: CBCentralManager) -> String {
+        let raw: Int
+        if #available(iOS 10.0, *) {
+            raw = central.state.rawValue
+        } else {
+            raw = (central.value(forKey: "state") as? NSNumber)?.intValue ?? 0
+        }
+        switch raw {
+        case 5: return "ready"
+        case 4: return "off"
+        case 3: return "unauthorized"
+        case 2: return "unsupported"
+        default: return "unknown"
+        }
+    }
+
     /// Returns the clockwise transform receivers need for a portrait-normalized camera sample buffer.
     /// Landscape names are device poses, not AVCaptureVideoOrientation values.
     /// With portrait-normalized, unmirrored pixels, left needs +90 and right needs -90.

@@ -23,6 +23,7 @@ class RuntimeSupervisor(private val app: App) {
     }
     private val helper = RootKeepaliveClient()
     val kioskController = KioskController(app, app.boot, helper, statusStore)
+    internal val airSensors = AirSensorHost(app)
     private val buildTier = try {
         app.getString(R.string.android_build_tier)
     } catch (_: Exception) {
@@ -127,6 +128,7 @@ class RuntimeSupervisor(private val app: App) {
             camera.stop()
             orientation.stop()
             cameraStarted = false
+            airSensors.onCoreStopped()
             setCoreReady(false, reason)
             publishRuntimeHealth(force = true)
             app.core.destroy()
@@ -155,6 +157,7 @@ class RuntimeSupervisor(private val app: App) {
             encoderExhausted = false
             encoderRetryAtMs = 0L
             cameraRetryAtMs = 0L
+            airSensors.onCoreStopped()
             setCoreReady(false, "identity_changed")
             publishRuntimeHealth(force = true)
             app.core.destroy()
@@ -313,6 +316,7 @@ class RuntimeSupervisor(private val app: App) {
             app.core.setUiManifest(AndroidRuntimeContracts.uiManifest())
             if (app.boot.role == "door_station") orientation.start() else orientation.stop()
             publishCapabilities()
+            airSensors.onCoreReady()
             applyHelperConfiguration()
             refreshSafeMode()
             handler.removeCallbacks(mediaPoll)
@@ -650,6 +654,7 @@ class RuntimeSupervisor(private val app: App) {
             safeMode,
             legacy19,
             releaseQualified(),
+            bleAirSensor = airSensors.supported,
         ))
         captureContract()
     }

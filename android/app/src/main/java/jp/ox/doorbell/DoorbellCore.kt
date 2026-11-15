@@ -157,6 +157,28 @@ class DoorbellCore(context: Context) {
     fun audio(deviceId: String = ""): JSONObject? =
         parse(if (handle != 0L) nativeAudioJson(handle, deviceId) else null)
 
+    /** The PM2.5 reading this device shows on its home screen (db_core_air_quality_json). */
+    fun airQuality(): JSONObject? =
+        parse(if (handle != 0L) nativeAirQualityJson(handle) else null)
+
+    /** What this device must do over Bluetooth for air sensors (db_core_air_sensor_plan_json). */
+    fun airSensorPlan(): JSONObject? =
+        parse(if (handle != 0L) nativeAirSensorPlanJson(handle) else null)
+
+    /** Hand one raw GATT notification to Core; queued there, never blocks. */
+    fun airSensorPacket(sensorId: String, data: ByteArray) {
+        if (handle != 0L && sensorId.isNotEmpty() && data.isNotEmpty())
+            nativeAirSensorPacket(handle, sensorId, data)
+    }
+
+    fun airSensorReport(report: JSONObject) {
+        if (handle != 0L) nativeAirSensorReportJson(handle, report.toString())
+    }
+
+    /** Hex bytes to write to the sensor's RX characteristic once after each connection. */
+    fun airSensorConnectCommandHex(): String =
+        if (handle != 0L) nativeAirSensorConnectCommandHex(handle).orEmpty() else ""
+
     /**
      * Publish a replicated announcement. expiresMs of zero means until cleared, and a door of
      * [GLOBAL_DOOR] writes the cluster-wide announcement at notice.global, which a door-specific
@@ -563,6 +585,11 @@ class DoorbellCore(context: Context) {
     private external fun nativeLocalTimeJson(handle: Long, wallMs: Long): String?
     private external fun nativeTimeSyncNow(handle: Long): Int
     private external fun nativeAudioJson(handle: Long, deviceId: String): String?
+    private external fun nativeAirQualityJson(handle: Long): String?
+    private external fun nativeAirSensorPlanJson(handle: Long): String?
+    private external fun nativeAirSensorPacket(handle: Long, sensorId: String, data: ByteArray)
+    private external fun nativeAirSensorReportJson(handle: Long, json: String)
+    private external fun nativeAirSensorConnectCommandHex(handle: Long): String?
     private external fun nativeSetDoorNotice(
         handle: Long,
         door: String,

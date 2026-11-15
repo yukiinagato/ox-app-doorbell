@@ -321,3 +321,49 @@ core が書きます。未知の門口、空文字、上限超過は `400 {"ok":
 電池のない端末では `battery_pct` は `-1` で、UI は 0% 表示ではなく何も出さないでください。
 コールバックを実装しない端末には `power` キー自体がありません。これは「電池残量 0」とは別物です。
 peer の値は限定された runtime 射影を通るため、この 3 フィールド以外は運びません。
+
+## PM2.5 センサー
+
+Bluetooth LE の PM2.5 センサー (MOPS·VIDA) は接続を担う 1 台の端末に紐づき、core がその測定値を
+gossip で配るので、どの門口端末・室内パネルでも任意のセンサーを表示できます。どちらも通常の複製設定で、
+`POST /api/config/commit` で書き込み、core (`airQualityConfigValid`) が検証します。
+
+```json
+{ "air_sensors": { "s_3f9a1c07": { "name": "玄関", "host": "<node_id>",
+                                   "address": "<接続端末ローカルの BLE 識別子>",
+                                   "kind": "mops_vida_pm25", "enabled": true } },
+  "devices": { "<node_id>": { "local": { "air_quality":
+                 { "show": true, "sensor": "s_3f9a1c07", "host": false } } } } }
+```
+
+- `air_sensors.<id>`: `id` は `[A-Za-z0-9_-]` の 1..32 文字 (管理画面は `s_<16 進 8 桁>` を書く)、
+  最大 16 台。`name` はコードポイントで 1..40 文字、`host` は接続する端末の node id、`address` は
+  その端末が検出で報告した識別子 (1..64 文字、その host 上でのみ意味を持つ)。`kind` と `enabled` は
+  任意。`null` を書くと削除で、管理画面はそのセンサーを表示していた全端末に
+  `devices.<id>.local.air_quality.sensor = null` も書きます。
+- `devices.<id>.local.air_quality`: `show` で測定値を表示、`sensor` で表示するセンサー
+  (`null` または空で「なし」)、`host: true` でその端末がセンサーを検索・接続します。
+  leaf `…air_quality.show|sensor|host` 単独の書き込みも有効で、管理画面は変更ごとに 1 leaf だけ書くため、
+  他フィールドの同時編集は失われません。
+
+シェルは表示できるとき `air_quality_display_v1`、センサーを接続できるとき `ble_air_sensor_v1` を
+capability features に広告します。管理画面は該当 feature のない端末ではそのスイッチを無効にします
+(既に有効な設定をオフにする操作だけは許可)。
+
+`GET /api/status` は管理者向けの状態を `air_quality` として返します。
+
+```json
+{ "sensors": [ { "id": "s_3f9a1c07", "name": "玄関", "host": "<node_id>",
+                 "address": "…", "enabled": true, "host_alive": true, "level": "moderate",
+                 "reading": { "pm25": 14, "at_ms": 1772000000000, "battery_pct": 80,
+                              "charging": false, "link": "connected" } } ],
+  "hosts": [ { "device": "<node_id>", "ble": "ready",
+               "discovered": [ { "address": "…", "name": "MOPS-VIDA", "rssi": -61,
+                                 "seen_ms": 1772000000000 } ] } ] }
+```
+
+`level` (good / moderate / sensitive / unhealthy / very_unhealthy / hazardous) と `reading` は、
+host が値を報告するまで存在しません。`link` は connected / connecting / disconnected / not_found。
+`hosts` には接続または検索を行う端末だけが並び、`ble` は ready / off / unauthorized / unsupported /
+unknown。`discovered` には登録済みのセンサーが含まれることがあり、管理画面は同じ host に登録済みの address を
+表示しません。端末タブは通常の 5 秒ごとの status ポーリングでこの欄を更新します。

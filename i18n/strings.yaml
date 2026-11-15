@@ -2867,3 +2867,54 @@ settings.editing_device_done: { ja: "この端末に戻る", en: "Back to this d
 settings.asset_not_here: { ja: "この端末にはまだ同期されていません", en: "Not on this device yet", zh: "尚未同步到本设备" }
 settings.speech: { ja: "返信音声と音声キャッシュ", en: "Reply voice and audio cache", zh: "回复语音与音频缓存" }
 settings.caps_override: { ja: "機能の上書き (JSON)", en: "Capability override (JSON)", zh: "能力覆盖 (JSON)" }
+
+# Bluetooth PM2.5 sensor reading on the home screen of a door station or indoor panel. The
+# level names follow the six US EPA PM2.5 bands Core reports (good … hazardous).
+air.pm25_label: { ja: "PM2.5", en: "PM2.5", zh: "PM2.5" }
+air.unit: { ja: "µg/m³", en: "µg/m³", zh: "µg/m³" }
+air.level_good: { ja: "良好", en: "Good", zh: "优" }
+air.level_moderate: { ja: "普通", en: "Moderate", zh: "良" }
+air.level_sensitive: { ja: "敏感な方は注意", en: "Sensitive groups", zh: "敏感人群注意" }
+air.level_unhealthy: { ja: "悪い", en: "Unhealthy", zh: "不健康" }
+air.level_very_unhealthy: { ja: "非常に悪い", en: "Very unhealthy", zh: "非常不健康" }
+air.level_hazardous: { ja: "危険", en: "Hazardous", zh: "危险" }
+air.waiting: { ja: "測定待ち", en: "Waiting", zh: "等待读数" }
+air.stale: { ja: "更新なし", en: "Not updated", zh: "未更新" }
+air.unconfigured: { ja: "センサー未設定", en: "No sensor", zh: "未设置传感器" }
+air.a11y: { ja: "PM2.5 {value} マイクログラム毎立方メートル、{level}", en: "PM2.5 {value} micrograms per cubic metre, {level}", zh: "PM2.5 {value} 微克每立方米，{level}" }
+air.a11y_no_value: { ja: "PM2.5、{state}", en: "PM2.5, {state}", zh: "PM2.5，{state}" }
+
+admin.air_title: { ja: "PM2.5 センサー", en: "PM2.5 sensors", zh: "PM2.5 传感器" }
+admin.air_intro: { ja: "Bluetooth の PM2.5 センサー（MOPS·VIDA）を近くのデバイスに接続し、その値を任意の室外機・室内機に表示します。センサーは電池が減りやすいため、USB 給電のままにしてください。", en: "Connect a Bluetooth PM2.5 sensor (MOPS·VIDA) to a nearby device and show its reading on any door station or indoor panel. Keep the sensor on USB power: a constant connection drains its battery.", zh: "将蓝牙 PM2.5 传感器（MOPS·VIDA）连接到附近的设备，并在任意门口机或室内机上显示读数。持续连接会很快耗电，请保持传感器 USB 供电。" }
+admin.air_host: { ja: "Bluetooth センサーを検索して接続する", en: "Search for and connect Bluetooth sensors", zh: "搜索并连接蓝牙传感器" }
+admin.air_host_unsupported: { ja: "このデバイスのアプリは Bluetooth センサーに対応していません", en: "This device's app cannot connect Bluetooth sensors", zh: "此设备的应用不支持连接蓝牙传感器" }
+admin.air_show: { ja: "PM2.5 を表示", en: "Show PM2.5", zh: "显示 PM2.5" }
+admin.air_sensor_pick: { ja: "表示するセンサー", en: "Sensor to show", zh: "显示的传感器" }
+admin.air_none: { ja: "（なし）", en: "(none)", zh: "（无）" }
+admin.air_display_unsupported: { ja: "このデバイスのアプリは PM2.5 の表示に対応していません", en: "This device's app cannot show PM2.5", zh: "此设备的应用不支持显示 PM2.5" }
+admin.air_sensors: { ja: "登録済みセンサー", en: "Sensors", zh: "已添加的传感器" }
+admin.air_no_sensors: { ja: "センサーはまだ登録されていません", en: "No sensors yet", zh: "尚未添加传感器" }
+admin.air_discovered: { ja: "見つかったセンサー", en: "Sensors found nearby", zh: "附近发现的传感器" }
+admin.air_no_hosts: { ja: "検索中のデバイスはありません。センサーの近くにあるデバイスで「Bluetooth センサーを検索して接続する」をオンにしてください。", en: "No device is searching. Turn on “Search for and connect Bluetooth sensors” for a device near the sensor.", zh: "没有设备正在搜索。请为传感器附近的设备打开“搜索并连接蓝牙传感器”。" }
+admin.air_nothing_found: { ja: "{device}：まだ見つかっていません", en: "{device}: nothing found yet", zh: "{device}：尚未发现" }
+admin.air_add: { ja: "登録", en: "Add", zh: "添加" }
+admin.air_remove: { ja: "削除", en: "Remove", zh: "删除" }
+admin.air_remove_confirm: { ja: "センサー「{name}」を削除しますか？", en: "Remove the sensor “{name}”?", zh: "删除传感器“{name}”？" }
+admin.air_name: { ja: "名前", en: "Name", zh: "名称" }
+admin.air_name_prompt: { ja: "センサーの名前（例：玄関）", en: "Sensor name (for example, Entrance)", zh: "传感器名称（例如：玄关）" }
+admin.air_host_device: { ja: "接続デバイス", en: "Connected through", zh: "连接设备" }
+admin.air_address: { ja: "Bluetooth 識別子", en: "Bluetooth identifier", zh: "蓝牙标识" }
+admin.air_reading: { ja: "最新値", en: "Latest reading", zh: "最新读数" }
+admin.air_signal: { ja: "信号 {rssi} dBm", en: "Signal {rssi} dBm", zh: "信号 {rssi} dBm" }
+admin.air_battery: { ja: "電池 {pct}%", en: "Battery {pct}%", zh: "电量 {pct}%" }
+admin.air_ble_ready: { ja: "Bluetooth 使用可", en: "Bluetooth ready", zh: "蓝牙可用" }
+admin.air_ble_off: { ja: "Bluetooth がオフ", en: "Bluetooth is off", zh: "蓝牙已关闭" }
+admin.air_ble_unauthorized: { ja: "Bluetooth の使用が許可されていません", en: "Bluetooth permission not granted", zh: "未获得蓝牙权限" }
+admin.air_ble_unsupported: { ja: "Bluetooth LE 非対応", en: "No Bluetooth LE", zh: "不支持低功耗蓝牙" }
+admin.air_ble_unknown: { ja: "Bluetooth 状態不明", en: "Bluetooth state unknown", zh: "蓝牙状态未知" }
+admin.air_link: { ja: "接続状態", en: "Connection", zh: "连接状态" }
+admin.air_link_connected: { ja: "接続中", en: "Connected", zh: "已连接" }
+admin.air_link_connecting: { ja: "接続しています", en: "Connecting", zh: "正在连接" }
+admin.air_link_disconnected: { ja: "未接続", en: "Not connected", zh: "未连接" }
+admin.air_link_not_found: { ja: "見つかりません", en: "Not found", zh: "未找到" }
+admin.air_host_offline: { ja: "接続デバイスがオフライン", en: "Connecting device is offline", zh: "连接设备离线" }

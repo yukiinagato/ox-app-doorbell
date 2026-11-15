@@ -20,6 +20,40 @@
   <data name="admin_add_rule" xml:space="preserve"><value>ルールを追加</value></data>
   <data name="admin_add_window" xml:space="preserve"><value>時間帯を追加</value></data>
   <data name="admin_addresses" xml:space="preserve"><value>アドレス</value></data>
+  <data name="admin_air_add" xml:space="preserve"><value>登録</value></data>
+  <data name="admin_air_address" xml:space="preserve"><value>Bluetooth 識別子</value></data>
+  <data name="admin_air_battery" xml:space="preserve"><value>電池 {0}%</value></data>
+  <data name="admin_air_ble_off" xml:space="preserve"><value>Bluetooth がオフ</value></data>
+  <data name="admin_air_ble_ready" xml:space="preserve"><value>Bluetooth 使用可</value></data>
+  <data name="admin_air_ble_unauthorized" xml:space="preserve"><value>Bluetooth の使用が許可されていません</value></data>
+  <data name="admin_air_ble_unknown" xml:space="preserve"><value>Bluetooth 状態不明</value></data>
+  <data name="admin_air_ble_unsupported" xml:space="preserve"><value>Bluetooth LE 非対応</value></data>
+  <data name="admin_air_discovered" xml:space="preserve"><value>見つかったセンサー</value></data>
+  <data name="admin_air_display_unsupported" xml:space="preserve"><value>このデバイスのアプリは PM2.5 の表示に対応していません</value></data>
+  <data name="admin_air_host" xml:space="preserve"><value>Bluetooth センサーを検索して接続する</value></data>
+  <data name="admin_air_host_device" xml:space="preserve"><value>接続デバイス</value></data>
+  <data name="admin_air_host_offline" xml:space="preserve"><value>接続デバイスがオフライン</value></data>
+  <data name="admin_air_host_unsupported" xml:space="preserve"><value>このデバイスのアプリは Bluetooth センサーに対応していません</value></data>
+  <data name="admin_air_intro" xml:space="preserve"><value>Bluetooth の PM2.5 センサー（MOPS·VIDA）を近くのデバイスに接続し、その値を任意の室外機・室内機に表示します。センサーは電池が減りやすいため、USB 給電のままにしてください。</value></data>
+  <data name="admin_air_link" xml:space="preserve"><value>接続状態</value></data>
+  <data name="admin_air_link_connected" xml:space="preserve"><value>接続中</value></data>
+  <data name="admin_air_link_connecting" xml:space="preserve"><value>接続しています</value></data>
+  <data name="admin_air_link_disconnected" xml:space="preserve"><value>未接続</value></data>
+  <data name="admin_air_link_not_found" xml:space="preserve"><value>見つかりません</value></data>
+  <data name="admin_air_name" xml:space="preserve"><value>名前</value></data>
+  <data name="admin_air_name_prompt" xml:space="preserve"><value>センサーの名前（例：玄関）</value></data>
+  <data name="admin_air_no_hosts" xml:space="preserve"><value>検索中のデバイスはありません。センサーの近くにあるデバイスで「Bluetooth センサーを検索して接続する」をオンにしてください。</value></data>
+  <data name="admin_air_no_sensors" xml:space="preserve"><value>センサーはまだ登録されていません</value></data>
+  <data name="admin_air_none" xml:space="preserve"><value>（なし）</value></data>
+  <data name="admin_air_nothing_found" xml:space="preserve"><value>{0}：まだ見つかっていません</value></data>
+  <data name="admin_air_reading" xml:space="preserve"><value>最新値</value></data>
+  <data name="admin_air_remove" xml:space="preserve"><value>削除</value></data>
+  <data name="admin_air_remove_confirm" xml:space="preserve"><value>センサー「{0}」を削除しますか？</value></data>
+  <data name="admin_air_sensor_pick" xml:space="preserve"><value>表示するセンサー</value></data>
+  <data name="admin_air_sensors" xml:space="preserve"><value>登録済みセンサー</value></data>
+  <data name="admin_air_show" xml:space="preserve"><value>PM2.5 を表示</value></data>
+  <data name="admin_air_signal" xml:space="preserve"><value>信号 {0} dBm</value></data>
+  <data name="admin_air_title" xml:space="preserve"><value>PM2.5 センサー</value></data>
   <data name="admin_alert_accent" xml:space="preserve"><value>SOS アクセント色</value></data>
   <data name="admin_alert_background" xml:space="preserve"><value>SOS 背景色</value></data>
   <data name="admin_alert_channels" xml:space="preserve"><value>チャネル</value></data>
@@ -472,6 +506,19 @@
   <data name="admin_windows" xml:space="preserve"><value>時間帯</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>写真付き</value></data>
   <data name="admin_write" xml:space="preserve"><value>書込</value></data>
+  <data name="air_a11y" xml:space="preserve"><value>PM2.5 {0} マイクログラム毎立方メートル、{1}</value></data>
+  <data name="air_a11y_no_value" xml:space="preserve"><value>PM2.5、{0}</value></data>
+  <data name="air_level_good" xml:space="preserve"><value>良好</value></data>
+  <data name="air_level_hazardous" xml:space="preserve"><value>危険</value></data>
+  <data name="air_level_moderate" xml:space="preserve"><value>普通</value></data>
+  <data name="air_level_sensitive" xml:space="preserve"><value>敏感な方は注意</value></data>
+  <data name="air_level_unhealthy" xml:space="preserve"><value>悪い</value></data>
+  <data name="air_level_very_unhealthy" xml:space="preserve"><value>非常に悪い</value></data>
+  <data name="air_pm25_label" xml:space="preserve"><value>PM2.5</value></data>
+  <data name="air_stale" xml:space="preserve"><value>更新なし</value></data>
+  <data name="air_unconfigured" xml:space="preserve"><value>センサー未設定</value></data>
+  <data name="air_unit" xml:space="preserve"><value>µg/m³</value></data>
+  <data name="air_waiting" xml:space="preserve"><value>測定待ち</value></data>
   <data name="app_already_running" xml:space="preserve"><value>Doorbell はこの端末ですでに実行中です。</value></data>
   <data name="app_core_start_failed" xml:space="preserve"><value>コアを起動できませんでした。ログを確認してください。</value></data>
   <data name="app_name" xml:space="preserve"><value>ドアホン</value></data>

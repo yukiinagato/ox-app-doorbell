@@ -185,6 +185,13 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     override fun onTts(text: String, lang: String) {}
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>,
+                                            grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // The Bluetooth host re-checks its permissions whatever this screen asked for.
+        if (app.coreOk) app.runtime.airSensors.onPermissionsChanged()
+    }
+
     internal fun refreshSnapshots() {
         config = if (app.coreOk) app.core.config() else null
         status = if (app.coreOk) app.core.status() else null
@@ -428,6 +435,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             SettingsCategory.DEVICE -> {
                 sectionThisDevice()
                 specSection(category)
+                native.airQuality()
                 parity.doorStation()
                 parity.uiOverrides()
             }

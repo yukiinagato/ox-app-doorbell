@@ -398,6 +398,8 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     }
 
     private companion object {
+        const val AIR_PERMISSION_REQUEST = 41
+
         const val MAX_PICK = 24 * 1024 * 1024
         const val ADD_FILE = "\u0000file"
         const val ADD_RECORD = "\u0000record"
@@ -640,6 +642,48 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     }
 
     // ---------- Calls: visit purposes ----------
+
+    /** This device's PM2.5 display and Bluetooth sensor hosting (devices.<self>.local.air_quality). */
+    fun airQuality() {
+        val base = "devices.${a.nodeId}.local.air_quality"
+        val card = a.section(L("admin.air_title"))
+        add(card, a.toggleRow(L("admin.air_show"), "$base.show",
+                              dig("$base.show") as? Boolean ?: false))
+        val options = listOf("" to L("admin.air_none")) + AirQualityModel.sensorOptions(cfg)
+        val current = (dig("$base.sensor") as? String).orEmpty()
+        val currentLabel = options.firstOrNull { it.first == current }?.second ?: current
+        add(card, item(L("admin.air_sensor_pick"), currentLabel.ifEmpty { L("admin.air_none") }) {
+            choose(L("admin.air_sensor_pick"), options) { id ->
+                a.write("$base.sensor", if (id.isEmpty()) "null" else JSONObject.quote(id)) { }
+            }
+        })
+        val supported = AirSensorHost.hasBleFeature(a)
+        val hosting = dig("$base.host") as? Boolean ?: false
+        val toggle = PlatformUi.toggle(a).apply {
+            isChecked = hosting && supported
+            isFocusable = true
+            isEnabled = supported && !a.readOnly
+        }
+        toggle.setOnCheckedChangeListener { _, checked ->
+            a.write("$base.host", if (checked) "true" else "false") { ok ->
+                if (!ok) toggle.isChecked = !checked
+                else if (checked) requestBluetoothPermissions()
+            }
+        }
+        add(card, ShellUi.row(a, a.palette, L("admin.air_host"),
+                              note = if (supported) "" else L("admin.air_host_unsupported"),
+                              enabled = supported && !a.readOnly, trailing = toggle) {
+            if (toggle.isEnabled) toggle.toggle()
+        })
+    }
+
+    /** Turning hosting on is the moment the administrator expects the Bluetooth prompt. */
+    private fun requestBluetoothPermissions() {
+        if (android.os.Build.VERSION.SDK_INT < 23) return
+        val missing = AirSensorPlans.runtimePermissions(android.os.Build.VERSION.SDK_INT)
+            .filter { a.checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) a.requestPermissions(missing.toTypedArray(), AIR_PERMISSION_REQUEST)
+    }
 
     fun purposes() {
         val card = a.section(L("settings.purposes"))

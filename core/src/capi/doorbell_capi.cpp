@@ -839,6 +839,32 @@ DB_API char* db_core_audio_json(db_core* c, const char* device_id) {
   return dupString(c->node->audioJson(device_id ? device_id : ""));
 }
 
+DB_API char* db_core_air_quality_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->airQualityJson());
+}
+
+DB_API char* db_core_air_sensor_plan_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->airSensorPlanJson());
+}
+
+DB_API void db_core_air_sensor_packet(db_core* c, const char* sensor_id, const uint8_t* data,
+                                      size_t len) {
+  if (!c || !c->node || !sensor_id || !data) return;
+  c->node->airSensorPacket(sensor_id, data, len);
+}
+
+DB_API void db_core_air_sensor_report_json(db_core* c, const char* report_json) {
+  if (!c || !c->node || !report_json) return;
+  c->node->airSensorReport(report_json);
+}
+
+DB_API char* db_core_air_sensor_connect_command_hex(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->airSensorConnectCommandHex());
+}
+
 DB_API int db_core_set_door_notice(db_core* c, const char* door, const char* text,
                                    int64_t expires_ms) {
   if (!c || !c->node || !door || !*door || !text || !*text) return -1;

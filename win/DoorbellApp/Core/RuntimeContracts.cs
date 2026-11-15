@@ -67,6 +67,7 @@ namespace DoorbellApp.Core
                         { "call_cancel_v2", true },
                         { "call_lifecycle_v2", pjsip },
                         { "device_alert_v1", true },
+                        { "air_quality_display_v1", true },
                         { "ui_manifest_v1", uiManifest },
                         { "runtime_recovery_v1", true },
                         { "helper_policy_v1", false },

@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.2</string>
+	<string>0.6.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,9 +30,13 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>73</string>
+	<string>74</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>PM2.5 センサー (Bluetooth) の測定値を受け取り、ドアホン機器に表示するために使います。</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>PM2.5 センサー (Bluetooth) の測定値を受け取り、ドアホン機器に表示するために使います。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>門口カメラ映像の配信 (来訪者の確認) に使います。</string>
 	<key>NSLocalNetworkUsageDescription</key>

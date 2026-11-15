@@ -80,6 +80,17 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private lateinit var sosSlot: android.widget.FrameLayout
     private lateinit var sosSlider: SosTriggerView
     private lateinit var clusterClock: ClusterClock
+    private lateinit var airIndicator: AirQualityIndicator
+    private var airReading = AirQualityReading.HIDDEN
+    private var airLoading = false
+    private var airPermissionsAsked = false
+    // Core hints on every change; the minute tick only keeps a stale/fresh boundary honest.
+    private val airTick = object : Runnable {
+        override fun run() {
+            refreshAirQuality()
+            ui.postDelayed(this, AIR_REFRESH_MS)
+        }
+    }
 
     /** Present only on an indoor panel; the door station never builds a dashboard. */
     private var dashboard: DashboardView? = null
@@ -202,6 +213,10 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private fun buildContent() {
         setContentView(R.layout.activity_main)
         bindViews()
+        airIndicator = AirQualityIndicator(this, TextView(this).apply { textSize = 15f })
+        (idleHeader as LinearLayout).addView(airIndicator.root, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(4) })
         backdrop = VisitorBackdrop(this, app, rootView, themeBg, nightTint, ui,
             config = { cfg }, nodeId = { nodeId }, palette = { palette },
             coreDisplay = { coreDisplay },
@@ -209,12 +224,14 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                 listOf(
                     InkRegion(clockText, "clock", false), InkRegion(dateText, "date", true),
                     InkRegion(touchHint, "hint", true), InkRegion(nodeInfo, "footer", true),
+                    InkRegion(airIndicator.label, "air", airReading.dimmed),
                 )
             })
         purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
         languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
         dashboard = null
         installRoleHome()
+        renderAirQuality()
         membershipRenderKey = ""
         lastClockText = ""
         lastClockDate = ""
@@ -285,6 +302,9 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         }
         enterImmersive()
         ui.post(clockTick)
+        ui.removeCallbacks(airTick)
+        ui.post(airTick)
+        requestAirSensorPermissions()
         if (choosingPurpose) {
             // Resume the remaining choice time; a pause must not restart the full window.
             val remaining = purposeDeadlineElapsedMs - SystemClock.elapsedRealtime()
@@ -432,6 +452,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         setupLaunchRequested = false
         resumed = false
         ui.removeCallbacks(clockTick)
+        ui.removeCallbacks(airTick)
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(homeRefreshTick)
         homeRefreshQueued = false
@@ -458,6 +479,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     override fun onDestroy() {
         ui.removeCallbacks(homeRefreshTick)
+        ui.removeCallbacks(airTick)
         homeThread?.quit()
         homeThread = null
         homeHandler = null
@@ -571,6 +593,31 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (dateValue == lastClockDate) return
         lastClockDate = dateValue
         dateText.text = dateValue
+    }
+
+    /** Read the PM2.5 document off the main thread; at most one read in flight. */
+    private fun refreshAirQuality() {
+        val worker = homeHandler
+        if (!app.coreOk || worker == null || airLoading) return
+        airLoading = true
+        val generation = app.runtime.coreGeneration
+        worker.post {
+            val reading = AirQualityModel.parse(app.core.airQuality())
+            ui.post {
+                airLoading = false
+                if (isFinishing || !app.runtime.isCurrentGeneration(generation)) return@post
+                airReading = reading
+                renderAirQuality()
+            }
+        }
+    }
+
+    private fun renderAirQuality() {
+        dashboard?.let {
+            it.setAirQuality(airReading)
+            return
+        }
+        if (airIndicator.render(airReading, texts, palette.line)) scheduleRegionInk()
     }
 
     /** An indoor panel replaces the visitor screen with the dashboard; a door station keeps it. */
@@ -727,6 +774,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
+        airIndicator.render(airReading, texts, palette.line)
         backdrop.clearInk()
         applyRegionInk()
         sosSlider.applyPalette(palette)
@@ -939,6 +987,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             texts.t("visitor.restoring", R.string.visitor_restoring)
         else texts.t("offline.title", R.string.offline_title)
         offlineBody.text = texts.t("offline.body", R.string.offline_body)
+        renderAirQuality()
     }
 
     /** Resolve a door label by current language, Japanese fallback, then identifier. */
@@ -1323,6 +1372,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                 if (ev.optString("state") == "ready") {
                     // Core only publishes pairing state once its runtime is up, so the
                     // membership check is repeated here rather than only in onResume.
+                    refreshAirQuality()
                     checkPairingAsync {
                         refreshNodeInfo()
                         restoreCurrentCallUi()
@@ -1426,6 +1476,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             // A door of "*" means the cluster-wide announcement moved, which affects every
             // door that has none of its own.
             "notice_changed" -> scheduleHomeRefresh()
+            "air_quality_changed" -> refreshAirQuality()
+            AirSensorHost.PERMISSIONS_EVENT -> requestAirSensorPermissions()
             "call_log_changed" -> scheduleHomeRefresh(fullRender = false, withCalls = true)
             "peers_changed" -> scheduleHomeRefresh(fullRender = false)
             "config_changed" -> scheduleHomeRefresh(withConfig = true)
@@ -1638,9 +1690,29 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), 1)
     }
 
+    /**
+     * Bluetooth permissions are asked for only after Core names this device as a sensor host, and
+     * once per screen instance; a request made while another dialog is up is retried afterwards.
+     */
+    private fun requestAirSensorPermissions() {
+        if (airPermissionsAsked || !app.coreOk || Build.VERSION.SDK_INT < 23) return
+        val missing = app.runtime.airSensors.missingPermissions()
+        if (missing.isEmpty()) return
+        airPermissionsAsked = true
+        requestPermissions(missing.toTypedArray(), AIR_PERMISSION_REQUEST)
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>,
                                             grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == AIR_PERMISSION_REQUEST) {
+            // An empty result means the request was cancelled by another dialog, not denied.
+            if (grantResults.isEmpty()) airPermissionsAsked = false
+            app.runtime.airSensors.onPermissionsChanged()
+            return
+        }
+        if (app.coreOk) app.runtime.airSensors.onPermissionsChanged()
+        requestAirSensorPermissions()
         // Newly granted camera/microphone permissions become foreground-service types.
         app.refreshResidentForegroundTypes()
         maybeStartCamera()
@@ -1658,6 +1730,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         private const val TAG = "doorbell-ui"
 
         private const val PURPOSE_TIMEOUT_MS = 15_000L
+        private const val AIR_REFRESH_MS = 60_000L
+        private const val AIR_PERMISSION_REQUEST = 2
         private const val CANCEL_RECONCILE_MS = 500L
     }
 }

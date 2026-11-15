@@ -72,6 +72,7 @@ namespace DoorbellApp
             LayOutVisitorTopBar(size);
             ClockText.FontSize = (compact ? 52 : (expanded ? 84 : 68));
             DateText.FontSize = (compact ? 17 : (expanded ? 26 : 22)) * scale;
+            VisitorAirText.FontSize = (compact ? 16 : (expanded ? 22 : 20)) * scale;
             VisitorDoorName.FontSize = (compact ? 18 : 22) * scale;
             CallButton.MinWidth = 0;
             PurposeGrid.Columns = LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count);
@@ -372,6 +373,8 @@ namespace DoorbellApp
             InkText(DashClock, RegionClock, 0);
             InkText(DateText, RegionDate, 0.35);
             InkText(DashDate, RegionDate, 0.35);
+            InkText(VisitorAirText, RegionDate, 0);
+            InkText(DashAirText, RegionDate, 0);
             InkText(TouchHint, RegionHint, 0.25);
             InkText(NodeInfo, RegionFooter, 0.35);
             InkText(VisitorVersionLine, RegionFooter, 0.35);

@@ -1013,7 +1013,8 @@ class WindowsContracts(unittest.TestCase):
         # No user-facing text is hardcoded in the new surfaces.
         for name in ("MainWindow.Shell.cs", "MainWindow.Dashboard.cs", "MainWindow.Notice.cs",
                      "MainWindow.History.cs", "MainWindow.CallScreen.cs",
-                     "NoticeDialog.xaml.cs", "WebAdminWindow.xaml.cs"):
+                     "NoticeDialog.xaml.cs", "WebAdminWindow.xaml.cs",
+                     "MainWindow.AirQuality.cs"):
             text = (WIN / "DoorbellApp" / name).read_text(encoding="utf-8")
             for literal in re.findall(r'(?:Text|Content) = "([^"]+)"', text):
                 if re.fullmatch(r"[0-9.:\-]*", literal):
@@ -2398,6 +2399,57 @@ class WindowsContracts(unittest.TestCase):
         manifest = read("win/DoorbellApp/app.manifest")
         self.assertIn(">true/pm</dpiAware>", manifest)
         self.assertIn(">PerMonitorV2, PerMonitor</dpiAwareness>", manifest)
+
+    def test_air_quality_is_display_only_and_read_off_the_dispatcher(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        air = read("win/DoorbellApp/MainWindow.AirQuality.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        self.assertIn("public static extern IntPtr db_core_air_quality_json(IntPtr core);",
+                      interop)
+        self.assertIn("public Dictionary<string, object> AirQuality()", client)
+        self.assertIn("db_core_air_quality_json", required_probe_exports(
+            read("win/abi-probe/main.cpp")))
+        # The WPF shell shows readings but never hosts a Bluetooth sensor.
+        feature_block = contracts[contracts.index('{ "features",'):contracts.index(
+            "public static Dictionary<string, object> Status")]
+        self.assertIn('{ "air_quality_display_v1", true }', feature_block)
+        for source in (interop, client, contracts, air):
+            self.assertNotIn("ble_air_sensor_v1", source)
+            self.assertNotIn("db_core_air_sensor_", source)
+        # The read enters core's run loop, so it rides the coalesced worker snapshot.
+        dispatch = window[window.index('case "peers_changed":'):
+                          window.index("private static string DictStr")]
+        handler = dispatch[dispatch.index('case "air_quality_changed":'):]
+        handler = handler[:handler.index("break;")]
+        self.assertIn("RequestHomeRefresh(HomeRefresh.AirQuality);", handler)
+        snapshot = window[window.index("private HomeSnapshot ReadHomeSnapshot"):
+                          window.index("private void ApplyHomeSnapshot")]
+        self.assertIn("snapshot.AirQuality = App.Core.AirQuality();", snapshot)
+        self.assertNotIn("App.Core.AirQuality()", air)
+        self.assertIn("All = Node | Notice | Tiles | History | Pairing | AirQuality,", window)
+        self.assertIn("TimeSpan.FromMinutes(1)", air)
+        # Both home screens carry the indicator, hidden until core says to show it.
+        for name in ("VisitorAirQuality", "DashAirQuality"):
+            self.assertRegex(xaml, r'x:Name="%s"[^>]*Visibility="Collapsed"' % name)
+        self.assertIn('state != "hidden"', air)
+        self.assertIn('state == "stale" ? AirStaleOpacity', air)
+        self.assertIn('Texts.T("air.a11y", value, status)', air)
+        self.assertIn('Texts.T("air.a11y_no_value", placeholder)', air)
+        self.assertIn("AutomationProperties.SetName(label, spoken);", air)
+        for key in ("air.pm25_label", "air.unit", "air.waiting", "air.stale",
+                    "air.unconfigured"):
+            self.assertIn('"%s"' % key, air)
+        resx = read("win/DoorbellApp/Resources/Strings.resx")
+        for level in ("good", "moderate", "sensitive", "unhealthy", "very_unhealthy",
+                      "hazardous"):
+            self.assertIn('case "%s": return Texts.T("air.level_%s");' % (level, level), air)
+            self.assertIn('name="air_level_%s"' % level, resx)
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        self.assertIn("InkText(VisitorAirText, RegionDate, 0);", shell)
+        self.assertIn("InkText(DashAirText, RegionDate, 0);", shell)
 
     def test_effective_volumes_reach_the_players(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")

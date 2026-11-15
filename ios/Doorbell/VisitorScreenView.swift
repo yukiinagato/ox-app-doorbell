@@ -15,6 +15,7 @@ final class VisitorScreenView: UIView {
     private let noticeExpand = UIButton(type: .system)
     private let hintLabel = HaloLabel()
     private let footerLabel = HaloLabel()
+    private lazy var airQuality = AirQualityView(texts: texts, centred: true)
     /// Shown only when the camera has actually been refused. A door station whose camera is off
     /// disappears from every indoor panel's tile list, so the reason belongs on its own screen
     /// where somebody standing at the door can read it.
@@ -203,7 +204,7 @@ final class VisitorScreenView: UIView {
         if sosVisible { footer.addArrangedSubview(sosControl) }
         footer.addArrangedSubview(footerLabel)
 
-        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
+        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel, airQuality])
         clockColumn.axis = .vertical
         clockColumn.spacing = 8
 
@@ -219,6 +220,7 @@ final class VisitorScreenView: UIView {
         clockLabel.font = UIFont.monospacedDigitSystemFont(
             ofSize: wide ? 96 : (landscape ? 56 : 64), weight: .light)
         dateLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 17, weight: .medium, traits: traitCollection)
+        airQuality.font = IOSAvailability.visitorFont(size: wide ? 20 : 16, weight: .medium, traits: traitCollection)
         root.spacing = compact ? 16 : 24
         actionColumn.spacing = compact ? 14 : 20
         noticeLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 18, traits: traitCollection)
@@ -338,6 +340,14 @@ final class VisitorScreenView: UIView {
         dateLabel.text = DoorbellClock.longDate(reading, lang: lang)
     }
 
+    func updateAirQuality(_ reading: AirQualityReading) {
+        airQuality.update(reading)
+    }
+
+    func refreshAirQualityText() {
+        airQuality.refreshText()
+    }
+
     func updateNotice(_ notice: DoorbellNotice?) {
         noticeText = notice?.text ?? ""
         let hasNotice = !noticeText.isEmpty
@@ -403,6 +413,7 @@ final class VisitorScreenView: UIView {
             skin.apply(region, to: label, quiet: region == "footer")
         }
         noticeExpand.tintColor = noticeLabel.textColor
+        airQuality.apply(skin: skin)
         applyCameraWarningSkin()
 
         let colors = DoorbellTheme.callButtonColors(display: skin.display,

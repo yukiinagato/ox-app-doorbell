@@ -3022,6 +3022,160 @@ var AdminLogic = (function () {
     return { size: size, modules: best, version: ver };
   }
 
+  /* ---------------- PM2.5 sensors ----------------
+   * air_sensors.<id> binds one Bluetooth sensor to the device that connects to it, and
+   * devices.<id>.local.air_quality chooses what each device shows. Core validates both
+   * (airQualityConfigValid); these helpers only build writes Core accepts. */
+  var AIR_SENSOR_MAX = 16, AIR_SENSOR_KIND = "mops_vida_pm25";
+  var AIR_LEVELS = ["good", "moderate", "sensitive", "unhealthy", "very_unhealthy", "hazardous"];
+  var AIR_LINKS = ["connected", "connecting", "disconnected", "not_found"];
+  var AIR_BLE_STATES = ["ready", "off", "unauthorized", "unsupported", "unknown"];
+
+  function airSensorDefs(cfg) {
+    var root = isObj(cfg) && isObj(cfg.air_sensors) ? cfg.air_sensors : {}, out = {};
+    for (var id in root) if (own(root, id) && isObj(root[id])) out[id] = root[id];
+    return out;
+  }
+
+  function airSensorName(raw) {
+    var name = String(raw == null ? "" : raw).replace(/^\s+|\s+$/g, "");
+    var n = countCharacters(name);
+    return n >= 1 && n <= 40 ? name : null;
+  }
+
+  // Ids are random so two administrators adding sensors at once never pick the same key.
+  function airSensorId(defs, random) {
+    var rnd = typeof random === "function" ? random : Math.random;
+    for (var attempt = 0; attempt < 64; attempt++) {
+      var hex = "";
+      for (var i = 0; i < 8; i++) hex += Math.floor(rnd() * 16).toString(16);
+      var id = "s_" + hex;
+      if (!own(defs || {}, id)) return id;
+    }
+    throw new Error("air_id_exhausted");
+  }
+
+  function airAddressRegistered(defs, host, address) {
+    for (var id in defs)
+      if (own(defs, id) && defs[id].host === host && defs[id].address === address) return true;
+    return false;
+  }
+
+  function airSensorAddPlan(cfg, host, address, rawName, random) {
+    var defs = airSensorDefs(cfg), name = airSensorName(rawName);
+    if (name === null) throw new Error("air_name_invalid");
+    host = String(host || ""); address = String(address || "");
+    if (!host || host.length > 128 || !address || address.length > 64)
+      throw new Error("air_address_invalid");
+    if (airAddressRegistered(defs, host, address)) throw new Error("air_address_taken");
+    if (Object.keys(defs).length >= AIR_SENSOR_MAX) throw new Error("air_too_many");
+    var id = airSensorId(defs, random);
+    return { id: id, entries: [{ key: "air_sensors." + id, value: {
+      name: name, host: host, address: address, kind: AIR_SENSOR_KIND, enabled: true } }] };
+  }
+
+  // Removing a sensor also clears every device that was showing it, so no display keeps
+  // pointing at an id that no longer exists.
+  function airSensorRemoveEntries(cfg, id) {
+    var entries = [{ key: "air_sensors." + id, value: null }];
+    var devices = isObj(cfg) && isObj(cfg.devices) ? cfg.devices : {};
+    for (var did in devices) {
+      if (!own(devices, did)) continue;
+      var aq = isObj(devices[did]) && isObj(devices[did].local) ? devices[did].local.air_quality : null;
+      if (isObj(aq) && aq.sensor === id)
+        entries.push({ key: "devices." + did + ".local.air_quality.sensor", value: null });
+    }
+    return entries;
+  }
+
+  // One leaf per change: toggling a device never rewrites its other air_quality fields.
+  function airDeviceEntries(deviceId, field, value) {
+    if (!deviceId) throw new Error("air_device_required");
+    var key = "devices." + deviceId + ".local.air_quality." + field;
+    if (field === "show" || field === "host") return [{ key: key, value: value === true }];
+    if (field === "sensor") {
+      var sensor = String(value || "");
+      if (sensor && !/^[A-Za-z0-9_-]{1,32}$/.test(sensor)) throw new Error("air_sensor_invalid");
+      return [{ key: key, value: sensor || null }];
+    }
+    throw new Error("air_field_invalid");
+  }
+
+  function airDeviceSettings(cfg, deviceId) {
+    var d = isObj(cfg) && isObj(cfg.devices) ? cfg.devices[deviceId] : null;
+    var aq = isObj(d) && isObj(d.local) && isObj(d.local.air_quality) ? d.local.air_quality : {};
+    return { show: aq.show === true, host: aq.host === true,
+             sensor: typeof aq.sensor === "string" ? aq.sensor : "" };
+  }
+
+  // A device can show or host only when its shell advertises the measured feature.
+  function airDeviceSupport(peer, status) {
+    var features = featureMapForPeer(peer, status);
+    return { display: features.air_quality_display_v1 === true,
+             host: features.ble_air_sensor_v1 === true };
+  }
+
+  function airLevel(level, pm25) {
+    if (AIR_LEVELS.indexOf(level) >= 0) return level;
+    var n = Number(pm25);
+    if (!isFinite(n) || n < 0) return "";
+    if (n <= 9) return "good";
+    if (n <= 35) return "moderate";
+    if (n <= 55) return "sensitive";
+    if (n <= 125) return "unhealthy";
+    if (n <= 225) return "very_unhealthy";
+    return "hazardous";
+  }
+
+  // The administrator view of status.air_quality: registered sensors in name order, and per
+  // scanning host the sensors it sees that are not yet registered through it.
+  function airSectionModel(status, cfg) {
+    var aq = isObj(status) && isObj(status.air_quality) ? status.air_quality : {};
+    var defs = airSensorDefs(cfg), reported = {}, sensors = [], i;
+    var rows = aq.sensors instanceof Array ? aq.sensors : [];
+    for (i = 0; i < rows.length; i++)
+      if (isObj(rows[i]) && typeof rows[i].id === "string") reported[rows[i].id] = rows[i];
+    for (var id in defs) {
+      if (!own(defs, id)) continue;
+      var def = defs[id], st = reported[id] || {};
+      var reading = isObj(st.reading) ? st.reading : null;
+      var pm25 = reading && typeof reading.pm25 === "number" && reading.pm25 >= 0 ? reading.pm25 : null;
+      var battery = reading && typeof reading.battery_pct === "number" &&
+                    reading.battery_pct >= 0 && reading.battery_pct <= 100 ? reading.battery_pct : null;
+      var link = reading && AIR_LINKS.indexOf(reading.link) >= 0 ? reading.link : "";
+      sensors.push({ id: id, name: String(def.name || id), host: String(def.host || ""),
+                     address: String(def.address || ""), enabled: def.enabled !== false,
+                     hostAlive: st.host_alive === true, link: link, pm25: pm25,
+                     level: pm25 === null ? "" : airLevel(st.level, pm25),
+                     atMs: reading && typeof reading.at_ms === "number" ? reading.at_ms : 0,
+                     battery: battery, charging: !!(reading && reading.charging === true) });
+    }
+    sensors.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 :
+                                          (a.id < b.id ? -1 : 1); });
+    var hosts = [], seen = {}, list = aq.hosts instanceof Array ? aq.hosts : [];
+    for (i = 0; i < list.length; i++) {
+      var h = list[i];
+      if (!isObj(h) || typeof h.device !== "string" || !h.device || seen[h.device]) continue;
+      seen[h.device] = true;
+      var found = [], raw = h.discovered instanceof Array ? h.discovered : [], addrs = {};
+      for (var j = 0; j < raw.length; j++) {
+        var f = raw[j];
+        if (!isObj(f) || typeof f.address !== "string" || !f.address || addrs[f.address]) continue;
+        addrs[f.address] = true;
+        if (airAddressRegistered(defs, h.device, f.address)) continue;
+        found.push({ address: f.address, name: typeof f.name === "string" ? f.name : "",
+                     rssi: typeof f.rssi === "number" ? f.rssi : null,
+                     seenMs: typeof f.seen_ms === "number" ? f.seen_ms : 0 });
+      }
+      found.sort(function (a, b) { return (b.rssi === null ? -999 : b.rssi) -
+                                          (a.rssi === null ? -999 : a.rssi); });
+      hosts.push({ device: h.device,
+                   ble: AIR_BLE_STATES.indexOf(h.ble) >= 0 ? h.ble : "unknown",
+                   discovered: found });
+    }
+    return { sensors: sensors, hosts: hosts, full: Object.keys(defs).length >= AIR_SENSOR_MAX };
+  }
+
   return {
     parseList: parseList, parseChatIds: parseChatIds, labelObj: labelObj, labelOf: labelOf,
     buildingEntries: buildingEntries, doorEntries: doorEntries,
@@ -3121,7 +3275,12 @@ var AdminLogic = (function () {
     settingsRoute: settingsRoute,
     settingsHash: settingsHash,
     settingsView: settingsView,
-    filterSettings: filterSettings
+    filterSettings: filterSettings,
+    AIR_SENSOR_MAX: AIR_SENSOR_MAX, AIR_SENSOR_KIND: AIR_SENSOR_KIND,
+    airSensorName: airSensorName, airSensorId: airSensorId,
+    airSensorAddPlan: airSensorAddPlan, airSensorRemoveEntries: airSensorRemoveEntries,
+    airDeviceEntries: airDeviceEntries, airDeviceSettings: airDeviceSettings,
+    airDeviceSupport: airDeviceSupport, airLevel: airLevel, airSectionModel: airSectionModel
   };
 })();
 
@@ -3482,7 +3641,12 @@ if (typeof document !== "undefined") (function () {
     notice: { global_active: false },
     call: { state: "idle", mic_muted: false },
     ui_manifest: L.defaultUiManifest("door_station"),
-    features: { call_flow_v2: true, emergency_rules_v1: true, device_alert_v1: true },
+    features: { call_flow_v2: true, emergency_rules_v1: true, device_alert_v1: true,
+                air_quality_display_v1: true, ble_air_sensor_v1: true },
+    air_quality: { sensors: [], hosts: [
+      { device: MOCK_ID1, ble: "ready", discovered: [
+        { address: "6F2C1A9E-4B1D-4C2A-9E61-0A3B5C7D9E10", name: "MOPS-VIDA", rssi: -61,
+          seen_ms: Date.now() - 4000 }] }] },
     emergency: { active: false, device: "", wall_ms: 0 },
     web_push: { subscriptions: 0, configured: false, delivery_backend: false },
     sip: { registered: false, state: "idle", call: "idle" },
@@ -5737,6 +5901,161 @@ if (typeof document !== "undefined") (function () {
     syncDisabled();
   }
 
+  function airDeviceLabel(id) {
+    var d = cfgObj("devices")[id], p = peerOf(id);
+    return (d && d.name) || (p && p.name) || (id ? id.slice(0, 8) : "");
+  }
+
+  function airLevelText(level) {
+    return ({ good: t("air.level_good"), moderate: t("air.level_moderate"),
+              sensitive: t("air.level_sensitive"), unhealthy: t("air.level_unhealthy"),
+              very_unhealthy: t("air.level_very_unhealthy"),
+              hazardous: t("air.level_hazardous") })[level] || "";
+  }
+
+  function airBleText(state) {
+    return ({ ready: t("admin.air_ble_ready"), off: t("admin.air_ble_off"),
+              unauthorized: t("admin.air_ble_unauthorized"),
+              unsupported: t("admin.air_ble_unsupported") })[state] ||
+           t("admin.air_ble_unknown");
+  }
+
+  function airLinkText(s) {
+    if (!s.hostAlive) return { cls: "err", text: t("admin.air_host_offline") };
+    if (s.link === "connected") return { cls: "ok", text: t("admin.air_link_connected") };
+    if (s.link === "connecting") return { cls: "warn", text: t("admin.air_link_connecting") };
+    if (s.link === "not_found") return { cls: "err", text: t("admin.air_link_not_found") };
+    return { cls: "warn", text: t("admin.air_link_disconnected") };
+  }
+
+  function airReadingHtml(s) {
+    if (s.pm25 === null) return "<span class='dim'>" + esc(t("air.waiting")) + "</span>";
+    var h = "<div><strong>" + esc(String(s.pm25)) + "</strong> " + esc(t("air.unit")) +
+            (s.level ? " · " + esc(airLevelText(s.level)) : "") + "</div>";
+    if (s.atMs) h += "<div class='dim mono'>" + esc(fmtTime(s.atMs)) + "</div>";
+    if (s.battery !== null)
+      h += "<div class='dim'>" + icon(s.charging ? "battery-charging" : "battery") + " " +
+           esc(fmt(t("admin.air_battery"), { pct: s.battery })) + "</div>";
+    return h;
+  }
+
+  // The PM2.5 card on the Devices tab: registered sensors, what scanning devices see nearby, and
+  // per device whether it scans and which sensor it shows.
+  function airCardHtml(deviceIds) {
+    var model = L.airSectionModel(S.status, S.cfg), h, i;
+    h = "<div class='card' id='airCard'><h2>" + esc(t("admin.air_title")) + "</h2>" +
+        "<p class='fhint dim'>" + esc(t("admin.air_intro")) + "</p>" +
+        "<h3>" + esc(t("admin.air_sensors")) + "</h3><table><thead><tr><th>" +
+        esc(t("admin.air_name")) + "</th><th>" + esc(t("admin.air_host_device")) + "</th><th>" +
+        esc(t("admin.air_address")) + "</th><th>" + esc(t("admin.air_link")) + "</th><th>" +
+        esc(t("admin.air_reading")) + "</th><th></th></tr></thead><tbody>";
+    for (i = 0; i < model.sensors.length; i++) {
+      var s = model.sensors[i], link = airLinkText(s);
+      h += "<tr class='" + (s.hostAlive ? "" : "offline") + "'><td>" + esc(s.name) + "</td><td>" +
+           esc(airDeviceLabel(s.host)) + "</td><td class='dim mono'>" + esc(s.address) +
+           "</td><td><span class='status " + link.cls + "'>" + esc(link.text) + "</span></td><td>" +
+           airReadingHtml(s) + "</td><td class='ops'><button class='btn2 danger' " +
+           "data-act='airRemove' data-id='" + esc(s.id) + "'>" + icon("trash") + " " +
+           esc(t("admin.air_remove")) + "</button></td></tr>";
+    }
+    if (!model.sensors.length) h += emptyRowHtml(6, t("admin.air_no_sensors"), "", "");
+    h += "</tbody></table><h3>" + esc(t("admin.air_discovered")) + "</h3>";
+    if (!model.hosts.length) h += "<p class='fhint dim'>" + esc(t("admin.air_no_hosts")) + "</p>";
+    for (i = 0; i < model.hosts.length; i++) {
+      var host = model.hosts[i], name = airDeviceLabel(host.device);
+      h += "<h4>" + esc(name) + " <span class='tag'>" + esc(airBleText(host.ble)) +
+           "</span></h4>";
+      if (!host.discovered.length) {
+        h += "<p class='fhint dim'>" + esc(fmt(t("admin.air_nothing_found"), { device: name })) +
+             "</p>";
+        continue;
+      }
+      h += "<table><tbody>";
+      for (var j = 0; j < host.discovered.length; j++) {
+        var f = host.discovered[j];
+        h += "<tr><td>" + esc(f.name || f.address) + "</td><td class='dim mono'>" +
+             esc(f.address) + "</td><td class='dim'>" +
+             (f.rssi === null ? "" : esc(fmt(t("admin.air_signal"), { rssi: f.rssi }))) +
+             "</td><td class='ops'><button class='btn2' data-act='airAdd' data-host='" +
+             esc(host.device) + "' data-address='" + esc(f.address) + "' data-name='" +
+             esc(f.name) + "'" + (model.full ? " disabled" : "") + ">" + icon("plus") + " " +
+             esc(t("admin.air_add")) + "</button></td></tr>";
+      }
+      h += "</tbody></table>";
+    }
+    h += "<h3>" + esc(t("admin.devices")) + "</h3><table><thead><tr><th>" +
+         esc(t("admin.dev_name")) + "</th><th>" + esc(t("admin.air_host")) + "</th><th>" +
+         esc(t("admin.air_show")) + "</th><th>" + esc(t("admin.air_sensor_pick")) +
+         "</th></tr></thead><tbody>";
+    deviceIds.forEach(function (nid) {
+      var set = L.airDeviceSettings(S.cfg, nid);
+      var support = L.airDeviceSupport(peerOf(nid), S.status);
+      // An unsupported switch that is already on stays usable so it can be turned off.
+      var hostOff = !support.host && !set.host, showOff = !support.display && !set.show;
+      var notes = [];
+      if (!support.host) notes.push(t("admin.air_host_unsupported"));
+      if (!support.display) notes.push(t("admin.air_display_unsupported"));
+      var opts = "<option value=''>" + esc(t("admin.air_none")) + "</option>", known = !set.sensor;
+      model.sensors.forEach(function (s) {
+        if (s.id === set.sensor) known = true;
+        opts += "<option value='" + esc(s.id) + "'" + (s.id === set.sensor ? " selected" : "") +
+                ">" + esc(s.name) + "</option>";
+      });
+      if (!known) opts += "<option value='" + esc(set.sensor) + "' selected>" +
+                          esc(set.sensor) + "</option>";
+      h += "<tr><td>" + esc(airDeviceLabel(nid)) +
+           (notes.length ? "<div class='dim fhint'>" + esc(notes.join(" / ")) + "</div>" : "") +
+           "</td><td><input type='checkbox' role='switch' data-air-host='" + esc(nid) + "'" +
+           " aria-label='" + esc(t("admin.air_host")) + "'" + (set.host ? " checked" : "") +
+           (hostOff ? " disabled" : "") + "></td><td><input type='checkbox' role='switch' " +
+           "data-air-show='" + esc(nid) + "' aria-label='" + esc(t("admin.air_show")) + "'" +
+           (set.show ? " checked" : "") + (showOff ? " disabled" : "") + "></td><td>" +
+           "<select data-air-sensor='" + esc(nid) + "' aria-label='" + esc(t("admin.air_sensor_pick")) +
+           "'" + (showOff && !set.sensor ? " disabled" : "") + ">" + opts + "</select></td></tr>";
+    });
+    return h + "</tbody></table></div>";
+  }
+
+  function bindAirCard(root) {
+    var card = root.querySelector("#airCard");
+    if (!card) return;
+    function write(entries) { saveAndRefresh(entries, null); }
+    $all("[data-act='airRemove']", card).forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute("data-id"), def = (cfgObj("air_sensors")[id]) || {};
+        if (!window.confirm(fmt(t("admin.air_remove_confirm"), { name: def.name || id }))) return;
+        write(L.airSensorRemoveEntries(S.cfg, id));
+      };
+    });
+    $all("[data-act='airAdd']", card).forEach(function (b) {
+      b.onclick = function () {
+        var raw = window.prompt(t("admin.air_name_prompt"), b.getAttribute("data-name") || "");
+        if (raw === null) return;
+        var plan;
+        try {
+          plan = L.airSensorAddPlan(S.cfg, b.getAttribute("data-host"),
+                                    b.getAttribute("data-address"), raw);
+        } catch (e) { msg(t("admin.save_failed") + ": " + e.message); return; }
+        write(plan.entries);
+      };
+    });
+    $all("[data-air-host]", card).forEach(function (box) {
+      box.onchange = function () {
+        write(L.airDeviceEntries(box.getAttribute("data-air-host"), "host", box.checked));
+      };
+    });
+    $all("[data-air-show]", card).forEach(function (box) {
+      box.onchange = function () {
+        write(L.airDeviceEntries(box.getAttribute("data-air-show"), "show", box.checked));
+      };
+    });
+    $all("[data-air-sensor]", card).forEach(function (sel) {
+      sel.onchange = function () {
+        write(L.airDeviceEntries(sel.getAttribute("data-air-sensor"), "sensor", sel.value));
+      };
+    });
+  }
+
   function renderDevices() {
     var el = $("#tab-devices");
     var ds = cfgObj("devices");
@@ -5802,6 +6121,7 @@ if (typeof document !== "undefined") (function () {
                         "<button class='btn' data-act='pair'>" + icon("plus") + " " +
                         esc(t("pair.tab")) + "</button>");
     h += "</tbody></table></div>";
+    h += airCardHtml(ids);
 
     var vp = cfgObj("video_playback"), globalProfile = L.normalizePlaybackProfile(vp.global);
     var indoors = [], outdoors = [];
@@ -5850,6 +6170,7 @@ if (typeof document !== "undefined") (function () {
                   vol: function (id) { editDeviceVolume(id); },
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
+    bindAirCard(el);
     bindPlaybackRows("pbGlobalRows");
     if ($("#pbPairRows")) bindPlaybackRows("pbPairRows");
     $("#pbGlobalSave").onclick = function () {
@@ -9865,6 +10186,14 @@ if (typeof document !== "undefined") (function () {
   })();
 
 
+  // A poll re-render would close an open select or drop typed text on the Devices tab, so it
+  // waits while a control there has focus.
+  function devicesTabEditing() {
+    var active = document.activeElement, tab = $("#tab-devices");
+    return !!(active && tab && tab.contains(active) &&
+              /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName));
+  }
+
   function poll(generation) {
     if (!generationCurrent(generation) || AUTH.pollBusy) return;
     AUTH.pollBusy = true;
@@ -9877,7 +10206,7 @@ if (typeof document !== "undefined") (function () {
     refreshStatus(function () {
       if (generationCurrent(generation)) {
         if (S.tab === "dash") renderDash();
-        if (S.tab === "devices") renderDevices();
+        if (S.tab === "devices" && !devicesTabEditing()) renderDevices();
       }
       complete();
     }, generation);

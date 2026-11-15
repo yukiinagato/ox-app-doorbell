@@ -20,6 +20,40 @@
   <data name="admin_add_rule" xml:space="preserve"><value>添加规则</value></data>
   <data name="admin_add_window" xml:space="preserve"><value>添加时间段</value></data>
   <data name="admin_addresses" xml:space="preserve"><value>地址</value></data>
+  <data name="admin_air_add" xml:space="preserve"><value>添加</value></data>
+  <data name="admin_air_address" xml:space="preserve"><value>蓝牙标识</value></data>
+  <data name="admin_air_battery" xml:space="preserve"><value>电量 {0}%</value></data>
+  <data name="admin_air_ble_off" xml:space="preserve"><value>蓝牙已关闭</value></data>
+  <data name="admin_air_ble_ready" xml:space="preserve"><value>蓝牙可用</value></data>
+  <data name="admin_air_ble_unauthorized" xml:space="preserve"><value>未获得蓝牙权限</value></data>
+  <data name="admin_air_ble_unknown" xml:space="preserve"><value>蓝牙状态未知</value></data>
+  <data name="admin_air_ble_unsupported" xml:space="preserve"><value>不支持低功耗蓝牙</value></data>
+  <data name="admin_air_discovered" xml:space="preserve"><value>附近发现的传感器</value></data>
+  <data name="admin_air_display_unsupported" xml:space="preserve"><value>此设备的应用不支持显示 PM2.5</value></data>
+  <data name="admin_air_host" xml:space="preserve"><value>搜索并连接蓝牙传感器</value></data>
+  <data name="admin_air_host_device" xml:space="preserve"><value>连接设备</value></data>
+  <data name="admin_air_host_offline" xml:space="preserve"><value>连接设备离线</value></data>
+  <data name="admin_air_host_unsupported" xml:space="preserve"><value>此设备的应用不支持连接蓝牙传感器</value></data>
+  <data name="admin_air_intro" xml:space="preserve"><value>将蓝牙 PM2.5 传感器（MOPS·VIDA）连接到附近的设备，并在任意门口机或室内机上显示读数。持续连接会很快耗电，请保持传感器 USB 供电。</value></data>
+  <data name="admin_air_link" xml:space="preserve"><value>连接状态</value></data>
+  <data name="admin_air_link_connected" xml:space="preserve"><value>已连接</value></data>
+  <data name="admin_air_link_connecting" xml:space="preserve"><value>正在连接</value></data>
+  <data name="admin_air_link_disconnected" xml:space="preserve"><value>未连接</value></data>
+  <data name="admin_air_link_not_found" xml:space="preserve"><value>未找到</value></data>
+  <data name="admin_air_name" xml:space="preserve"><value>名称</value></data>
+  <data name="admin_air_name_prompt" xml:space="preserve"><value>传感器名称（例如：玄关）</value></data>
+  <data name="admin_air_no_hosts" xml:space="preserve"><value>没有设备正在搜索。请为传感器附近的设备打开“搜索并连接蓝牙传感器”。</value></data>
+  <data name="admin_air_no_sensors" xml:space="preserve"><value>尚未添加传感器</value></data>
+  <data name="admin_air_none" xml:space="preserve"><value>（无）</value></data>
+  <data name="admin_air_nothing_found" xml:space="preserve"><value>{0}：尚未发现</value></data>
+  <data name="admin_air_reading" xml:space="preserve"><value>最新读数</value></data>
+  <data name="admin_air_remove" xml:space="preserve"><value>删除</value></data>
+  <data name="admin_air_remove_confirm" xml:space="preserve"><value>删除传感器“{0}”？</value></data>
+  <data name="admin_air_sensor_pick" xml:space="preserve"><value>显示的传感器</value></data>
+  <data name="admin_air_sensors" xml:space="preserve"><value>已添加的传感器</value></data>
+  <data name="admin_air_show" xml:space="preserve"><value>显示 PM2.5</value></data>
+  <data name="admin_air_signal" xml:space="preserve"><value>信号 {0} dBm</value></data>
+  <data name="admin_air_title" xml:space="preserve"><value>PM2.5 传感器</value></data>
   <data name="admin_alert_accent" xml:space="preserve"><value>SOS 强调色</value></data>
   <data name="admin_alert_background" xml:space="preserve"><value>SOS 背景色</value></data>
   <data name="admin_alert_channels" xml:space="preserve"><value>通道</value></data>
@@ -472,6 +506,19 @@
   <data name="admin_windows" xml:space="preserve"><value>时间段</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>附照片</value></data>
   <data name="admin_write" xml:space="preserve"><value>写入</value></data>
+  <data name="air_a11y" xml:space="preserve"><value>PM2.5 {0} 微克每立方米，{1}</value></data>
+  <data name="air_a11y_no_value" xml:space="preserve"><value>PM2.5，{0}</value></data>
+  <data name="air_level_good" xml:space="preserve"><value>优</value></data>
+  <data name="air_level_hazardous" xml:space="preserve"><value>危险</value></data>
+  <data name="air_level_moderate" xml:space="preserve"><value>良</value></data>
+  <data name="air_level_sensitive" xml:space="preserve"><value>敏感人群注意</value></data>
+  <data name="air_level_unhealthy" xml:space="preserve"><value>不健康</value></data>
+  <data name="air_level_very_unhealthy" xml:space="preserve"><value>非常不健康</value></data>
+  <data name="air_pm25_label" xml:space="preserve"><value>PM2.5</value></data>
+  <data name="air_stale" xml:space="preserve"><value>未更新</value></data>
+  <data name="air_unconfigured" xml:space="preserve"><value>未设置传感器</value></data>
+  <data name="air_unit" xml:space="preserve"><value>µg/m³</value></data>
+  <data name="air_waiting" xml:space="preserve"><value>等待读数</value></data>
   <data name="app_already_running" xml:space="preserve"><value>Doorbell 已在此设备上运行。</value></data>
   <data name="app_core_start_failed" xml:space="preserve"><value>核心无法启动，请查看日志。</value></data>
   <data name="app_name" xml:space="preserve"><value>门铃</value></data>

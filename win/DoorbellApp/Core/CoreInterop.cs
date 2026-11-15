@@ -420,6 +420,10 @@ namespace DoorbellApp.Core
         public static extern IntPtr db_core_audio_json(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string deviceId);
 
+        // Enters core's run loop synchronously: call it from a worker, never the dispatcher.
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_air_quality_json(IntPtr core);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int db_core_set_door_notice(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door,

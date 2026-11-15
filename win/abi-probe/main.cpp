@@ -59,9 +59,10 @@ int main(int argc, char** argv) {
   }
   // Batch-2 shell surfaces (spec 5.1 to 5.5): the cluster clock, effective volumes,
   // announcements, call history and its before_ms paging, the one cluster-wide 管理パスワード,
-  // native configuration writes with their advisory warnings, the door unlock action, and the
-  // microphone toggle. The 全体 announcement needs no entry point of its own: core addresses it
-  // as the door "*" through db_core_set_door_notice.
+  // native configuration writes with their advisory warnings, the door unlock action, the
+  // microphone toggle, and the PM2.5 reading on the home screen. The global announcement needs
+  // no entry point of its own: core addresses it as the door "*" through
+  // db_core_set_door_notice.
   static const char* kShellExports[] = {
       "db_core_local_time_json",         "db_core_time_sync_now",
       "db_core_audio_json",              "db_core_set_door_notice",
@@ -71,7 +72,7 @@ int main(int argc, char** argv) {
       "db_core_admin_password_verify",   "db_core_admin_password_set",
       "db_core_set_config_json",         "db_core_last_write_warnings_json",
       "db_core_config_batch_json",       "db_core_delete_config_key",
-      "db_core_sip_set_mic_muted"};
+      "db_core_sip_set_mic_muted",       "db_core_air_quality_json"};
   for (const char* name : kShellExports) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required shell export is missing: " << name << "\n";

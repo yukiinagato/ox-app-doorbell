@@ -988,3 +988,7 @@ SIP 仅使用明确映射账号的 `user` 与安全 `pass_ref`。账号或本地
 旧 `panel.token_refs` 及会话明确标为 `legacy_shared`，保留已声明的本地动作和共享 SIP 兼容行为，不宣称能独立撤销设备；不能作为独立身份委托远端媒体。缺失或畸形身份不会自动成为 legacy。`media.publish` 还必须满足 T15 当前 session/call/revision/owner 检查，认证接收端再次校验当前身份代次、权限和通话归属，不转发浏览器 Cookie、CSRF 或长期 bearer。
 
 既有 LAN-public `/stream.mjpeg`、`/stream.mp4`、`/snapshot.jpg` 门口摄像头策略保持不变。`view` 范围保护面板 API 和受保护代理，不会把这些明确公开的门口画面自动变成私有资源；住户回传画面另有发布者/session 授权。
+
+## 蓝牙 PM2.5 传感器
+
+`air_sensors.<id>` 把一个蓝牙 PM2.5 传感器绑定到负责连接它的设备：`{name, host, address, kind?, enabled?}`。`devices.<id>.local.air_quality` 为 `{host, show, sensor}`：`host` 让该设备搜索并连接传感器，`show` 在其主屏幕显示读数，`sensor` 选择显示哪一个。读数是易失的对等 runtime，从不写入配置。见[蓝牙 PM2.5 传感器](air-quality-sensors.md)。

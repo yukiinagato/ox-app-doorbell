@@ -685,6 +685,59 @@ json::Doc powerProjection(const cJSON* section) {
   return out;
 }
 
+// Core-owned Bluetooth air-sensor section: enumerated states, clamped numbers, at most eight
+// readings and eight discovered devices, and short identifiers only.
+bool airTokenValid(const std::string& s, size_t max) {
+  if (s.empty() || s.size() > max) return false;
+  for (unsigned char c : s) {
+    if (c < 0x20 || c == 0x7F) return false;
+  }
+  return true;
+}
+
+json::Doc airSensorsProjection(const cJSON* section) {
+  if (!cJSON_IsObject(section)) return {};
+  auto out = json::obj();
+  const std::string ble = json::getString(section, "ble", "unknown");
+  const bool ble_known = ble == "ready" || ble == "off" || ble == "unauthorized" ||
+                         ble == "unsupported" || ble == "unknown";
+  json::set(out.get(), "ble", ble_known ? ble : "unknown");
+  auto clamp = [](int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : (v > hi ? hi : v); };
+  cJSON* readings = json::addObj(out.get(), "readings");
+  int count = 0;
+  const cJSON* r = nullptr;
+  cJSON_ArrayForEach(r, json::get(section, "readings")) {
+    if (count >= 8) break;
+    const std::string id = r->string ? r->string : "";
+    if (!cJSON_IsObject(r) || !airTokenValid(id, 32)) continue;
+    const std::string link = json::getString(r, "link");
+    cJSON* e = json::addObj(readings, id.c_str());
+    json::set(e, "pm25", clamp(json::getInt(r, "pm25", -1), -1, 2000));
+    json::set(e, "at_ms", clamp(json::getInt(r, "at_ms", 0), 0, 4'102'444'800'000LL));
+    json::set(e, "battery_pct", clamp(json::getInt(r, "battery_pct", -1), -1, 100));
+    json::setBool(e, "charging", json::getBool(r, "charging"));
+    json::set(e, "link", link == "connecting" || link == "connected" || link == "not_found"
+                             ? link : std::string("disconnected"));
+    count++;
+  }
+  cJSON* found = json::addArr(out.get(), "discovered");
+  count = 0;
+  const cJSON* d = nullptr;
+  cJSON_ArrayForEach(d, json::get(section, "discovered")) {
+    if (count >= 8) break;
+    const std::string address = json::getString(d, "address");
+    const std::string name = json::getString(d, "name");
+    if (!airTokenValid(address, 64) || name.size() > 64) continue;
+    cJSON* e = json::pushObj(found);
+    json::set(e, "address", address);
+    json::set(e, "name", airTokenValid(name, 64) ? name : std::string());
+    json::set(e, "rssi", clamp(json::getInt(d, "rssi", 0), -127, 20));
+    json::set(e, "seen_ms", clamp(json::getInt(d, "seen_ms", 0), 0, 4'102'444'800'000LL));
+    count++;
+  }
+  return out;
+}
+
 void sendJoinFrame(const ConnPtr& conn, const cJSON* msg) {
   std::string s = json::dump(msg);
   Bytes f;
@@ -724,6 +777,8 @@ bool projectMeshRuntimeJson(const std::string& runtime_json, std::string* projec
   }
   auto power = powerProjection(json::get(source.get(), "power"));
   if (power) json::setItem(projected.get(), "power", std::move(power));
+  auto air = airSensorsProjection(json::get(source.get(), "air_sensors"));
+  if (air) json::setItem(projected.get(), "air_sensors", std::move(air));
   const cJSON* ui_style = json::get(source.get(), "ui_style");
   if (ui_style) {
     auto clean = uiStyleProjection(ui_style);
