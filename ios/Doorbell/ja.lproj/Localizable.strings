@@ -1714,8 +1714,8 @@
 "reply.answered" = "応答済み (%@)";
 "reply.banner" = "住人からのメッセージ";
 "reply.choose" = "クイック返信を選択";
-"reply.exit_confirm" = "もう一度タップすると閉じます";
-"reply.exit_hint" = "画面を2回タップすると閉じます";
+"reply.exit_confirm" = "もう一度タップで閉じる";
+"reply.exit_hint" = "画面を2回タップして閉じる";
 "reply.failed" = "クイック返信の送信に失敗しました";
 "reply.sent" = "送信しました: %@";
 "ring.answer" = "応答";

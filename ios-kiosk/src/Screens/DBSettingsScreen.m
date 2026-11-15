@@ -1288,7 +1288,7 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.call_ttl"] key:@"ui.call_ttl_s" def:60
                                min:10 max:300 step:10 unit:seconds]];
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.reply_ttl"] key:@"reply.display_ttl_s"
-                               def:8 min:3 max:60 step:1 unit:seconds]];
+                               def:30 min:5 max:300 step:5 unit:seconds]];
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.visitor_lang_revert"]
                                key:@"ui.visitor_lang_revert_s" def:60 min:5 max:600 step:5
                               unit:seconds]];

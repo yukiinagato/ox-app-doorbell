@@ -43,9 +43,30 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBLatestWins.m" \
+  "$REPO_ROOT/ios-compat/tests/latest_wins_test.m" \
+  -framework Foundation -o "$OUT/latest_wins_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBReplyDismissal.m" \
+  "$REPO_ROOT/ios-compat/tests/reply_dismissal_test.m" \
+  -framework Foundation -o "$OUT/reply_dismissal_test"
+"$OUT/latest_wins_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBTextFit.m" \
+  "$REPO_ROOT/ios-compat/tests/text_fit_test.m" \
+  -framework Foundation -o "$OUT/text_fit_test"
+"$OUT/reply_dismissal_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBFleetCounts.m" \
   "$REPO_ROOT/ios-compat/tests/fleet_counts_test.m" \
   -framework Foundation -o "$OUT/fleet_counts_test"
+"$OUT/text_fit_test"
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \

@@ -692,7 +692,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
   } else if ([screen hasPrefix:@"visitor:"]) {
     [self transitionTo:self.door animated:NO];
     DBDoorScreen *door = self.door;
-    NSString *state = [screen substringFromIndex:8];
+    // The sample text of "visitor:reply:<text>" keeps its case.
+    NSString *state = [[name stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]] substringFromIndex:8];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{ [door debugShowState:state]; });
   } else if ([screen isEqualToString:@"visitor"]) {

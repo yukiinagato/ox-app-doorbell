@@ -126,8 +126,8 @@ emergency.notify_off: { ja: "✅ 緊急解除", en: "✅ Emergency cleared", zh:
 notify.test: { ja: "ドアホン テスト通知", en: "Doorbell test notification", zh: "门铃测试通知" }
 
 reply.banner: { ja: "住人からのメッセージ", en: "Message from resident", zh: "住户留言" }
-reply.exit_hint: { ja: "画面を2回タップすると閉じます", en: "Tap the screen twice to close", zh: "连续点击屏幕两次即可关闭" }
-reply.exit_confirm: { ja: "もう一度タップすると閉じます", en: "Tap once more to close", zh: "再点一次即可关闭" }
+reply.exit_hint: { ja: "画面を2回タップして閉じる", en: "Tap the screen twice to close", zh: "连续点击屏幕两次即可关闭" }
+reply.exit_confirm: { ja: "もう一度タップで閉じる", en: "Tap once more to close", zh: "再点一次即可关闭" }
 reply.sent: { ja: "送信しました: {text}", en: "Sent: {text}", zh: "已发送：{text}" }
 reply.choose: { ja: "クイック返信を選択", en: "Choose a quick reply", zh: "选择快捷回复" }
 reply.answered: { ja: "応答済み ({text})", en: "Replied ({text})", zh: "已回复（{text}）" }

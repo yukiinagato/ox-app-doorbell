@@ -454,6 +454,20 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertNotIn("emergency:", panel)
         self.assertNotIn("UILongPressGestureRecognizer", panel)
 
+    def test_end_is_guarded_and_restyled_when_the_call_connects(self):
+        incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+        self.assertIn("kEndGuardSeconds = 1.0", incoming)
+        tap = incoming[incoming.index("- (void)onAnswer"):incoming.index("- (void)placeAnswerCall")]
+        guard = "if (DBCallMonotonicTime() < _endGuardUntil) return;"
+        self.assertIn(guard, tap)
+        self.assertLess(tap.index(guard), tap.index("[_router sipHangup]"))
+        connected = incoming[incoming.index("if (state == DBMiniSipInCall)"):
+                             incoming.index("} else if (state == DBMiniSipEnded)")]
+        self.assertIn("_endGuardUntil = DBCallMonotonicTime() + kEndGuardSeconds;", connected)
+        self.assertIn('ts:@"incall.end_call"', connected)
+        self.assertLess(connected.index("[self applySemanticStyles];"),
+                        connected.index("[self layoutIfNeeded];"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

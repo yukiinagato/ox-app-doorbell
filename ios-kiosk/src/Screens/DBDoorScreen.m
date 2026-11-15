@@ -14,6 +14,9 @@
 #import "../Core/DBIconAsset.h"
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBDoorVisitorLayout.h"
+#import "../Core/DBTextFit.h"
+#import "../Core/DBLatestWins.h"
+#import "../Core/DBReplyDismissal.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
 #import "../Net/DBMjpegClient.h"
@@ -196,11 +199,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSString *_cancelTouchCallID;
   NSUInteger _cancelActionGeneration;
   NSUInteger _cancelTouchGeneration;
-  UIView *_replyPlate;
-  UILabel *_replyText;
+  UIControl *_replyPlate;
+  UILabel *_replyHint;
   UILabel *_replyCountdown;
-  BOOL _replyShown;
+  DBReplyDismissal _replyDismissal;
   NSTimeInterval _replyDeadline;
+  NSUInteger _langGeneration;
+  BOOL _langWritePending;
+  BOOL _debugForceRebuild;
+  UIScrollView *_replyScroll;
+  UILabel *_replyText;
+  NSString *_replyFitKey;
+  BOOL _replyShown;
   UIView *_emergencyOverlay;
   UILabel *_emergencyTitle;
   UILabel *_emergencyNote;
@@ -456,15 +466,35 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [_noticeCard addSubview:_noticeExpand];
   [self addSubview:_noticeCard];
 
-  _replyPlate = DBDoorPlate();
+  _replyPlate = [[UIControl alloc] init];
   _replyPlate.hidden = YES;
+  _replyScroll = [[UIScrollView alloc] init];
+  _replyScroll.backgroundColor = [UIColor clearColor];
+  [_replyPlate addSubview:_replyScroll];
   _replyText = [self plateLabelWithFont:[UIFont boldSystemFontOfSize:28]];
   _replyText.textAlignment = NSTextAlignmentCenter;
+  _replyText.textColor = [UIColor whiteColor];
   _replyText.accessibilityIdentifier = @"door_reply";
-  [_replyPlate addSubview:_replyText];
-  _replyCountdown = [self plateLabelWithFont:[UIFont systemFontOfSize:15]];
+  [_replyScroll addSubview:_replyText];
+  // A full-screen opaque overlay: any tap dismisses it, as announced to assistive technology.
+  _replyPlate.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1];
+  _replyPlate.isAccessibilityElement = YES;
+  _replyPlate.accessibilityTraits = UIAccessibilityTraitButton;
+  [_replyPlate addTarget:self action:@selector(onReplyTap)
+        forControlEvents:UIControlEventTouchUpInside];
+  [_replyScroll addGestureRecognizer:[[UITapGestureRecognizer alloc]
+      initWithTarget:self action:@selector(onReplyTap)]];
+  _replyHint = [self plateLabelWithFont:[UIFont systemFontOfSize:14]];
+  _replyHint.numberOfLines = 1;
+  _replyHint.textAlignment = NSTextAlignmentCenter;
+  _replyHint.textColor = [UIColor colorWithWhite:1 alpha:0.7f];
+  _replyHint.userInteractionEnabled = NO;
+  [_replyPlate addSubview:_replyHint];
+  _replyCountdown = [self plateLabelWithFont:[UIFont systemFontOfSize:14]];
   _replyCountdown.numberOfLines = 1;
   _replyCountdown.textAlignment = NSTextAlignmentRight;
+  _replyCountdown.textColor = [UIColor colorWithWhite:1 alpha:0.7f];
+  _replyCountdown.userInteractionEnabled = NO;
   [_replyPlate addSubview:_replyCountdown];
   [self addSubview:_replyPlate];
 
@@ -542,10 +572,17 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _languageButton.hidden = !languages || !_languageUsesSheet;
   _languagePlate.hidden = !languages;
   if (!languages) [self dismissLanguageSheet];
+  // A call state change or an emergency replaces the reply at once.
+  if (_replyShown && (!idle || !_emergencyOverlay.hidden)) {
+    _replyShown = NO;
+    [_replyTimer invalidate];
+    [_replyAudio stop];
+  }
   BOOL reply = idle && _replyShown;
   BOOL notice = idle && !reply && !_noticeLabel.hidden;
   BOOL covered = reply || (notice && _noticeExpanded);
   _replyPlate.hidden = !reply;
+  if (reply) [self insertSubview:_replyPlate belowSubview:_emergencyOverlay];
   _noticeCard.hidden = !notice;
   _clockLabel.hidden = !idle || covered;
   _dateLabel.hidden = !idle || covered;
@@ -595,7 +632,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 // Rendered from Core's local-time document: no operating-system time-zone
 // database is needed and the clock follows the cluster zone and NTP offset.
 - (void)updateClock {
-  [self updateReplyCountdown];
+  [self updateReplyCaptions];
   NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
@@ -1353,6 +1390,24 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   }
 }
 
+// YES when the existing cards still match the enabled purposes and were relabelled.
+- (BOOL)retitlePurposesInPlace {
+  NSArray *ids = [DBPurposeModel enabledPurposeIdsInConfig:_cfg];
+  if (![ids isEqualToArray:_purposeIds ?: @[]] ||
+      [ids count] != [_purposeButtons count]) return NO;
+  NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
+  if (![purposes isKindOfClass:[NSDictionary class]]) purposes = nil;
+  for (NSUInteger i = 0; i < [ids count]; i++) {
+    NSString *identifier = [ids objectAtIndex:i];
+    NSString *label = [DBConfigUtil labelOf:[purposes objectForKey:identifier] lang:_visitorLang
+                                   fallback:identifier];
+    UIButton *button = [_purposeButtons objectAtIndex:i];
+    [button setTitle:label forState:UIControlStateNormal];
+    button.accessibilityLabel = label;
+  }
+  return YES;
+}
+
 - (void)rebuildLanguages {
   id raw = [DBConfigUtil dig:_cfg path:@"ui.languages"];
   NSMutableArray *languages = [NSMutableArray array];
@@ -1389,7 +1444,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSString *value = [lang length] ? lang : @"ja";
   _visitorLang = value;
   [_texts setLang:value];
-  [self rebuildPurposes];
+  // The cards keep their views and icons; only their labels change with the language.
+  if (_debugForceRebuild || ![self retitlePurposesInPlace]) [self rebuildPurposes];
   [self updateLanguageSelection];
   [self applyStrings];
   [self applySemanticStyles];
@@ -1607,12 +1663,60 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 - (void)selectLanguageAtIndex:(NSInteger)index {
   if (index < 0 || index >= (NSInteger)[_languages count]) return;
   NSString *lang = [_languages objectAtIndex:(NSUInteger)index];
-  [_core setVisitorLang:_boot.door ?: @"" lang:lang];
   [self setVisitorLanguage:lang];
+  // Only the final selection reaches Core: each tap supersedes the pending write.
+  NSUInteger token = DBLatestWinsBegin(&_langGeneration);
+  _langWritePending = YES;
+  NSString *door = _boot.door ?: @"";
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    DBDoorScreen *screen = weakSelf;
+    if (!screen || !DBLatestWinsIsCurrent(screen->_langGeneration, token)) return;
+    screen->_langWritePending = NO;
+    [screen->_core setVisitorLang:door lang:screen->_visitorLang];
+  });
 }
 
 - (void)onLanguageChanged:(UISegmentedControl *)sender {
+  CFTimeInterval started = CACurrentMediaTime();
   [self selectLanguageAtIndex:sender.selectedSegmentIndex];
+  if (_boot.debugScreenshots) {
+    CFTimeInterval applied = CACurrentMediaTime();
+    [self layoutIfNeeded];
+    CFTimeInterval done = CACurrentMediaTime();
+    [self traceLanguageMilliseconds:(done - started) * 1000
+                            applied:(applied - started) * 1000];
+  }
+}
+
+// Debug builds only: the handler's cost, appended where the diagnostics can fetch it.
+- (void)traceLanguageMilliseconds:(double)milliseconds applied:(double)applied {
+  NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/langtiming.txt"];
+  NSString *line = [NSString stringWithFormat:@"%.1f apply=%.1f\n", milliseconds, applied];
+  NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+  if (!handle) {
+    [line writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+    return;
+  }
+  [handle seekToEndOfFile];
+  [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+  [handle closeFile];
+}
+
+// Debug builds only: rapid switching as a finger would do it.
+- (void)debugLanguageBurst {
+  if ([_languages count] < 2) return;
+  // Two bursts: first rebuilding every card per switch (the old path), then in place.
+  for (NSInteger i = 0; i < 24; i++) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.3 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      _debugForceRebuild = i < 12;
+      if (i == 0 || i == 12) [self traceLanguageMilliseconds:0 applied:i == 0 ? -1 : -2];
+      _languageControl.selectedSegmentIndex = i % (NSInteger)[_languages count];
+      [self onLanguageChanged:_languageControl];
+    });
+  }
 }
 
 - (void)onLanguageButton {
@@ -1741,12 +1845,15 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSString *path = [DBConfigUtil evStr:event key:@"audio_path"];
   if ([path length] > 0) [_replyAudio playAssetPath:path];
   _replyText.text = [DBConfigUtil evStr:event key:@"text"];
+  _replyPlate.accessibilityLabel = [_texts ts:@"ui.close"];
+  _replyPlate.accessibilityValue = _replyText.text;
   _replyShown = YES;
+  _replyDismissal = DBReplyDismissalBegin(DBCallMonotonicTime());
   [_replyTimer invalidate];
   NSTimeInterval ttl = [[event objectForKey:@"ttl_s"] doubleValue];
   if (ttl <= 0) ttl = 30;
   _replyDeadline = DBCallMonotonicTime() + ttl;
-  [self updateReplyCountdown];
+  [self updateReplyCaptions];
   _replyTimer = [NSTimer scheduledTimerWithTimeInterval:ttl target:self
       selector:@selector(hideReplyBanner) userInfo:nil repeats:NO];
   [self showIdleWithHint:nil];
@@ -1757,11 +1864,65 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     [self showCallingWithTitle:nil];
   } else if ([state isEqualToString:@"connected"]) {
     [self showInCall];
-  } else if ([state isEqualToString:@"reply"]) {
-    [self handleReplyEvent:@{ @"text" : @"少々お待ちください。すぐに参ります。", @"ttl_s" : @300 }];
+  } else if ([state isEqualToString:@"langburst"]) {
+    [self debugLanguageBurst];
+  } else if ([state hasPrefix:@"reply"]) {
+    // "reply" shows a sample; "reply:<text>" shows that text.
+    NSString *sample = [state length] > 6 ? [state substringFromIndex:6]
+        : @"少々お待ちください。すぐに参ります。";
+    [self handleReplyEvent:@{ @"text" : sample, @"ttl_s" : @300 }];
   } else if ([state isEqualToString:@"noanswer"]) {
     [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
   }
+}
+
+// The largest size at which the whole reply fits the box; below the floor the text scrolls.
+// Runs only when the text or the box changed, never on a plain layout pass.
+- (void)fitReplyTextInBox:(CGSize)box {
+  NSString *text = _replyText.text ?: @"";
+  NSString *key = [NSString stringWithFormat:@"%@|%.0f|%.0f", text, box.width, box.height];
+  if ([key isEqualToString:_replyFitKey]) return;
+  _replyFitKey = key;
+  CGFloat size = DBTextFitSize(box, 28, box.height, ^CGFloat(CGFloat candidate, CGFloat width) {
+    return [text sizeWithFont:[UIFont boldSystemFontOfSize:candidate]
+            constrainedToSize:CGSizeMake(width, 100000)
+                lineBreakMode:NSLineBreakByWordWrapping].height;
+  });
+  UIFont *font = [UIFont boldSystemFontOfSize:size];
+  CGFloat height = ceil([text sizeWithFont:font constrainedToSize:CGSizeMake(box.width, 100000)
+                             lineBreakMode:NSLineBreakByWordWrapping].height);
+  _replyText.font = font;
+  CGFloat contentHeight = MAX(box.height, height);
+  _replyText.frame = CGRectMake(0, floor((contentHeight - height) / 2), box.width, height);
+  _replyScroll.contentSize = CGSizeMake(box.width, contentHeight);
+  _replyScroll.contentOffset = CGPointZero;
+}
+
+// Runs from the one-second clock tick, and only while the reply is on screen.
+- (void)updateReplyCaptions {
+  if (!_replyShown) return;
+  // The emergency overlay already covers the reply; the next tick retires it.
+  if (!_emergencyOverlay.hidden) {
+    [self hideReplyBanner];
+    return;
+  }
+  NSTimeInterval now = DBCallMonotonicTime();
+  _replyCountdown.text = [NSString stringWithFormat:@"%ld",
+      (long)MAX(0, (NSInteger)ceil(_replyDeadline - now))];
+  DBReplyHint hint = DBReplyDismissalHint(_replyDismissal, now);
+  NSString *text = hint == DBReplyHintFirst ? [_texts ts:@"reply.exit_hint"]
+      : (hint == DBReplyHintConfirm ? [_texts ts:@"reply.exit_confirm"] : @"");
+  if (![_replyHint.text isEqualToString:text]) _replyHint.text = text;
+  _replyHint.font = hint == DBReplyHintConfirm ? [UIFont boldSystemFontOfSize:18]
+                                               : [UIFont systemFontOfSize:14];
+  _replyHint.textColor = [UIColor colorWithWhite:1 alpha:hint == DBReplyHintConfirm ? 1 : 0.7f];
+}
+
+- (void)onReplyTap {
+  if (!_replyShown) return;
+  if (DBReplyDismissalTap(&_replyDismissal, DBCallMonotonicTime()) == DBReplyTapClose)
+    [self hideReplyBanner];
+  else [self updateReplyCaptions];
 }
 
 - (void)hideReplyBanner {
@@ -1771,18 +1932,13 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [self setNeedsLayout];
 }
 
-// The seconds until the reply leaves the screen, refreshed by the clock tick so the screen
-// runs no second timer.
-- (void)updateReplyCountdown {
-  if (!_replyShown) return;
-  NSInteger seconds = (NSInteger)ceil(_replyDeadline - DBCallMonotonicTime());
-  _replyCountdown.text = [NSString stringWithFormat:@"%ld", (long)MAX(0, seconds)];
-}
-
 - (void)handleVisitorLangEvent:(NSDictionary *)event {
   NSString *door = [DBConfigUtil evStr:event key:@"door"];
+  NSString *lang = [DBConfigUtil evStr:event key:@"lang"];
+  // The echo of an earlier selection must not undo a newer one that is still pending.
+  if (_langWritePending || [lang isEqualToString:_visitorLang ?: @""]) return;
   if ([door length] == 0 || [_boot.door length] == 0 || [door isEqualToString:_boot.door])
-    [self setVisitorLanguage:[DBConfigUtil evStr:event key:@"lang"]];
+    [self setVisitorLanguage:lang];
 }
 
 - (void)handleCallEvent:(NSDictionary *)event {
@@ -2010,6 +2166,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _languageControl.frame = layout.language;
   _languageButton.frame = layout.language;
   _languagePlate.frame = layout.language;
+  // The ground follows the outline of what it sits under: a flat segmented control rounds its
+  // corners by about 4 pt, the sheet button by the chrome's 10 pt.
+  _languagePlate.layer.cornerRadius = _languageUsesSheet ? 10 : 4;
   [self applyFlowVisibility];
 
   _clockLabel.font = [UIFont boldSystemFontOfSize:18];
@@ -2042,14 +2201,17 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _noticeLabel.frame = CGRectInset(_noticeCard.bounds, 12, 6);
   _noticeExpand.frame = _noticeCard.bounds;
 
-  _replyPlate.frame = layout.headline;
-  CGRect replyBounds = CGRectInset(_replyPlate.bounds, 12, 6);
-  replyBounds.size.height = MAX(0, replyBounds.size.height - 20);
-  _replyText.frame = replyBounds;
-  _replyText.font = DBDoorFittingFont(_replyText.text ?: @"", compact ? 20 : 28, 13, YES,
-                                      replyBounds.size);
-  _replyCountdown.frame = CGRectMake(12, CGRectGetMaxY(replyBounds),
-                                     MAX(0, _replyPlate.bounds.size.width - 24), 20);
+  _replyPlate.frame = self.bounds;
+  // Two caption lines sit below the text box: the exit hint centred, the countdown trailing.
+  CGFloat caption = 20;
+  CGRect replyBox = CGRectInset(_replyPlate.bounds, layout.margin, layout.margin);
+  replyBox.size.height = MAX(0, replyBox.size.height - caption - 4);
+  _replyScroll.frame = replyBox;
+  CGFloat captionY = _replyPlate.bounds.size.height - layout.margin - caption;
+  CGFloat captionWidth = _replyPlate.bounds.size.width - layout.margin * 2;
+  _replyCountdown.frame = CGRectMake(layout.margin + captionWidth - 56, captionY, 56, caption);
+  _replyHint.frame = CGRectMake(layout.margin + 60, captionY, MAX(0, captionWidth - 120), caption);
+  [self fitReplyTextInBox:_replyScroll.frame.size];
 
   // The purposes scroll inside their viewport when the grid is taller than it. The pairing
   // reminder leads and the media line trails the grid.

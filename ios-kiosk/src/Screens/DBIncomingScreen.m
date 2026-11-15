@@ -3,6 +3,7 @@
 #import "DBIncomingScreen.h"
 
 #import "../Core/DBBootConfig.h"
+#import "../Core/DBCallTiming.h"
 #import "../Core/DBBackoffPolicy.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
@@ -35,6 +36,8 @@ static const CGFloat kListWidth = 380;
 static const NSUInteger kListMaxVisibleRows = 8;
 static const CGFloat kPrimaryRowHeight = 64;
 static const CGFloat kAnswerColumnHeight = 72;
+// Taps on End are ignored this long after the call connects.
+static const NSTimeInterval kEndGuardSeconds = 1.0;
 static const CGFloat kReplyColumnHeight = 52;
 static const CGFloat kSecondaryHeight = 44;
 static const CGFloat kAdminQrSide = 84;
@@ -213,6 +216,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSString *_selectedPeerName;
   BOOL _inCall;
   BOOL _answerPending;
+  NSTimeInterval _endGuardUntil;
   BOOL _awaitingSupersededIdle;
   BOOL _lifecycleAnswered;
   BOOL _lifecycleEnded;
@@ -856,7 +860,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _noVideoLabel.text = [_texts ts:@"ring.no_video"];
   _statusLabel.text = _monitorOnly ? [_texts ts:@"monitor.live"]
                                    : (_cancelled ? [_texts ts:@"ring.cancelled"] : @"");
-  [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end"] : [_texts ts:@"ring.answer"])
+  [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end_call"] : [_texts ts:@"ring.answer"])
                  forState:UIControlStateNormal];
   // The monitor and mic entries are toggles whose title states the current position.
   [_monitorButton setTitle:[_texts ts:(_monitorAudioOn ? @"ring.monitor_on"
@@ -2059,6 +2063,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   }
   if (_peerHost == nil) return;
   if (_inCall) {
+    // End sits where Answer was; a second tap on the same spot is not a decision to hang up.
+    if (DBCallMonotonicTime() < _endGuardUntil) return;
     [_router sipHangup];
     [self reportLifecycleEndedIfNeeded];
     _sipMode = @"";
@@ -2175,6 +2181,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if (state == DBMiniSipInCall) {
     if (![_sipMode isEqualToString:@"answer"]) return;
     _inCall = YES;
+    _endGuardUntil = DBCallMonotonicTime() + kEndGuardSeconds;
     [_returnCountdown pauseForAnsweredCall];
     [self updateCountdownLabel];
     [self rebuildReplies];
@@ -2183,10 +2190,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
                                         stageRevision:_stageRevision];
     }
     _answerButton.enabled = YES;
-    [_answerButton setTitle:[_texts ts:@"incall.end"] forState:UIControlStateNormal];
+    [_answerButton setTitle:[_texts ts:@"incall.end_call"] forState:UIControlStateNormal];
     _statusLabel.text = [_texts ts:@"incall.title"];
     _hintLabel.hidden = YES;
     [self applySemanticStyles];
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
   } else if (state == DBMiniSipEnded) {
     if (_awaitingSupersededIdle) {
       [self handleSupersededSipIdle];
