@@ -155,26 +155,65 @@ class VisitorFlowEditModelTest {
     }
 
     @Test
-    fun errorsSplitIntoTheCatalogueKeyAndTheDetail() {
-        assertEquals("visitor_flow.unknown_target" to "s_home.o_visit",
-                     FlowEdit.errorParts("visitor_flow.unknown_target: s_home.o_visit"))
-        assertEquals("visitor_flow.cycle" to "", FlowEdit.errorParts("visitor_flow.cycle"))
+    fun errorsSplitIntoCodeLocationAndDetail() {
+        val located = FlowEdit.parseError("visitor_flow.missing_target: s_home.o_visit")!!
+        assertEquals("missing_target", located.code)
+        assertEquals(FlowEdit.Location("s_home", "o_visit"), located.location)
+        assertNull(FlowEdit.parseError("visitor_flow.cycle")!!.location)
+        assertNull(FlowEdit.parseError("unresolved_config_conflict"))
         assertTrue(FlowEdit.isConflict("unresolved_config_conflict"))
         assertFalse(FlowEdit.isConflict("visitor_flow.cycle"))
     }
 
     @Test
-    fun obviousProblemsAreCaughtBeforeAskingCore() {
-        assertEquals("visitor_flow.no_options",
-                     FlowEdit.localProblem(JSONObject("""{"kind":"page","options":[]}""")))
-        assertEquals("visitor_flow.option_needs_label", FlowEdit.localProblem(
-            JSONObject("""{"kind":"page","options":[{"id":"o","to":"c"}]}""")))
-        assertEquals("visitor_flow.multiple_primary", FlowEdit.localProblem(JSONObject(
+    fun locationsNameTheControl() {
+        fun at(where: String, code: String = "x") = FlowEdit.parseLocation(code, where)
+        assertEquals(FlowEdit.Location("s"), at("s"))
+        assertEquals(FlowEdit.Location("s", field = "title", lang = "ja"), at("s.title.ja"))
+        assertEquals(FlowEdit.Location("s", field = "body", lang = "en"), at("s.body.en"))
+        assertEquals(FlowEdit.Location("s", field = "message", lang = "zh"), at("s.message.zh"))
+        assertEquals(FlowEdit.Location("s", field = "message"), at("s.message"))
+        assertEquals(FlowEdit.Location("s", "o1", "label", "ja"), at("s.o1.label.ja"))
+        assertEquals(FlowEdit.Location("s", "o1", "label"), at("s.o1.label"))
+        assertEquals(FlowEdit.Location("s", "o1"), at("s.o1"))
+        assertEquals(FlowEdit.Location("s", image = 1), at("s.images[1]"))
+        assertEquals(FlowEdit.Location("s", field = "alt", lang = "ja", image = 0), at("s.images[0].alt.ja"))
+        assertEquals(FlowEdit.Location(start = true), at("start"))
+        assertEquals(FlowEdit.Location(start = true, door = "d_front"), at("doors.d_front.start"))
+        assertEquals(FlowEdit.Location(start = true, door = "d_front"), at("d_front", "no_reachable_call"))
+        assertNull(at(""))
+    }
+
+    @Test
+    fun detailFillsThePlaceholdersInTheOrderTheResourceNumbersThem() {
+        val detail = JSONObject("""{"lang":"ja","limit":60,"value":71}""")
+        val error = FlowEdit.parseError("visitor_flow.text_too_long: s.title.ja", detail) { "日本語" }!!
+        assertEquals(listOf<Any>("日本語", "60", "71"), error.args().toList())
+        val range = FlowEdit.parseError("visitor_flow.bad_idle_s", JSONObject("""{"min":15,"max":300}"""))!!
+        assertEquals(listOf<Any>("15", "300"), range.args().toList())
+        assertEquals(0, FlowEdit.parseError("visitor_flow.cycle: s")!!.args().size)
+    }
+
+    @Test
+    fun obviousProblemsAreCaughtBeforeAskingCoreWithCoreCodes() {
+        val none = FlowEdit.localProblem("s", JSONObject("""{"kind":"page","options":[]}"""))!!
+        assertEquals("no_options", none.code)
+        assertEquals(FlowEdit.Location("s"), none.location)
+        val unlabeled = FlowEdit.localProblem("s", JSONObject(
+            """{"kind":"page","options":[{"id":"o","to":"c"}]}"""))!!
+        assertEquals("option_needs_label", unlabeled.code)
+        assertEquals(FlowEdit.Location("s", "o"), unlabeled.location)
+        val untargeted = FlowEdit.localProblem("s", JSONObject(
+            """{"kind":"page","options":[{"id":"o","purpose":"p"}]}"""))!!
+        assertEquals("missing_target", untargeted.code)
+        assertEquals(FlowEdit.Location("s", "o"), untargeted.location)
+        assertEquals("missing_target", FlowEdit.localProblem("n", JSONObject("""{"kind":"notify"}"""))!!.code)
+        assertEquals("multiple_primary", FlowEdit.localProblem("s", JSONObject(
             """{"kind":"page","options":[{"id":"a","purpose":"p","style":"primary","to":"c"},
-                {"id":"b","purpose":"p","style":"primary","to":"c"}]}""")))
-        assertNull(FlowEdit.localProblem(JSONObject(
+                {"id":"b","purpose":"p","style":"primary","to":"c"}]}"""))!!.code)
+        assertNull(FlowEdit.localProblem("s", JSONObject(
             """{"kind":"page","options":[{"id":"a","purpose":"p","to":"c"}]}""")))
-        assertNull(FlowEdit.localProblem(JSONObject("""{"kind":"call"}""")))
+        assertNull(FlowEdit.localProblem("c", JSONObject("""{"kind":"call"}""")))
     }
 
     // ---------- step order ----------

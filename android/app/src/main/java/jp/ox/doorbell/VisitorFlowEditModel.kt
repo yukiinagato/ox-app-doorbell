@@ -310,32 +310,101 @@ internal object FlowEdit {
 
     // ---------- errors ----------
 
-    /** `visitor_flow.<code>[: <step>[.<option>]]` split into its i18n key and its detail. */
-    fun errorParts(error: String): Pair<String, String> {
+    /** Where a Core answer points, from the `<location>` of `visitor_flow.<code>[: <location>]`. */
+    data class Location(
+        val step: String? = null,
+        val option: String? = null,
+        /** title, body, message, label or alt. */
+        val field: String? = null,
+        val lang: String? = null,
+        val image: Int? = null,
+        /** True for the global start (door null) or a door's start. */
+        val start: Boolean = false,
+        val door: String? = null,
+    )
+
+    data class FlowError(
+        val code: String,
+        val location: Location?,
+        val detail: Map<String, String>,
+        val raw: String,
+    ) {
+        /** The arguments of `flow_error.<code>` in the order the generated resource numbers them. */
+        fun args(): Array<Any> = (ARGS[code] ?: emptyList()).map { detail[it].orEmpty() }.toTypedArray()
+    }
+
+    private val ARGS: Map<String, List<String>> = buildMap {
+        for (code in listOf("text_too_long", "too_many_paragraphs")) put(code, listOf("lang", "limit", "value"))
+        put("bad_character", listOf("lang"))
+        for (code in listOf("too_many_options", "too_many_languages", "too_many_images", "too_many_steps",
+                            "too_deep")) put(code, listOf("limit", "value"))
+        for (code in listOf("bad_order", "bad_return_s", "bad_idle_s")) put(code, listOf("min", "max"))
+    }
+
+    private val IMAGE_PART = Regex("^images\\[(\\d+)]$")
+
+    /**
+     * `visitor_flow.<code>[: <location>]` plus Core's `detail` object. Null when [error] is not a
+     * visitor-flow answer. A language tag in the detail is shown by [langName].
+     */
+    fun parseError(error: String, detail: JSONObject? = null, langName: (String) -> String = { it }): FlowError? {
+        if (!error.startsWith("visitor_flow.")) return null
         val cut = error.indexOf(": ")
-        return if (cut < 0) error to "" else error.substring(0, cut) to error.substring(cut + 2)
+        val code = (if (cut < 0) error else error.substring(0, cut)).removePrefix("visitor_flow.")
+        val where = if (cut < 0) "" else error.substring(cut + 2)
+        val values = LinkedHashMap<String, String>()
+        if (detail != null) for (key in detail.keys()) {
+            val value = detail.opt(key)?.toString().orEmpty()
+            values[key] = if (key == "lang") langName(value) else value
+        }
+        return FlowError(code, parseLocation(code, where), values, error)
+    }
+
+    fun parseLocation(code: String, where: String): Location? {
+        if (where.isEmpty()) return null
+        if (where == "start") return Location(start = true)
+        if (where.startsWith("doors.") && where.endsWith(".start") && where.length > 12)
+            return Location(start = true, door = where.substring(6, where.length - 6))
+        if (code == "no_reachable_call") return Location(start = true, door = where)
+        val parts = where.split('.')
+        val step = parts[0]
+        val rest = parts.drop(1)
+        if (rest.isEmpty()) return Location(step = step)
+        val image = IMAGE_PART.matchEntire(rest[0])?.groupValues?.get(1)?.toIntOrNull()
+        if (image != null) {
+            return if (rest.getOrNull(1) == "alt") Location(step, field = "alt", lang = rest.getOrNull(2), image = image)
+            else Location(step, image = image)
+        }
+        if (rest[0] == "title" || rest[0] == "body" || rest[0] == "message")
+            return Location(step, field = rest[0], lang = rest.getOrNull(1))
+        if (rest.getOrNull(1) == "label") return Location(step, rest[0], "label", rest.getOrNull(2))
+        return Location(step, option = rest[0])
     }
 
     fun isConflict(error: String): Boolean = error == CONFLICT || error.startsWith("$CONFLICT:")
 
-    /** Problems the shell can see before asking Core, as the catalogue keys Core would answer. */
-    fun localProblem(step: JSONObject): String? {
+    /** Problems the shell can see before asking Core, with the codes and locations Core would answer. */
+    fun localProblem(id: String, step: JSONObject): FlowError? {
+        fun problem(code: String, where: Location, detail: Map<String, String> = emptyMap()) =
+            FlowError(code, where, detail, "visitor_flow.$code")
         when (step.optString("kind")) {
             "page" -> {
                 val options = step.optJSONArray("options")
-                if (options == null || options.length() == 0) return "visitor_flow.no_options"
-                if (options.length() > MAX_OPTIONS) return "visitor_flow.too_many_options"
+                if (options == null || options.length() == 0) return problem("no_options", Location(id))
+                if (options.length() > MAX_OPTIONS) return problem("too_many_options", Location(id),
+                    mapOf("limit" to MAX_OPTIONS.toString(), "value" to options.length().toString()))
                 var primary = 0
                 for (i in 0 until options.length()) {
-                    val option = options.optJSONObject(i) ?: return "visitor_flow.invalid"
+                    val option = options.optJSONObject(i) ?: return problem("bad_step", Location(id))
+                    val at = Location(id, option.optString("id"))
                     if (option.optString("style") == "primary") primary++
                     if (option.optJSONObject("label") == null && option.optString("purpose").isEmpty())
-                        return "visitor_flow.option_needs_label"
-                    if (option.optString("to").isEmpty()) return "visitor_flow.unknown_target"
+                        return problem("option_needs_label", at)
+                    if (option.optString("to").isEmpty()) return problem("missing_target", at)
                 }
-                if (primary > 1) return "visitor_flow.multiple_primary"
+                if (primary > 1) return problem("multiple_primary", Location(id))
             }
-            "notify" -> if (step.optString("to").isEmpty()) return "visitor_flow.unknown_target"
+            "notify" -> if (step.optString("to").isEmpty()) return problem("missing_target", Location(id))
         }
         return null
     }

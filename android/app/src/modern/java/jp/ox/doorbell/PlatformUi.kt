@@ -40,6 +40,8 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.navigation.NavigationBarView
 import com.google.android.material.navigationrail.NavigationRailView
 import com.google.android.material.progressindicator.CircularProgressIndicator
+import com.google.android.material.progressindicator.CircularProgressIndicatorSpec
+import com.google.android.material.progressindicator.IndeterminateDrawable
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.sidesheet.SideSheetDialog
 import com.google.android.material.slider.Slider
@@ -202,6 +204,32 @@ internal object PlatformUi {
         button.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
         button.iconSize = dp(button.context, sizeDp)
         button.iconPadding = dp(button.context, 8)
+    }
+
+    /**
+     * Swaps a button's icon for an indeterminate circular indicator in the button's own ink, or
+     * puts [icon] back. The icon slot keeps its size, so nothing around the button moves.
+     */
+    fun setButtonBusy(view: TextView, busy: Boolean, icon: Int, sizeDp: Int = 24) {
+        val button = view as? MaterialButton ?: return
+        if (!busy) {
+            setButtonIcon(button, icon, sizeDp)
+            return
+        }
+        val context = button.context
+        val spec = CircularProgressIndicatorSpec(context, null, 0,
+            R.style.Widget_Material3_CircularProgressIndicator_ExtraSmall).apply {
+            indicatorSize = dp(context, sizeDp * 3 / 4)
+            indicatorInset = 0
+            trackThickness = dp(context, 3)
+            indicatorColors = intArrayOf(button.currentTextColor)
+        }
+        val drawable = IndeterminateDrawable.createCircularDrawable(context, spec)
+        button.icon = drawable
+        button.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+        button.iconSize = dp(context, sizeDp)
+        button.iconPadding = dp(context, 8)
+        drawable.setVisible(true, true)
     }
 
     /** A tonal icon button: it carries its own container, so it reads over any wallpaper. */

@@ -2,18 +2,22 @@
 //
 // Everything is written the way the contract asks: the scalar keys as leaves, every step as one
 // whole value, and one batch per save so Core validates the graph on the configuration the batch
-// would leave. Core's validation answers are shown inside the open dialog, next to what was
-// edited; an unresolved configuration conflict is shown with a pointer instead of a retry.
+// would leave. Core's validation answers are shown next to the control they name (inside the open
+// dialog, or on the settings row); an unresolved configuration conflict is shown with a pointer
+// instead of a retry.
 package jp.ox.doorbell
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.text.InputFilter
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import java.io.ByteArrayOutputStream
 import java.security.SecureRandom
 import org.json.JSONArray
@@ -31,6 +35,77 @@ internal class VisitorFlowEditor(
     private fun add(card: LinearLayout, view: View) = with(a) { card.row(view) }
     private val unset: String get() = L("settings.value_unset")
 
+    /** A localized answer and the parsed error it came from (null for a shell-side message). */
+    private class Problem(val message: String, val error: FlowEdit.FlowError?)
+
+    /** A note under a control of an open dialog; [open] reopens the dialog that edits a row's field. */
+    private class Spot(val note: TextView, val control: View, val open: ((Problem) -> Unit)?)
+
+    private class Notes {
+        val spots = LinkedHashMap<String, Spot>()
+    }
+
+    /** The notes of the dialog being built; read only synchronously while its build runs. */
+    private var notes: Notes? = null
+
+    /** List-level answers: "start", "door:<door>", "step:<id>"; the empty key is the banner. */
+    private val listProblems = HashMap<String, String>()
+    private var revealList: String? = null
+
+    private fun problem(error: String, detail: JSONObject?): Problem {
+        if (FlowEdit.isConflict(error)) return Problem(L("flow_editor.conflict"), null)
+        val parsed = FlowEdit.parseError(error, detail, Texts::langDisplayName)
+            ?: return Problem(L("visitor_flow.invalid", error), null)
+        return problem(parsed)
+    }
+
+    private fun problem(error: FlowEdit.FlowError): Problem {
+        val key = "flow_error." + error.code
+        val message = L(key, *error.args())
+        return if (message.isEmpty() || message == key) Problem(L("visitor_flow.invalid", error.raw), error)
+        else Problem(message, error)
+    }
+
+    private fun errorInk(): Int = ShellUi.roleInk(a.palette.danger, a.palette)
+
+    private fun noteView(): TextView = ShellUi.label(a, "", TextRole.SUPPORTING, errorInk()).apply {
+        visibility = View.GONE
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+
+    /** Puts a note under [control] (just added to [box]) and registers it under [key]. */
+    private fun attachNote(box: LinearLayout, key: String, control: View,
+                           open: ((Problem) -> Unit)? = null) {
+        val note = noteView()
+        box.addView(note, ShellUi.matchWrap())
+        notes?.spots?.put(key, Spot(note, control, open))
+    }
+
+    /** Hides one note of the dialog being built; the returned function stays valid after the build. */
+    private fun noteClearer(): (String) -> Unit {
+        val owner = notes
+        return { key -> owner?.spots?.get(key)?.note?.visibility = View.GONE }
+    }
+
+    /** The spots, most specific first, that an error location can land on in a dialog. */
+    private fun spotKeys(at: FlowEdit.Location): List<String> {
+        val lang = at.lang
+        val image = at.image
+        val option = at.option
+        val field = at.field
+        return when {
+            image != null && field == "alt" -> listOfNotNull(lang?.let { "alt.$it" }, "alt", "img.$image")
+            image != null -> listOf("img.$image")
+            option != null && field == "label" ->
+                listOfNotNull(lang?.let { "label.$it" }, "label", "o.$option")
+            option != null && field != null -> listOf(field, "o.$option")
+            option != null -> listOf("o.$option")
+            field != null -> listOfNotNull(lang?.let { "$field.$it" }, field)
+            else -> emptyList()
+        }
+    }
+
     private fun item(title: String, value: String = "", note: String = "", onClick: (() -> Unit)?): View =
         ShellUi.row(a, a.palette, title, value, note, enabled = !a.readOnly, onClick = onClick)
 
@@ -39,6 +114,7 @@ internal class VisitorFlowEditor(
     fun section() {
         val state = FlowEdit.read(cfg)
         val card = a.section(L("flow_editor.title"))
+        listProblem(card, "")
         add(card, a.toggleRow(L("flow_editor.enabled"), "visitor_flow.enabled", state.enabled,
                               L("flow_editor.enabled_hint")))
         if (!state.written) {
@@ -50,9 +126,10 @@ internal class VisitorFlowEditor(
         val pages = FlowEdit.pages(state.steps)
         add(card, item(L("flow_editor.start"), stepName(state, state.start)) {
             pickStep(L("flow_editor.start"), pages.map { it to stepName(state, it) }) {
-                a.write("visitor_flow.start", JSONObject.quote(it)) { }
+                writeLeaf("start", "visitor_flow.start", it)
             }
         })
+        listProblem(card, "start")
         val doorStarts = FlowEdit.doorStarts(cfg)
         for (door in a.doorIds()) {
             val own = doorStarts[door]
@@ -61,10 +138,12 @@ internal class VisitorFlowEditor(
                 val options = listOf("" to L("flow_editor.door_start_inherit")) +
                     pages.map { it to stepName(state, it) }
                 pickStep(L("flow_editor.door_start"), options) { picked ->
+                    listProblems.remove("door:$door")
                     if (picked.isEmpty()) a.deleteKey(FlowEdit.doorStartKey(door))
-                    else a.write(FlowEdit.doorStartKey(door), JSONObject.quote(picked)) { }
+                    else writeLeaf("door:$door", FlowEdit.doorStartKey(door), picked)
                 }
             })
+            listProblem(card, "door:$door")
         }
         add(card, a.numberRow(L("flow_editor.idle_s"), "visitor_flow.idle_s", state.idleS,
                               FlowEdit.IDLE_MIN, FlowEdit.IDLE_MAX))
@@ -77,7 +156,11 @@ internal class VisitorFlowEditor(
             val step = state.steps.getValue(id)
             val summary = kindLabel(step.optString("kind")) + " · " + id + summaryOf(step)
             add(steps, item(stepName(state, id), summary,
-                            if (id == state.start) L("flow_editor.start") else "") { stepMenu(state, id) })
+                            if (id == state.start) L("flow_editor.start") else "") {
+                listProblems.remove("step:$id")
+                stepMenu(state, id)
+            })
+            listProblem(steps, "step:$id")
         }
         if (state.steps.size < FlowEdit.MAX_STEPS)
             add(steps, item(L("flow_editor.add_step")) { addStep(state) })
@@ -89,6 +172,45 @@ internal class VisitorFlowEditor(
                 writeBatch(FlowEdit.resetOps(cfg))
             }
         })
+    }
+
+    /** The answer of a refused list-level write, under the row it names. */
+    private fun listProblem(card: LinearLayout, key: String) {
+        val text = listProblems[key] ?: return
+        val note = noteView().apply {
+            this.text = text
+            visibility = View.VISIBLE
+            val pad = ShellUi.dp(a, 16)
+            setPadding(pad, ShellUi.dp(a, 4), pad, ShellUi.dp(a, 8))
+        }
+        add(card, note)
+        if (revealList == key) {
+            revealList = null
+            note.post { note.requestRectangleOnScreen(android.graphics.Rect(0, 0, note.width, note.height), true) }
+        }
+    }
+
+    private fun showListProblem(answer: Problem) {
+        val at = answer.error?.location
+        val key = when {
+            at == null -> ""
+            at.start && at.door != null -> "door:${at.door}"
+            at.start -> "start"
+            at.step != null -> "step:${at.step}"
+            else -> ""
+        }
+        listProblems.clear()
+        listProblems[key] = answer.message
+        revealList = key
+        a.render()
+    }
+
+    /** A scalar flow key through the batch route, so a refusal comes back with its code and location. */
+    private fun writeLeaf(listKey: String, key: String, value: String) {
+        listProblems.remove(listKey)
+        a.writeOpsReporting(listOf(ConfigOp.Set(key, JSONObject.quote(value)))) { result ->
+            if (result != null && !result.ok) showListProblem(problem(result.error, result.detail))
+        }
     }
 
     private fun templates(state: FlowEdit.State) {
@@ -142,7 +264,7 @@ internal class VisitorFlowEditor(
         pickStep(stepName(state, id), options) { pick ->
             when (pick) {
                 "edit" -> editStep(id, false, step)
-                "start" -> a.write("visitor_flow.start", JSONObject.quote(id)) { }
+                "start" -> writeLeaf("start", "visitor_flow.start", id)
                 "preview" -> preview(state.steps, if (step.optString("kind") == "page") id else state.start)
                 "up" -> writeBatch(FlowEdit.moveOps(state, id, -1))
                 "down" -> writeBatch(FlowEdit.moveOps(state, id, 1))
@@ -161,7 +283,9 @@ internal class VisitorFlowEditor(
 
     private fun duplicate(state: FlowEdit.State, id: String, step: JSONObject) {
         if (state.steps.size >= FlowEdit.MAX_STEPS) {
-            failure(L("visitor_flow.too_many_steps"))
+            showListProblem(problem(FlowEdit.FlowError("too_many_steps", null,
+                mapOf("limit" to FlowEdit.MAX_STEPS.toString(), "value" to (state.steps.size + 1).toString()),
+                "visitor_flow.too_many_steps")))
             return
         }
         val copy = JSONObject(step.toString())
@@ -195,8 +319,9 @@ internal class VisitorFlowEditor(
 
     private fun writeBatch(ops: List<ConfigOp>) {
         if (ops.isEmpty()) return
+        listProblems.clear()
         a.writeOpsReporting(ops) { result ->
-            if (result != null && !result.ok) failure(errorText(result.error))
+            if (result != null && !result.ok) showListProblem(problem(result.error, result.detail))
         }
     }
 
@@ -215,9 +340,9 @@ internal class VisitorFlowEditor(
             build = { box, rebuild -> buildStepForm(session, box, rebuild) },
             onSave = { sync, fail, close ->
                 sync()
-                val problem = FlowEdit.localProblem(session.draft)
-                if (problem != null) {
-                    fail(errorText(problem))
+                val local = FlowEdit.localProblem(session.id, session.draft)
+                if (local != null) {
+                    fail(problem(local))
                 } else {
                     // New steps take the next order; an edited step keeps the one it has.
                     val fresh = LinkedHashMap<String, JSONObject>()
@@ -228,9 +353,9 @@ internal class VisitorFlowEditor(
                     steps.putAll(FlowEdit.withNextOrders(FlowEdit.read(cfg).steps, fresh))
                     a.writeOpsReporting(FlowEdit.saveStepOps(steps)) { result ->
                         when {
-                            result == null -> fail(L("settings.offline"))
+                            result == null -> fail(Problem(L("settings.offline"), null))
                             result.ok -> close()
-                            else -> fail(errorText(result.error))
+                            else -> fail(problem(result.error, result.detail))
                         }
                     }
                 }
@@ -251,9 +376,9 @@ internal class VisitorFlowEditor(
         when (draft.optString("kind")) {
             "page", "end" -> {
                 val title = langFields(box, L("flow_editor.field_title"), draft.optJSONObject("title"),
-                                       FlowEdit.MAX_TITLE)
+                                       FlowEdit.MAX_TITLE, name = "title")
                 val body = langFields(box, L("flow_editor.field_body"), draft.optJSONObject("body"),
-                                      FlowEdit.MAX_BODY, multiline = true)
+                                      FlowEdit.MAX_BODY, multiline = true, name = "body")
                 syncs.add {
                     putText(draft, "title", title())
                     putText(draft, "body", body())
@@ -290,7 +415,7 @@ internal class VisitorFlowEditor(
             }
             "notify" -> {
                 val message = langFields(box, L("flow_editor.field_message"), draft.optJSONObject("message"),
-                                         FlowEdit.MAX_MESSAGE, multiline = true)
+                                         FlowEdit.MAX_MESSAGE, multiline = true, name = "message")
                 syncs.add { putText(draft, "message", message()) }
                 box.addView(item(L("flow_editor.field_purpose"), purposeName(draft.optString("purpose"))) {
                     pickPurpose { picked -> change { putOrRemove(draft, "purpose", picked) } }
@@ -360,9 +485,13 @@ internal class VisitorFlowEditor(
                 .ifEmpty { hash.take(8) }
             val place = if (image.optString("place") == "below") L("flow_editor.image_below")
                         else L("flow_editor.image_above")
-            box.addView(item(label, place, a.localizedLabel(image.optJSONObject("alt"), "")) {
+            val clear = noteClearer()
+            val row = item(label, place, a.localizedLabel(image.optJSONObject("alt"), "")) {
+                clear("img.$index")
                 imageMenu(images, index, draft, change)
-            }, ShellUi.matchWrap())
+            }
+            box.addView(row, ShellUi.matchWrap())
+            attachNote(box, "img.$index", row) { answer -> altDialog(image, { change { } }, answer) }
         }
         if (images.size < FlowEdit.MAX_IMAGES) box.addView(item(L("flow_editor.add_image")) {
             val existing = AssetTypes.list(cfg, AssetTypes.IMAGES)
@@ -395,7 +524,7 @@ internal class VisitorFlowEditor(
         options.add("delete" to L("admin.delete"))
         pickStep(L("flow_editor.field_images"), options) { pick ->
             when (pick) {
-                "alt" -> altDialog(image) { change { } }
+                "alt" -> altDialog(image, { change { } })
                 "place" -> change { image.put("place", if (below) "above" else "below") }
                 "up" -> change { FlowEdit.move(images, index, -1); draft.put("images", FlowEdit.toArray(images)) }
                 "down" -> change { FlowEdit.move(images, index, 1); draft.put("images", FlowEdit.toArray(images)) }
@@ -407,15 +536,17 @@ internal class VisitorFlowEditor(
         }
     }
 
-    private fun altDialog(image: JSONObject, done: () -> Unit) {
+    private fun altDialog(image: JSONObject, done: () -> Unit, initial: Problem? = null) {
         formDialog(
             title = L("flow_editor.image_alt"),
             build = { box, _ ->
-                val alt = langFields(box, L("flow_editor.image_alt"), image.optJSONObject("alt"), FlowEdit.MAX_ALT)
+                val alt = langFields(box, L("flow_editor.image_alt"), image.optJSONObject("alt"), FlowEdit.MAX_ALT,
+                                     name = "alt")
                 val sync: () -> Unit = { putText(image, "alt", alt()) }
                 sync
             },
             onSave = { sync, _, close -> sync(); close(); done() },
+            initial = initial,
         )
     }
 
@@ -468,10 +599,21 @@ internal class VisitorFlowEditor(
                 if (option.optString("style") == "primary") L("flow_editor.option_primary") else null,
                 if (!option.optBoolean("enabled", true)) L("flow_editor.option_enabled") + " ✗" else null,
             ).joinToString(" · ")
+            val purpose = option.optString("purpose")
+            val switchedOff = purpose.isNotEmpty() && !VisitPurposes.isEnabled(cfg, purpose)
+            val note = if (switchedOff) listOf(flags, L("flow_error.disabled_purpose"))
+                .filter { it.isNotEmpty() }.joinToString("\n") else flags
             val target = option.optString("to").takeIf { it.isNotEmpty() }?.let { stepName(shown, it) } ?: unset
-            box.addView(item(label, target, flags) {
+            val optionId = option.optString("id")
+            val clear = noteClearer()
+            val row = item(label, target, note) {
+                clear("o.$optionId")
                 optionMenu(session, known, options, index, change)
-            }, ShellUi.matchWrap())
+            }
+            box.addView(row, ShellUi.matchWrap())
+            attachNote(box, "o.$optionId", row) { answer ->
+                editOption(session, known, option, index, options, change, answer)
+            }
         }
         if (options.size < FlowEdit.MAX_OPTIONS) box.addView(item(L("flow_editor.add_option")) {
             val fresh = JSONObject().put("id", FlowEdit.newId("o", options.map { it.optString("id") }, random.nextLong()))
@@ -505,13 +647,14 @@ internal class VisitorFlowEditor(
     }
 
     private fun editOption(session: Session, known: Map<String, JSONObject>, original: JSONObject, index: Int?,
-                           options: MutableList<JSONObject>, change: (() -> Unit) -> Unit) {
+                           options: MutableList<JSONObject>, change: (() -> Unit) -> Unit,
+                           initial: Problem? = null) {
         val option = JSONObject(original.toString())
         formDialog(
             title = L("flow_editor.field_options"),
             build = { box, rebuild ->
                 val label = langFields(box, L("flow_editor.option_label"), option.optJSONObject("label"),
-                                       FlowEdit.MAX_LABEL)
+                                       FlowEdit.MAX_LABEL, name = "label")
                 val primary = checkbox(box, L("flow_editor.option_primary"), option.optString("style") == "primary")
                 val shown = checkbox(box, L("flow_editor.option_enabled"), option.optBoolean("enabled", true))
                 val sync: () -> Unit = {
@@ -523,6 +666,12 @@ internal class VisitorFlowEditor(
                     sync()
                     pickPurpose { picked -> putOrRemove(option, "purpose", picked); rebuild() }
                 }, ShellUi.matchWrap())
+                val chosen = option.optString("purpose")
+                if (chosen.isNotEmpty() && !VisitPurposes.isEnabled(cfg, chosen))
+                    box.addView(noteView().apply {
+                        text = L("flow_error.disabled_purpose")
+                        visibility = View.VISIBLE
+                    }, ShellUi.matchWrap())
                 val own = option.optString("icon")
                 box.addView(item(L("flow_editor.icon_title"),
                     if (own.isEmpty()) L("flow_editor.icon_inherit")
@@ -531,8 +680,10 @@ internal class VisitorFlowEditor(
                     pickIcon { picked -> putOrRemove(option, "icon", picked); rebuild() }
                 }, ShellUi.matchWrap())
                 val names = FlowEdit.State(true, true, "", 0, true, known)
-                box.addView(item(L("flow_editor.option_target"),
+                val clear = noteClearer()
+                val targetRow = item(L("flow_editor.option_target"),
                     option.optString("to").takeIf { it.isNotEmpty() }?.let { stepName(names, it) } ?: unset) {
+                    clear("to")
                     sync()
                     val choices = known.filterKeys { it != session.id }.keys.sorted().map { it to stepName(names, it) } +
                         listOf(NEW_CALL to L("flow_editor.target_new_call"), NEW_END to L("flow_editor.target_new_end"))
@@ -544,15 +695,21 @@ internal class VisitorFlowEditor(
                         })
                         rebuild()
                     }
-                }, ShellUi.matchWrap())
+                }
+                box.addView(targetRow, ShellUi.matchWrap())
+                attachNote(box, "to", targetRow)
                 sync
             },
+            initial = initial,
             onSave = { sync, fail, close ->
                 sync()
+                val at = FlowEdit.Location(session.id, option.optString("id"))
                 if (option.optJSONObject("label") == null && option.optString("purpose").isEmpty()) {
-                    fail(errorText("visitor_flow.option_needs_label"))
+                    fail(problem(FlowEdit.FlowError("option_needs_label", at.copy(field = "label"),
+                        emptyMap(), "visitor_flow.option_needs_label")))
                 } else if (option.optString("to").isEmpty()) {
-                    fail(errorText("visitor_flow.unknown_target"))
+                    fail(problem(FlowEdit.FlowError("missing_target", at.copy(field = "to"),
+                        emptyMap(), "visitor_flow.missing_target")))
                 } else {
                     change {
                         if (index == null) options.add(option) else options[index] = option
@@ -630,7 +787,7 @@ internal class VisitorFlowEditor(
         val first = if (steps[start]?.optString("kind") == "page") start
             else FlowEdit.pages(steps).firstOrNull()
         if (first == null) {
-            failure(errorText("visitor_flow.no_options"))
+            a.toast(problem(FlowEdit.FlowError("no_options", null, emptyMap(), "visitor_flow.no_options")).message)
             return
         }
         val langs = languages
@@ -661,6 +818,7 @@ internal class VisitorFlowEditor(
             setPadding(pad, pad / 2, pad, pad)
         }
         var outcome: FlowPreview.Outcome = FlowPreview.Outcome.None
+        var waiting = false
         lateinit var panel: VisitorFlowPanel
         fun draw() {
             val snapshot = walker.snapshot()
@@ -690,8 +848,26 @@ internal class VisitorFlowEditor(
         panel = VisitorFlowPanel(
             a, content, dock, a.ui, { a.resources.displayMetrics.heightPixels },
             onOption = { id ->
-                outcome = FlowPreview.outcome(walker.apply(FlowEvent.Tap(id)), walker.currentPageId)
-                draw()
+                if (waiting) return@VisitorFlowPanel
+                val target = walker.targetOf(id)
+                val notify = target is FlowTarget.Notify
+                val finish = {
+                    waiting = false
+                    outcome = FlowPreview.outcome(walker.apply(FlowEvent.Tap(id)), walker.currentPageId)
+                    draw()
+                }
+                if (target == FlowTarget.Nothing || target == FlowTarget.Page || target == FlowTarget.End) {
+                    finish()
+                } else {
+                    // The same indicator as the door station, for a simulated second; nothing is sent.
+                    waiting = true
+                    val busy = texts.t(if (notify) "flow.pending_notify" else "flow.pending_call",
+                        if (notify) R.string.flow_pending_notify else R.string.flow_pending_call)
+                    panel.setStatus("")
+                    panel.setPending(id, busy)
+                    a.ui.postDelayed({ panel.setStatus(busy) }, PREVIEW_STATUS_MS)
+                    a.ui.postDelayed({ panel.setPending(null); finish() }, PREVIEW_PENDING_MS)
+                }
             },
             onBack = { walker.apply(FlowEvent.Back); outcome = FlowPreview.Outcome.None; draw() },
             onDone = { walker.apply(FlowEvent.Done); outcome = FlowPreview.Outcome.None; draw() },
@@ -731,15 +907,6 @@ internal class VisitorFlowEditor(
         if (value == null || (value is String && value.isEmpty())) into.remove(key) else into.put(key, value)
     }
 
-    private fun errorText(error: String): String {
-        if (FlowEdit.isConflict(error)) return L("flow_editor.conflict")
-        val (key, detail) = FlowEdit.errorParts(error)
-        val message = if (key.startsWith("visitor_flow.")) L(key) else key
-        if (key.startsWith("visitor_flow.") && message != key)
-            return if (detail.isEmpty()) message else "$message ($detail)"
-        return L("visitor_flow.invalid", error)
-    }
-
     private fun failure(message: String) {
         ShellDialogBuilder(a).setMessage(message)
             .setPositiveButton(L("admin.menu_close"), null).show()
@@ -759,10 +926,12 @@ internal class VisitorFlowEditor(
             .setNegativeButton(L("admin.cancel"), null).show()
     }
 
-    private fun caption(box: LinearLayout, text: String) {
-        box.addView(ShellUi.label(a, text, TextRole.LABEL).apply {
+    private fun caption(box: LinearLayout, text: String): View {
+        val view = ShellUi.label(a, text, TextRole.LABEL).apply {
             setPadding(0, ShellUi.dp(a, 14), 0, ShellUi.dp(a, 2))
-        }, ShellUi.matchWrap())
+        }
+        box.addView(view, ShellUi.matchWrap())
+        return view
     }
 
     private fun checkbox(box: LinearLayout, title: String, value: Boolean): android.widget.CompoundButton =
@@ -774,21 +943,34 @@ internal class VisitorFlowEditor(
         }
 
     private fun field(box: LinearLayout, title: String, value: String,
-                      kind: Int = InputType.TYPE_CLASS_TEXT, max: Int = 0, lines: Int = 1): EditText {
+                      kind: Int = InputType.TYPE_CLASS_TEXT, max: Int = 0, lines: Int = 1,
+                      noteKey: String? = null): EditText {
         val entry = PlatformUi.field(a, title, value, kind, lines)
         if (max > 0) entry.input.filters = arrayOf(InputFilter.LengthFilter(max))
         box.addView(entry.view, ShellUi.matchWrap().apply { topMargin = ShellUi.dp(a, 8) })
+        if (noteKey != null) {
+            attachNote(box, noteKey, entry.input)
+            // Editing the field withdraws the answer that named it.
+            val owner = notes
+            entry.input.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    owner?.spots?.get(noteKey)?.note?.visibility = View.GONE
+                }
+            })
+        }
         return entry.input
     }
 
     /** One text field per configured language; the reader returns what is typed now. */
     private fun langFields(box: LinearLayout, title: String, current: JSONObject?, max: Int,
-                           multiline: Boolean = false): () -> Map<String, String> {
-        caption(box, title)
+                           multiline: Boolean = false, name: String): () -> Map<String, String> {
+        attachNote(box, name, caption(box, title))
         val fields = languages.associateWith { lang ->
             field(box, Texts.langDisplayName(lang), current?.optString(lang).orEmpty(),
                   if (multiline) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                  else InputType.TYPE_CLASS_TEXT, max, if (multiline) 3 else 1)
+                  else InputType.TYPE_CLASS_TEXT, max, if (multiline) 3 else 1, noteKey = "$name.$lang")
         }
         return { fields.mapValues { it.value.text.toString() } }
     }
@@ -801,7 +983,8 @@ internal class VisitorFlowEditor(
     private fun formDialog(
         title: String,
         build: (LinearLayout, () -> Unit) -> (() -> Unit),
-        onSave: (sync: () -> Unit, fail: (String) -> Unit, close: () -> Unit) -> Unit,
+        onSave: (sync: () -> Unit, fail: (Problem) -> Unit, close: () -> Unit) -> Unit,
+        initial: Problem? = null,
     ) {
         val box = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL
@@ -816,26 +999,55 @@ internal class VisitorFlowEditor(
         }
         var sync: () -> Unit = {}
         lateinit var rebuild: () -> Unit
+        val own = Notes()
         rebuild = {
             box.removeAllViews()
+            own.spots.clear()
             box.addView(error, ShellUi.matchWrap())
+            notes = own
             sync = build(box) { rebuild() }
+            notes = null
         }
         rebuild()
+        // The answer goes under the control the location names, scrolled into view; without a
+        // control here it is the form's banner at the top.
+        fun place(answer: Problem) {
+            val at = answer.error?.location
+            val keys = if (at == null) emptyList() else spotKeys(at)
+            val key = keys.firstOrNull { own.spots.containsKey(it) }
+            val spot = key?.let { own.spots[it] }
+            val rowField = at != null && (at.field == "label" || at.field == "alt") && key != null &&
+                (key.startsWith("o.") || key.startsWith("img."))
+            if (spot?.open != null && rowField) {
+                spot.open.invoke(answer)
+                return
+            }
+            if (spot == null) {
+                error.text = answer.message
+                error.visibility = View.VISIBLE
+                scroll.post { scroll.fullScroll(View.FOCUS_UP) }
+                return
+            }
+            spot.note.text = answer.message
+            spot.note.visibility = View.VISIBLE
+            scroll.post {
+                spot.note.requestRectangleOnScreen(
+                    android.graphics.Rect(0, 0, spot.note.width, spot.note.height), true)
+                if (spot.control is EditText) spot.control.requestFocus()
+            }
+        }
         val dialog = ShellDialogBuilder(a).setTitle(title).setView(scroll)
             .setPositiveButton(L("admin.save"), null)
             .setNegativeButton(L("admin.cancel"), null).create()
         dialog.setOnShowListener {
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 error.visibility = View.GONE
-                onSave({ sync() }, { message ->
-                    error.text = message
-                    error.visibility = View.VISIBLE
-                    scroll.post { scroll.fullScroll(View.FOCUS_UP) }
-                }, { dialog.dismiss() })
+                for (spot in own.spots.values) spot.note.visibility = View.GONE
+                onSave({ sync() }, { answer -> place(answer) }, { dialog.dismiss() })
             }
         }
         dialog.show()
+        if (initial != null) scroll.post { place(initial) }
     }
 
     private companion object {
@@ -845,5 +1057,7 @@ internal class VisitorFlowEditor(
         const val MAX_EDGE = 1280
         const val TARGET_BYTES = 400 * 1024
         const val PREVIEW_HEIGHT_SHARE = 0.7f
+        const val PREVIEW_STATUS_MS = 800L
+        const val PREVIEW_PENDING_MS = 1000L
     }
 }

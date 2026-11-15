@@ -1485,7 +1485,9 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         if (warnings == null) return ""
         for (index in 0 until warnings.length()) {
             val key = warnings.optJSONObject(index)?.optString("message_key").orEmpty()
-            if (key.startsWith("visitor_flow.")) return label(key).takeIf { it != key }.orEmpty()
+            if (!key.startsWith("visitor_flow.")) continue
+            val catalogue = if (key == "visitor_flow.disabled_purpose") "flow_error.disabled_purpose" else key
+            return label(catalogue).takeIf { it != catalogue }.orEmpty()
         }
         return ""
     }

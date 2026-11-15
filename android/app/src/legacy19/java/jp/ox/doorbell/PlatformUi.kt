@@ -147,6 +147,29 @@ internal object PlatformUi {
         view.compoundDrawablePadding = dp(view.context, 8)
     }
 
+    /**
+     * Swaps a button's icon for the stock indeterminate spinner in the button's ink, or puts
+     * [icon] back. The slot keeps its size, so nothing around the button moves. The spinner stays
+     * still when the system animations are switched off.
+     */
+    fun setButtonBusy(view: TextView, busy: Boolean, icon: Int, sizeDp: Int = 24) {
+        if (!busy) {
+            setButtonIcon(view, icon, sizeDp)
+            return
+        }
+        val context = view.context
+        val drawable = ProgressBar(context, null, android.R.attr.progressBarStyleSmall)
+            .indeterminateDrawable?.mutate() ?: return
+        val size = dp(context, sizeDp)
+        drawable.setBounds(0, 0, size, size)
+        drawable.setColorFilter(view.currentTextColor, PorterDuff.Mode.SRC_IN)
+        view.setCompoundDrawables(drawable, null, null, null)
+        view.compoundDrawablePadding = dp(context, 8)
+        val scale = android.provider.Settings.Global.getFloat(
+            context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        if (scale > 0f) (drawable as? android.graphics.drawable.Animatable)?.start()
+    }
+
     fun iconButton(context: Context, icon: Int, label: CharSequence, onClick: () -> Unit): View =
         ImageButton(context).apply {
             setImageResource(icon)

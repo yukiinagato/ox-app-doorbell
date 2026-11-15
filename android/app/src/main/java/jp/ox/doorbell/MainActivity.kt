@@ -157,6 +157,9 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     private val flowGate = ReloadGate()
     private var flowEndReason = "ended"
     private var flowBusy = false
+    private var flowPendingToken = 0
+    private val flowStatusTick = Runnable { flowPendingStatus() }
+    private val flowTimeoutTick = Runnable { flowPendingFailed() }
     private val flowIdleTick = Runnable { flowIdleElapsed() }
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
     private var callUiPhase = CallUiPhase.IDLE
@@ -1393,6 +1396,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     private fun scheduleFlowTimer() {
         ui.removeCallbacks(flowIdleTick)
+        if (flowBusy) return
         val walker = flowWalker ?: return
         val snapshot = walker.snapshot()
         val seconds = when {
@@ -1481,11 +1485,22 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         return true
     }
 
+    /**
+     * The household is notified by Core, which takes seconds: the tapped option shows a spinner at
+     * once, a status line follows after [FLOW_STATUS_DELAY_MS], and the page is restored with a retry
+     * hint when Core fails or [FLOW_PENDING_TIMEOUT_MS] pass. The idle return is suspended meanwhile.
+     */
     private fun flowNotify(optionId: String, target: FlowTarget.Notify, label: String) {
         val worker = homeHandler ?: return
         playButtonSound()
+        val token = ++flowPendingToken
         flowBusy = true
-        flowPanel.setEnabled(false)
+        ui.removeCallbacks(flowIdleTick)
+        val busy = texts.t("flow.pending_notify", R.string.flow_pending_notify)
+        flowPanel.setStatus("")
+        flowPanel.setPending(optionId, busy)
+        ui.postDelayed(flowStatusTick, FLOW_STATUS_DELAY_MS)
+        ui.postDelayed(flowTimeoutTick, FLOW_PENDING_TIMEOUT_MS)
         val generation = app.runtime.coreGeneration
         worker.post {
             val result = try { app.core.visitorNotify(app.boot.door, target.step) } catch (e: Exception) {
@@ -1493,24 +1508,47 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                 null
             }
             ui.post {
-                flowBusy = false
+                if (token != flowPendingToken) return@post
                 val walker = flowWalker
-                if (isFinishing || walker == null || !app.runtime.isCurrentGeneration(generation)) return@post
-                // A throttled result is ok: the visitor sees the same page and never learns of the limit.
-                val calls = walker.apply(FlowEvent.Tap(optionId, notifyOk = FlowDocuments.notifyOk(result)))
-                if (calls.any { it is FlowCall.Press }) {
-                    if (flowRing(target.purpose, if (target.purpose.isEmpty()) "" else label)) {
-                        showCalling(callTitleOverride)
-                    } else {
-                        walker.callFailed()
-                        showIdle()
-                    }
-                } else {
-                    flowPanel.forgetAnnouncement()
-                    showIdle()
+                if (isFinishing || walker == null || !app.runtime.isCurrentGeneration(generation)) {
+                    endFlowPending()
+                    return@post
                 }
+                // A throttled result is ok: the visitor sees the same page and never learns of the limit.
+                if (!FlowDocuments.notifyOk(result)) {
+                    flowPendingFailed()
+                    return@post
+                }
+                endFlowPending()
+                walker.apply(FlowEvent.Tap(optionId, notifyOk = true))
+                flowPanel.forgetAnnouncement()
+                showIdle()
             }
         }
+    }
+
+    private fun flowPendingStatus() {
+        if (!flowBusy) return
+        val text = texts.t("flow.pending_notify", R.string.flow_pending_notify)
+        flowPanel.setStatus(text)
+    }
+
+    private fun flowPendingFailed() {
+        if (!flowBusy) return
+        endFlowPending()
+        flowPanel.setPending(null)
+        flowPanel.setEnabled(app.coreOk)
+        val text = texts.t("flow.pending_failed", R.string.flow_pending_failed)
+        flowPanel.setStatus(text, emphasis = true)
+        scheduleFlowTimer()
+    }
+
+    /** Leaves the pending state; a result that arrives later is ignored by its stale token. */
+    private fun endFlowPending() {
+        flowPendingToken++
+        flowBusy = false
+        ui.removeCallbacks(flowStatusTick)
+        ui.removeCallbacks(flowTimeoutTick)
     }
 
     // ---------- Call state transitions ----------
@@ -2171,6 +2209,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
         private const val PURPOSE_TIMEOUT_MS = 15_000L
         private const val FLOW_WAIT_MS = 2_500L
+        private const val FLOW_STATUS_DELAY_MS = 800L
+        private const val FLOW_PENDING_TIMEOUT_MS = 15_000L
         private const val FLOW_COLUMN_MAX_DP = 640
         private const val AIR_REFRESH_MS = 60_000L
         private const val AIR_PERMISSION_REQUEST = 2

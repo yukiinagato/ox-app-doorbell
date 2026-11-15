@@ -52,6 +52,7 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
         return ConfigWriteResult(
             ok, error, if (ok) 200 else 400,
             warnings = document.optJSONArray("warnings"),
+            detail = document.optJSONObject("detail"),
         )
     }
 

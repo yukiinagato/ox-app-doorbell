@@ -49,6 +49,13 @@ internal class VisitorFlowPanel(
             size > MAX_CACHED_IMAGES
     }
     private var renderToken = 0
+    private var pendingId: String? = null
+    private var pendingDescription = ""
+    private var busyButton: Button? = null
+    private var backButton: Button? = null
+    private var statusView: TextView? = null
+    private var status: CharSequence = ""
+    private var statusBold = false
     private var lastTitleAnnounced: String? = null
 
     val visible: Boolean get() = content.visibility == View.VISIBLE
@@ -60,12 +67,67 @@ internal class VisitorFlowPanel(
         content.removeAllViews()
         dock.removeAllViews()
         optionButtons.clear()
+        busyButton = null
+        backButton = null
+        statusView = null
+        pendingId = null
+        status = ""
     }
 
     /** Disables every control while Core cannot be reached or a call is being placed. */
     fun setEnabled(enabled: Boolean) {
+        if (pendingId != null) {
+            applyPending()
+            return
+        }
         for (index in 0 until dock.childCount) setTreeEnabled(dock.getChildAt(index), enabled)
         for ((button, _) in optionButtons) button.isEnabled = enabled
+    }
+
+    /**
+     * Marks one option as waiting for Core: it keeps its label and its enabled look and shows the
+     * platform's indeterminate indicator in its icon slot; every other option and Back are
+     * disabled in place. Null restores the page. A re-render keeps the state.
+     */
+    fun setPending(optionId: String?, description: String = "") {
+        pendingId = optionId
+        pendingDescription = description
+        applyPending()
+        if (optionId != null && description.isNotEmpty()) content.announceForAccessibility(description)
+    }
+
+    /** The one-line status under the options; its slot is reserved, so showing it moves nothing. */
+    fun setStatus(text: CharSequence, emphasis: Boolean = false) {
+        status = text
+        statusBold = emphasis
+        applyStatus()
+    }
+
+    private fun applyStatus() {
+        val view = statusView ?: return
+        view.text = status
+        view.setTypeface(null, if (statusBold) Typeface.BOLD else Typeface.NORMAL)
+        view.visibility = if (status.isEmpty()) View.INVISIBLE else View.VISIBLE
+    }
+
+    private fun applyPending() {
+        val id = pendingId
+        for ((button, option) in optionButtons) {
+            val busy = id != null && option.id == id
+            button.isEnabled = id == null || busy
+            button.contentDescription =
+                if (busy && pendingDescription.isNotEmpty()) option.label + ", " + pendingDescription
+                else option.label
+            val icon = FlowIcons.glyph(option.purpose, option.icon).drawable
+            if (busy && busyButton !== button) {
+                busyButton = button
+                PlatformUi.setButtonBusy(button, true, icon, OPTION_ICON_DP)
+            } else if (!busy && busyButton === button) {
+                busyButton = null
+                PlatformUi.setButtonBusy(button, false, icon, OPTION_ICON_DP)
+            }
+        }
+        backButton?.isEnabled = id == null
     }
 
     private fun setTreeEnabled(view: View, enabled: Boolean) {
@@ -92,6 +154,9 @@ internal class VisitorFlowPanel(
         content.removeAllViews()
         dock.removeAllViews()
         optionButtons.clear()
+        busyButton = null
+        backButton = null
+        statusView = null
         val window = UiKit.window(activity)
         val metrics = activity.resources.displayMetrics
         val gap = ShellUi.dp(activity, UiTokens.SPACE_M)
@@ -187,14 +252,32 @@ internal class VisitorFlowPanel(
         } else {
             addDockedOptions(grid)
         }
-        if (snapshot.back) dock.addView(UiKit.actionButton(
-            activity, texts.t("flow.back", R.string.flow_back), roles, ActionRole.SECONDARY,
-            ScreenLayouts.touchTargetDp(window, 56),
-        ) { onBack() }, LinearLayout.LayoutParams(
+        val statusLine = TextView(activity).apply {
+            setLines(1)
+            textSize = 16f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setTextColor(ShellUi.opaque(roles.onSurface))
+            visibility = View.INVISIBLE
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        statusView = statusLine
+        (if (inline) content else dock).addView(statusLine, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { if (!inline) topMargin = cell })
+        ).apply { topMargin = cell })
+        if (snapshot.back) {
+            val back = UiKit.actionButton(
+                activity, texts.t("flow.back", R.string.flow_back), roles, ActionRole.SECONDARY,
+                ScreenLayouts.touchTargetDp(window, 56),
+            ) { onBack() }
+            backButton = back
+            dock.addView(back, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { if (!inline) topMargin = cell })
+        }
         dock.visibility = if (dock.childCount == 0) View.GONE else View.VISIBLE
         applySemantic(styleConfig, nodeId)
+        applyPending()
+        applyStatus()
     }
 
     private fun addDockedOptions(grid: LinearLayout) {

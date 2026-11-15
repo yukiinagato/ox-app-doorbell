@@ -23,6 +23,8 @@ internal data class ConfigWriteResult(
      * colour below the ratio earns. The value is still saved; these are shown next to the field.
      */
     val warnings: org.json.JSONArray? = null,
+    /** The numbers and language behind a visitor-flow refusal (`limit`, `value`, `min`, `max`, `lang`). */
+    val detail: JSONObject? = null,
 ) {
     /** The advisory to show, or null when the write raised none. */
     val warning: WriteWarning? get() = WriteWarnings.first(warnings)
@@ -116,7 +118,7 @@ internal class AdminSession private constructor(
             val document = try { JSONObject(payload) } catch (_: Exception) { null }
             val ok = status in 200..299 && document?.optBoolean("ok", false) != false
             ConfigWriteResult(ok, document?.optString("err").orEmpty(), status,
-                              document?.optJSONArray("warnings"))
+                              document?.optJSONArray("warnings"), document?.optJSONObject("detail"))
         } catch (e: Exception) {
             ConfigWriteResult(false, e.javaClass.simpleName, 0)
         } finally {
