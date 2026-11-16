@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -215,6 +216,9 @@ namespace DoorbellApp
                                   ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight);
                 PaintFlowPrimary();
                 if (_flowBusy) ApplyFlowPending();
+                RefreshAutomationTree(FlowOptionGrid);
+                RefreshAutomationTree(FlowPrimaryHost);
+                RefreshAutomationTree(FlowBackButton);
                 QueueInkPass();
             }
             catch (Exception ex)
@@ -223,6 +227,23 @@ namespace DoorbellApp
                 _flow = null;
                 BuildPurposeButtons();
                 RenderVisitorFlow();
+            }
+        }
+
+        /// <summary>
+        /// A page is drawn into panels that already exist, and WPF keeps the children of an
+        /// automation peer it has handed out until told otherwise: without this, the buttons of
+        /// the second page and Back, which was collapsed on the first, can be missing from the
+        /// accessibility tree that assistive tools and the UI test suite read.
+        /// </summary>
+        private static void RefreshAutomationTree(DependencyObject from)
+        {
+            for (DependencyObject node = from; node != null; node = VisualTreeHelper.GetParent(node))
+            {
+                var element = node as UIElement;
+                if (element == null) continue;
+                AutomationPeer peer = UIElementAutomationPeer.FromElement(element);
+                if (peer != null) peer.InvalidatePeer();
             }
         }
 

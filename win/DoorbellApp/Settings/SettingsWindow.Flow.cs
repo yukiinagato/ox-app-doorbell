@@ -39,6 +39,9 @@ namespace DoorbellApp.Settings
 
         private FlowErrorSite _flowSite;
 
+        // The line under the Options header: errors about the option list as a whole.
+        private const string OptionsLineKey = "options";
+
         // ---- reading the configuration --------------------------------------------------------
 
         private Dictionary<string, object> FlowSteps()
@@ -220,6 +223,7 @@ namespace DoorbellApp.Settings
             line.SetResourceReference(TextBlock.ForegroundProperty, problem ? "NegativeText" : "AccentText");
             line.Text = text;
             line.Visibility = Visibility.Visible;
+            line.UpdateLayout();
             line.BringIntoView();
         }
 
@@ -236,7 +240,10 @@ namespace DoorbellApp.Settings
             if (info.Step == stepId)
             {
                 if (info.Place == FlowErrorPlace.Field && info.Lang.Length > 0) key = info.Field + "." + info.Lang;
-                else if (info.Place == FlowErrorPlace.Option) key = "option." + info.Option;
+                else if (info.Place == FlowErrorPlace.Option)
+                    key = _flowSite.Lines.ContainsKey("option." + info.Option) ? "option." + info.Option : OptionsLineKey;
+                else if (info.Place == FlowErrorPlace.Step && (info.Code == "no_options" || info.Code == "too_many_options"))
+                    key = OptionsLineKey;
                 else if (info.Place == FlowErrorPlace.Image)
                     key = info.Lang.Length > 0 && _flowSite.Lines.ContainsKey("image." + info.Image + "." + info.Lang)
                         ? "image." + info.Image + "." + info.Lang : "image." + info.Image;
@@ -947,7 +954,12 @@ namespace DoorbellApp.Settings
                     {
                         string problem = read(next);
                         if (problem == null) continue;
-                        ShowFlowLine(_flowSite.Header, problem, true);
+                        TextBlock optionsLine;
+                        if (problem == Texts.T("flow_error.no_options")
+                            && _flowSite.Lines.TryGetValue(OptionsLineKey, out optionsLine))
+                            ShowFlowLine(optionsLine, problem, true);
+                        else
+                            ShowFlowLine(_flowSite.Header, problem, true);
                         return;
                     }
                     var sets = new List<KeyValuePair<string, object>>();
@@ -1466,9 +1478,11 @@ namespace DoorbellApp.Settings
                     if (data != null) options.Add(Copy(data));
                 }
             form.Children.Add(FieldLabel(Texts.T("flow_editor.field_options")));
+            var add = CommandButton(Texts.T("flow_editor.add_option"));
+            var optionsLine = NewFlowLine(OptionsLineKey, add);
+            form.Children.Add(optionsLine);
             var host = new StackPanel();
             form.Children.Add(host);
-            var add = CommandButton(Texts.T("flow_editor.add_option"));
             AutomationId(add, "FlowAddOption");
             add.Margin = new Thickness(0, 6, 0, 0);
             add.HorizontalAlignment = HorizontalAlignment.Left;
@@ -1478,6 +1492,7 @@ namespace DoorbellApp.Settings
             redraw = () =>
             {
                 host.Children.Clear();
+                optionsLine.Visibility = Visibility.Collapsed;
                 if (_flowSite != null)
                     foreach (string stale in new List<string>(_flowSite.Lines.Keys))
                         if (stale.StartsWith("option.", StringComparison.Ordinal)) _flowSite.Lines.Remove(stale);

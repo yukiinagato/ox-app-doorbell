@@ -141,7 +141,8 @@ namespace DoorbellApp.Settings
             error.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             DockPanel.SetDock(error, Dock.Bottom);
             outer.Children.Add(error);
-            form = new StackPanel();
+            // The bottom margin keeps the last row clear of the button row when scrolled to the end.
+            form = new StackPanel { Margin = new Thickness(0, 0, 12, 24) };
             outer.Children.Add(new ScrollViewer
             {
                 Content = form,
