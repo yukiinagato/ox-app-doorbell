@@ -1318,7 +1318,7 @@ TEST_CASE("standby: a live channel reuses TLS transport and only delivers the ac
   CHECK(track.subscriberCount() == 0);
   CHECK(track.subscriberCount() == 0);
   auto lease = client.subscribe();
-  REQUIRE(lease);
+  REQUIRE(static_cast<bool>(lease));
   CHECK(!client.subscribe());
   server.command("owner", "channel", lease->token());
   CHECK(lease->awaitBegin(1000));
