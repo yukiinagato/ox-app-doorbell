@@ -603,7 +603,7 @@ function Test-FlowEditor([string]$look) {
             Start-Sleep -Milliseconds 500
         }
         # A field error: with every option removed the page cannot be saved, and the message
-        # stands at the top of the form. Nothing is written; Cancel discards the draft.
+        # stands under the Options header. Nothing is written; Cancel discards the draft.
         for ($i = 0; $i -lt 12; $i++) {
             $remove = Find-ById 'FlowOptionRemove' 400
             if (-not (Test-OnScreen $remove)) { break }
@@ -611,7 +611,7 @@ function Test-FlowEditor([string]$look) {
             Start-Sleep -Milliseconds 200
         }
         if (Click-Id 'flow step dialog' 'FlowStepSave') {
-            [void](Assert-Element 'flow step error' 'FlowStepError' 3000)
+            [void](Assert-Element 'flow step error' 'FlowFieldError' 3000)
             Start-Sleep -Milliseconds 300
             Save-Shot ("flow-step-error-" + $look)
         }

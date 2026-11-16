@@ -1340,7 +1340,7 @@ TEST_CASE("standby: a live channel reuses TLS transport and only delivers the ac
   server.setRotation(180);
   CHECK(waitFor([&] { return client.rotation() == 180; }, 2000));
   auto next = client.subscribe();
-  REQUIRE(next);
+  REQUIRE(static_cast<bool>(next));
   CHECK(next->token() == 2);
   server.command("owner", "channel", next->token());
   CHECK(next->awaitBegin(1000));
