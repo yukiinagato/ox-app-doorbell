@@ -8,7 +8,7 @@ integration: the visitor flow implemented on Core, the web door page, Admin, the
 iOS and tvOS, Android and Windows. The fourth integration added the per-shell polish of that
 flow (step ordering, option icons, preview, start-page composition, no classic-screen flash).
 The fifth integration adds the flow feedback round described in "Fifth integration" below.
-Current versions: Windows 0.4.2 (file version 0.4.2.35), Android 0.6.2 (56), iOS 0.7.3 (83),
+Current versions: Windows 0.4.3 (file version 0.4.3.36), Android 0.6.2 (56), iOS 0.7.3 (83),
 tvOS 0.6.4 (34), iOS 5 kiosk 0.9.2 (103) with the iOS 9 profile 0.8.2 (426). Verification is
 stated per deliverable; anything
 under "Not verified" is untested, not passing.
@@ -112,7 +112,7 @@ NOT verified:
 
 ## State per deliverable
 
-### Windows (0.4.2, file version 0.4.2.35)
+### Windows (0.4.3, file version 0.4.3.36)
 
 Polish (0.4.0): the flow editor lists steps by Core's `order` and moves them with buttons
 (consecutive `order` values, changed steps written whole); options draw vendored Fluent icons
